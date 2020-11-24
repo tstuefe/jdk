@@ -584,7 +584,7 @@ int JVM_HANDLE_XXX_SIGNAL(int sig, siginfo_t* info,
     }
 #if defined(ZERO) && !defined(PRODUCT)
     char buf[64];
-    VMError::report_and_die(t, sig, pc, info, ucVoid,
+    VMError::report_and_die(sig, pc, info, ucVoid,
           "\n#"
           "\n#    /--------------------\\"
           "\n#    |      %-7s       |"
@@ -596,7 +596,7 @@ int JVM_HANDLE_XXX_SIGNAL(int sig, siginfo_t* info,
           "\n#    OOO        c_c_(___)",
           get_signal_name(sig, buf, sizeof(buf)));
 #else
-    VMError::report_and_die(t, sig, pc, info, ucVoid);
+    VMError::report_and_die(sig, pc, info, ucVoid);
 #endif
     // VMError should not return.
     ShouldNotReachHere();

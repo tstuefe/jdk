@@ -2437,9 +2437,9 @@ LONG WINAPI Handle_FLT_Exception(struct _EXCEPTION_POINTERS* exceptionInfo) {
 }
 #endif
 
-static inline void report_error(Thread* t, DWORD exception_code,
+static inline void report_error(DWORD exception_code,
                                 address addr, void* siginfo, void* context) {
-  VMError::report_and_die(t, exception_code, addr, siginfo, context);
+  VMError::report_and_die(exception_code, addr, siginfo, context);
 
   // If UseOSErrorReporting, this will return here and save the error file
   // somewhere where we can find it in the minidump.
@@ -2536,7 +2536,7 @@ LONG WINAPI topLevelExceptionFilter(struct _EXCEPTION_POINTERS* exceptionInfo) {
       // Last unguard failed or not unguarding
       tty->print_raw_cr("Execution protection violation");
 #if !defined(USE_VECTORED_EXCEPTION_HANDLING)
-      report_error(t, exception_code, addr, exception_record,
+      report_error(exception_code, addr, exception_record,
                    exceptionInfo->ContextRecord);
 #endif
       return EXCEPTION_CONTINUE_SEARCH;
@@ -2583,7 +2583,7 @@ LONG WINAPI topLevelExceptionFilter(struct _EXCEPTION_POINTERS* exceptionInfo) {
         overflow_state->disable_stack_red_zone();
         tty->print_raw_cr("An unrecoverable stack overflow has occurred.");
 #if !defined(USE_VECTORED_EXCEPTION_HANDLING)
-        report_error(t, exception_code, pc, exception_record,
+        report_error(exception_code, pc, exception_record,
                       exceptionInfo->ContextRecord);
 #endif
         return EXCEPTION_CONTINUE_SEARCH;
@@ -2625,7 +2625,7 @@ LONG WINAPI topLevelExceptionFilter(struct _EXCEPTION_POINTERS* exceptionInfo) {
           address stub = SharedRuntime::continuation_for_implicit_exception(thread, pc, SharedRuntime::IMPLICIT_NULL);
           if (stub != NULL) return Handle_Exception(exceptionInfo, stub);
         }
-        report_error(t, exception_code, pc, exception_record,
+        report_error(exception_code, pc, exception_record,
                       exceptionInfo->ContextRecord);
         return EXCEPTION_CONTINUE_SEARCH;
       }
@@ -2642,7 +2642,7 @@ LONG WINAPI topLevelExceptionFilter(struct _EXCEPTION_POINTERS* exceptionInfo) {
 
       // Stack overflow or null pointer exception in native code.
 #if !defined(USE_VECTORED_EXCEPTION_HANDLING)
-      report_error(t, exception_code, pc, exception_record,
+      report_error(exception_code, pc, exception_record,
                    exceptionInfo->ContextRecord);
 #endif
       return EXCEPTION_CONTINUE_SEARCH;
@@ -2701,7 +2701,7 @@ LONG WINAPI topLevelExceptionFilter(struct _EXCEPTION_POINTERS* exceptionInfo) {
 
 #if !defined(USE_VECTORED_EXCEPTION_HANDLING)
   if (exception_code != EXCEPTION_BREAKPOINT) {
-    report_error(t, exception_code, pc, exception_record,
+    report_error(exception_code, pc, exception_record,
                  exceptionInfo->ContextRecord);
   }
 #endif
@@ -2751,7 +2751,7 @@ LONG WINAPI topLevelUnhandledExceptionFilter(struct _EXCEPTION_POINTERS* excepti
   Thread* t = Thread::current_or_null_safe();
 
   if (exception_code != EXCEPTION_BREAKPOINT) {
-    report_error(t, exception_code, pc, exceptionInfo->ExceptionRecord,
+    report_error(exception_code, pc, exceptionInfo->ExceptionRecord,
                 exceptionInfo->ContextRecord);
   }
 exit:

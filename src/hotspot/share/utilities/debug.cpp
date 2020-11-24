@@ -264,7 +264,7 @@ void report_vm_error(const char* file, int line, const char* error_msg, const ch
   }
 #endif
 
-  VMError::report_and_die(Thread::current_or_null(), context, file, line, error_msg, detail_fmt, detail_args);
+  VMError::report_and_die(context, file, line, error_msg, detail_fmt, detail_args);
   va_end(detail_args);
 }
 
@@ -284,7 +284,7 @@ void report_fatal(const char* file, int line, const char* detail_fmt, ...)
     context = g_assertion_context;
   }
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
-  VMError::report_and_die(Thread::current_or_null(), context, file, line, "fatal error", detail_fmt, detail_args);
+  VMError::report_and_die(context, file, line, "fatal error", detail_fmt, detail_args);
   va_end(detail_args);
 }
 
@@ -293,7 +293,7 @@ void report_vm_out_of_memory(const char* file, int line, size_t size,
   if (Debugging) return;
   va_list detail_args;
   va_start(detail_args, detail_fmt);
-  VMError::report_and_die(Thread::current_or_null(), file, line, size, vm_err_type, detail_fmt, detail_args);
+  VMError::report_and_die(file, line, size, vm_err_type, detail_fmt, detail_args);
   va_end(detail_args);
 
   // The UseOSErrorReporting option in report_and_die() may allow a return

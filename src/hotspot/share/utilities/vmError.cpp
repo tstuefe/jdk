@@ -1307,33 +1307,26 @@ const char* VMError::_filename;
 int         VMError::_lineno;
 size_t      VMError::_size;
 
-void VMError::report_and_die(Thread* thread, unsigned int sig, address pc, void* siginfo,
-                             void* context, const char* detail_fmt, ...)
+void VMError::report_and_die(unsigned int sig, address pc, void* siginfo, void* context)
 {
-  va_list detail_args;
-  va_start(detail_args, detail_fmt);
-  report_and_die(sig, NULL, detail_fmt, detail_args, thread, pc, siginfo, context, NULL, 0, 0);
-  va_end(detail_args);
+  va_list detail_args;           // unused
+  const char* detail_fmt = NULL; // unused
+  report_and_die(sig, NULL, detail_fmt, detail_args, pc, siginfo, context, NULL, 0, 0);
 }
 
-void VMError::report_and_die(Thread* thread, unsigned int sig, address pc, void* siginfo, void* context)
-{
-  report_and_die(thread, sig, pc, siginfo, context, "%s", "");
-}
-
-void VMError::report_and_die(Thread* thread, void* context, const char* filename, int lineno, const char* message,
+void VMError::report_and_die(void* context, const char* filename, int lineno, const char* message,
                              const char* detail_fmt, va_list detail_args)
 {
-  report_and_die(INTERNAL_ERROR, message, detail_fmt, detail_args, thread, NULL, NULL, context, filename, lineno, 0);
+  report_and_die(INTERNAL_ERROR, message, detail_fmt, detail_args, NULL, NULL, context, filename, lineno, 0);
 }
 
-void VMError::report_and_die(Thread* thread, const char* filename, int lineno, size_t size,
+void VMError::report_and_die(const char* filename, int lineno, size_t size,
                              VMErrorType vm_err_type, const char* detail_fmt, va_list detail_args) {
-  report_and_die(vm_err_type, NULL, detail_fmt, detail_args, thread, NULL, NULL, NULL, filename, lineno, size);
+  report_and_die(vm_err_type, NULL, detail_fmt, detail_args, NULL, NULL, NULL, filename, lineno, size);
 }
 
 void VMError::report_and_die(int id, const char* message, const char* detail_fmt, va_list detail_args,
-                             Thread* thread, address pc, void* siginfo, void* context, const char* filename,
+                             address pc, void* siginfo, void* context, const char* filename,
                              int lineno, size_t size)
 {
   // A single scratch buffer to be used from here on.
@@ -1384,14 +1377,18 @@ void VMError::report_and_die(int id, const char* message, const char* detail_fmt
 
     _id = id;
     _message = message;
-    _thread = thread;
+    _thread = Thread::current_or_null_safe();
     _pc = pc;
     _siginfo = siginfo;
     _context = context;
     _filename = filename;
     _lineno = lineno;
     _size = size;
-    jio_vsnprintf(_detail_msg, sizeof(_detail_msg), detail_fmt, detail_args);
+    if (detail_fmt != NULL) {
+      jio_vsnprintf(_detail_msg, sizeof(_detail_msg), detail_fmt, detail_args);
+    } else {
+      _detail_msg[0] = '\0';
+    }
 
     // first time
     _error_reported = true;

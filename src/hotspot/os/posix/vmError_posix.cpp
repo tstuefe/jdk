@@ -128,7 +128,7 @@ static void crash_handler(int sig, siginfo_t* info, void* ucVoid) {
   }
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
 
-  VMError::report_and_die(NULL, sig, pc, info, ucVoid);
+  VMError::report_and_die(sig, pc, info, ucVoid);
 }
 
 void VMError::reset_signal_handlers() {

@@ -2080,9 +2080,6 @@ OSReturn os::get_native_priority(const Thread* const thread, int *priority_ptr) 
   return (*priority_ptr != -1 || errno == 0 ? OS_OK : OS_ERR);
 }
 
-extern void report_error(char* file_name, int line_no, char* title,
-                         char* format, ...);
-
 // this is called _before_ the most of global arguments have been parsed
 void os::init(void) {
   char dummy;   // used to get a guess on initial stack address

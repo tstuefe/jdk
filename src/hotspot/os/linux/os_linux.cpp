@@ -4351,9 +4351,6 @@ jlong os::Linux::fast_thread_cpu_time(clockid_t clockid) {
   return (tp.tv_sec * NANOSECS_PER_SEC) + tp.tv_nsec;
 }
 
-extern void report_error(char* file_name, int line_no, char* title,
-                         char* format, ...);
-
 // Some linux distributions (notably: Alpine Linux) include the
 // grsecurity in the kernel. Of particular interest from a JVM perspective
 // is PaX (https://pax.grsecurity.net/), which adds some security features
