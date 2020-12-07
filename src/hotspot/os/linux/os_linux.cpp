@@ -2012,6 +2012,7 @@ void os::print_dll_info(outputStream *st) {
   if (!_print_ascii_file(fname, st)) {
     st->print_cr("Can not get library information for pid = %d", pid);
   }
+
 }
 
 struct loaded_modules_info_param {
@@ -5498,8 +5499,25 @@ void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
             (a2 >= start && a2 < end) || // right leg in
             (a1 < start && a2 >= end)) { // superimposition
           num_found ++;
-          st->print("%s", line); // line includes \n
+          const int len = strlen(line);
+          if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+          }
+          st->print("%s", line);
         }
+        st->print(" ");
+        if (!os::print_area_brief(st, (address)a1)) {
+          for (int attempt = 0; attempt < 10; attempt ++) {
+            address a = (address)a1 + (os::vm_page_size() * attempt);
+            if (a > (address)a2) {
+              break;
+            }
+            if (os::print_area_brief(st, a)) {
+              break;
+            }
+          }
+        }
+        st->cr();
       }
     }
     ::fclose(f);

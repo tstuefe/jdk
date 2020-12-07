@@ -83,6 +83,7 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<PrintVMFlagsDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SetVMFlagDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMDynamicLibrariesDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMPrintMemoryMappingsDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMUptimeDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SystemGCDCmd>(full_export, true, false));
@@ -884,6 +885,19 @@ VMDynamicLibrariesDCmd::VMDynamicLibrariesDCmd(outputStream *output, bool heap_a
 void VMDynamicLibrariesDCmd::execute(DCmdSource source, TRAPS) {
   os::print_dll_info(output());
   output()->cr();
+}
+
+class VM_PrintMemoryMappings : public VM_Operation {
+  outputStream* const _out;
+public:
+  VM_PrintMemoryMappings(outputStream* out) : _out(out) {}
+  virtual VMOp_Type type() const            { return VMOp_PrintMemoryMappings; }
+  virtual void doit()                       { os::print_memory_mappings(_out); }
+};
+
+void VMPrintMemoryMappingsDCmd::execute(DCmdSource source, TRAPS) {
+  VM_PrintMemoryMappings dumper(output());
+  VMThread::execute(&dumper);
 }
 
 void CompileQueueDCmd::execute(DCmdSource source, TRAPS) {

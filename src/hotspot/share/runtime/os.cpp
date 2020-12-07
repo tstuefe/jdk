@@ -39,6 +39,7 @@
 #include "logging/logStream.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/guardedMemory.hpp"
+#include "memory/metaspace.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "oops/compressedOops.inline.hpp"
@@ -1169,6 +1170,40 @@ void os::print_location(outputStream* st, intptr_t x, bool verbose) {
   }
 
   st->print_cr(INTPTR_FORMAT " is an unknown value", p2i(addr));
+}
+
+// Print a short information about the area
+bool os::print_area_brief(outputStream* st, address p) {
+  bool rc = false;
+  Metaspace::MetadataType mdtype;
+  if (CodeCache::find_blob_unsafe(p)) {
+    st->print("Code Cache");
+    rc = true;
+  } else if (Universe::heap() != NULL && Universe::heap()->is_in(p)) {
+    st->print("Heap");
+    rc = true;
+  } else if (Metaspace::contains_non_shared_class(p)) {
+    st->print("Class Space");
+    rc = true;
+  } else if (Metaspace::contains_non_shared_nonclass(p)) {
+    st->print("Metaspace");
+    rc = true;
+  } else {
+    for (JavaThreadIteratorWithHandle jtiwh; JavaThread *thread = jtiwh.next(); ) {
+      // If the addr is in the stack region for this thread then report that
+      // and print thread info
+      if (thread->is_in_full_stack(p)) {
+        st->print("Thread Stack");
+        const OSThread* osth = thread->osthread();
+        if (osth != NULL) {
+          st->print(" (" UINT64_FORMAT ")", (uint64_t)osth->thread_id());
+        }
+        rc = true;
+        break;
+      }
+    }
+  }
+  return rc;
 }
 
 // Looks like all platforms can use the same function to check if C

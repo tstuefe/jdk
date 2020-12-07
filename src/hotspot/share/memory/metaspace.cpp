@@ -922,9 +922,16 @@ bool Metaspace::contains(const void* ptr) {
 }
 
 bool Metaspace::contains_non_shared(const void* ptr) {
-  if (using_class_space() && VirtualSpaceList::vslist_class()->contains((MetaWord*)ptr)) {
-     return true;
-  }
+  return contains_non_shared_class(ptr) ||
+      contains_non_shared_nonclass(ptr);
+}
 
-  return VirtualSpaceList::vslist_nonclass()->contains((MetaWord*)ptr);
+bool Metaspace::contains_non_shared_class(const void* ptr) {
+  return VirtualSpaceList::vslist_class() != NULL &&
+         VirtualSpaceList::vslist_class()->contains((MetaWord*)ptr);
+}
+
+bool Metaspace::contains_non_shared_nonclass(const void* ptr) {
+  return VirtualSpaceList::vslist_nonclass() != NULL &&
+         VirtualSpaceList::vslist_nonclass()->contains((MetaWord*)ptr);
 }

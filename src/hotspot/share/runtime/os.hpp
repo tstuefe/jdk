@@ -665,6 +665,10 @@ class os: AllStatic {
   static void print_dhm(outputStream* st, const char* startStr, long sec);
 
   static void print_location(outputStream* st, intptr_t x, bool verbose = false);
+
+  // Print a short information about the area
+  static bool print_area_brief(outputStream* st, address p);
+
   static size_t lasterror(char *buf, size_t len);
   static int get_last_error();
 

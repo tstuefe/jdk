@@ -128,6 +128,8 @@ public:
 
   static bool contains(const void* ptr);
   static bool contains_non_shared(const void* ptr);
+  static bool contains_non_shared_class(const void* ptr);
+  static bool contains_non_shared_nonclass(const void* ptr);
 
   // Free empty virtualspaces
   static void purge();

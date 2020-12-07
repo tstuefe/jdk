@@ -223,6 +223,27 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class VMPrintMemoryMappingsDCmd : public DCmd {
+public:
+  VMPrintMemoryMappingsDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
+  static const char* name() {
+    return "VM.memory_map";
+  }
+  static const char* description() {
+    return "Print the process memory map";
+  }
+  static const char* impact() {
+    return "Medium";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 class VMUptimeDCmd : public DCmdWithParser {
 protected:
   DCmdArgument<bool> _date;
