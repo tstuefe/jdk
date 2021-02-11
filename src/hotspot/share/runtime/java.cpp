@@ -61,6 +61,8 @@
 #include "runtime/continuation.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/flags/flagSetting.hpp"
+// SapMachine 2019-09-01: vitals.
+#include "runtime/globals.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
@@ -80,6 +82,8 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/vmError.hpp"
+// SapMachine 2019-09-01: vitals.
+#include "vitals/vitals.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Compiler.hpp"
 #include "c1/c1_Runtime1.hpp"
@@ -330,6 +334,15 @@ void print_statistics() {
     MetaspaceUtils::print_basic_report(tty, 0);
   }
 
+  // SapMachine 2019-09-01: vitals.
+  if (DumpVitalsAtExit) {
+    sapmachine_vitals::dump_reports();
+  }
+  if (PrintVitalsAtExit) {
+    tty->print_cr("Vitals:");
+    sapmachine_vitals::print_report(tty);
+  }
+
   ThreadsSMRSupport::log_statistics();
 }
 
@@ -378,7 +391,20 @@ void print_statistics() {
     MetaspaceUtils::print_basic_report(tty, 0);
   }
 
+  if (LogTouchedMethods && PrintTouchedMethodsAtExit) {
+    Method::print_touched_methods(tty);
+  }
+
+  // SapMachine 2019-09-01: vitals.
+  if (DumpVitalsAtExit) {
+    sapmachine_vitals::dump_reports();
+  }
+  if (PrintVitalsAtExit) {
+    sapmachine_vitals::print_report(tty);
+  }
+
   ThreadsSMRSupport::log_statistics();
+
 }
 
 #endif
