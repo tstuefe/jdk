@@ -23,6 +23,7 @@
  *
  */
 
+
 #include "precompiled.hpp"
 #include "jvm.h"
 #include "cds/metaspaceShared.hpp"
@@ -54,6 +55,8 @@
 #include "runtime/vm_version.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "services/memTracker.hpp"
+// SapMachine 2019-02-20 : vitals
+#include "services/vitals.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
@@ -1043,6 +1046,15 @@ void VMError::report(outputStream* st, bool _verbose) {
        MemTracker::error_report(st);
      }
 
+  // SapMachine 2019-02-20 : vitals
+  STEP("Vitals")
+     if (_verbose) {
+       sapmachine_vitals::print_info_t info;
+       sapmachine_vitals::default_settings(&info);
+       info.sample_now = true; // About the only place where we do this apart from explicitly setting the "now" parm on jcmd
+       sapmachine_vitals::print_report(st);
+     }
+
   STEP("printing system")
 
      if (_verbose) {
@@ -1220,6 +1232,13 @@ void VMError::print_vm_info(outputStream* st) {
   // STEP("Native Memory Tracking")
 
   MemTracker::error_report(st);
+
+  // SapMachine 2019-02-20 : vitals
+  // STEP("Vitals")
+  sapmachine_vitals::print_info_t info;
+  sapmachine_vitals::default_settings(&info);
+  info.sample_now = false;
+  sapmachine_vitals::print_report(st);
 
   // STEP("printing system")
 
