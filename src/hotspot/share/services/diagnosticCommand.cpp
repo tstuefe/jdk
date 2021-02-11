@@ -63,6 +63,10 @@
 #include "trimCHeapDCmd.hpp"
 #endif
 
+// SapMachine 2019-02-20 : vitals
+#include "vitals/vitalsDCmd.hpp"
+
+
 static void loadAgentModule(TRAPS) {
   ResourceMark rm(THREAD);
   HandleMark hm(THREAD);
@@ -148,6 +152,10 @@ void DCmdRegistrant::register_dcmds(){
 #if INCLUDE_CDS
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DumpSharedArchiveDCmd>(full_export, true, false));
 #endif // INCLUDE_CDS
+
+  // SapMachine 2019-02-20 : vitals
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<sapmachine_vitals::VitalsDCmd>(full_export, true, false));
+
 }
 
 #ifndef HAVE_EXTRA_DCMD
