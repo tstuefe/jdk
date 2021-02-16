@@ -1484,6 +1484,14 @@ const intx ObjectAlignmentInBytes = 8;
           "class pointers are used")                                        \
           range(1*M, 3*G)                                                   \
                                                                             \
+  develop(uintx, CompressedClassSpaceAddress, max_uintx,                    \
+          "Enforce compressed class space address")                         \
+          range(0, max_uintx)                                               \
+                                                                            \
+  develop(uintx, NarrowKlassPointerBaseAddress, max_uintx,                  \
+          "Enforce narrow Klass pointer encoding")                          \
+          range(0, max_uintx)                                               \
+                                                                            \
   product(ccstr, MetaspaceReclaimPolicy, "balanced",                        \
           "options: balanced, aggressive, none")                            \
                                                                             \

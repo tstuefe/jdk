@@ -707,21 +707,32 @@ void Metaspace::global_initialize() {
 
     // case (b)
     ReservedSpace rs;
-
-    // If UseCompressedOops=1 and the java heap has been placed in coops-friendly
-    //  territory, i.e. its base is under 32G, then we attempt to place ccs
-    //  right above the java heap.
-    // Otherwise the lower 32G are still free. We try to place ccs at the lowest
-    // allowed mapping address.
-    address base = (UseCompressedOops && (uint64_t)CompressedOops::base() < OopEncodingHeapMax) ?
-                   CompressedOops::end() : (address)HeapBaseMinAddress;
-    base = align_up(base, Metaspace::reserve_alignment());
-
     const size_t size = align_up(CompressedClassSpaceSize, Metaspace::reserve_alignment());
-    if (base != NULL) {
-      if (CompressedKlassPointers::is_valid_base(base)) {
-        rs = ReservedSpace(size, Metaspace::reserve_alignment(),
-                           false /* large */, (char*)base);
+
+#ifdef ASSERT
+    if (CompressedClassSpaceAddress != max_uintx) {
+      // Enforce ccs placement or die. No correction, no test, just take the address the user gives
+      // us verbatim.
+      rs = ReservedSpace(size, Metaspace::reserve_alignment(),
+                         false /* large */, (char*)CompressedClassSpaceAddress);
+    }
+#endif
+
+    if (!rs.is_reserved()) {
+      // If UseCompressedOops=1 and the java heap has been placed in coops-friendly
+      //  territory, i.e. its base is under 32G, then we attempt to place ccs
+      //  right above the java heap.
+      // Otherwise the lower 32G are still free. We try to place ccs at the lowest
+      // allowed mapping address.
+      address base = (UseCompressedOops && (uint64_t)CompressedOops::base() < OopEncodingHeapMax) ?
+                     CompressedOops::end() : (address)HeapBaseMinAddress;
+      base = align_up(base, Metaspace::reserve_alignment());
+
+      if (base != NULL) {
+        if (CompressedKlassPointers::is_valid_base(base)) {
+          rs = ReservedSpace(size, Metaspace::reserve_alignment(),
+                             false /* large */, (char*)base);
+        }
       }
     }
 

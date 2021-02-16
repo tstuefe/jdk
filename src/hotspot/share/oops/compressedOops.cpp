@@ -188,7 +188,6 @@ NarrowPtrStruct CompressedKlassPointers::_narrow_klass = { NULL, 0, true };
 //  are compiled for 32bit to LP64_ONLY).
 size_t CompressedKlassPointers::_range = 0;
 
-
 // Given an address range [addr, addr+len) which the encoding is supposed to
 //  cover, choose base, shift and range.
 //  The address range is the expected range of uncompressed Klass pointers we
@@ -249,6 +248,17 @@ void CompressedKlassPointers::initialize(address addr, size_t len) {
     }
 
   }
+
+#ifdef ASSERT
+  if (NarrowKlassPointerBaseAddress != max_uintx) {
+    base = (address)NarrowKlassPointerBaseAddress;
+    if (!is_valid_base(base)) {
+      vm_exit_during_initialization("Invalid value for NarrowKlassPointerBaseAddress");
+    }
+    shift = LogKlassAlignmentInBytes;
+    range = 4 * G;
+  }
+#endif
 
   set_base(base);
   set_shift(shift);
