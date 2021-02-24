@@ -4151,6 +4151,73 @@ bool os::pd_release_memory_special(char* base, size_t bytes) {
   return res;
 }
 
+static bool calc_intersection(address from1, address to1, address from2, address to2, address* r1, address* r2) {
+  if (to1 <= from2 || to2 <= from1) {
+    return false;
+  }
+  *r1 = MAX2(from1, from2);
+  *r2 = MIN2(to1, to2);
+  return true;
+}
+/*
+// Returns true if pointer falls into sbrk nofly zone.
+// (this should be factored out for all posix platforms and all kinds of reserve functions)
+static bool in_sbrk_noflyzone(address p) {
+  address sbrkloc = (address)::sbrk(0);
+  const size_t sbrk_noflyzone_len = G;
+  return p >= sbrkloc && p < sbrkloc + sbrk_noflyzone_len;
+}
+*/
+// Given an address range [from, to), look for a hole in that address range to place a
+//  prospective mapping of size size at map addresses aligned to alignment.
+// Upon return, if the returned address is not NULL, this address can be mapped to with
+//  a high probability; note however that there is no guarantee a subsequent mapping at that
+//  address will succeed, since concurrently mappings may have been added there.
+address os::find_hole_in_range(address from, address to, size_t size, size_t alignment) {
+
+  assert(alignment > 0, "sanity");
+  assert(to >= from, "sanity");
+
+  address ret = NULL;
+
+  // Is this even possible?
+  address from_aligned = align_up(from, alignment);
+  if (from_aligned >= to || (size_t)(to - from_aligned) < size) {
+    return NULL;
+  }
+
+  // On Linux, we simply scan /proc/self/maps to find a suitable hole
+  char line[512];
+  FILE* f = ::fopen("/proc/self/maps", "r");
+  if (f != NULL) {
+    address last_mapping_end = (address)0x10000; // Very low but not NULL
+    while(fgets(line, sizeof(line), f) == line) {
+      unsigned long long a1 = 0;
+      unsigned long long a2 = 0;
+      if (::sscanf(line, "%llx-%llx", &a1, &a2) == 2) {
+        address this_mapping_start = (address)a1;
+        address hole_start; address hole_end;
+        if (calc_intersection(last_mapping_end, this_mapping_start,
+                              from, to, &hole_start, &hole_end)) {
+          address candidate = align_up(hole_start, alignment);
+          if ((candidate + size) <= hole_end //&&
+             /* !in_sbrk_noflyzone(candidate)*/) {
+            ret = candidate;
+            break;
+          }
+        }
+        // If we are past the caller-given range we can stop looking.
+        if ((address)a2 >= to) {
+          break;
+        }
+        last_mapping_end = (address)a2;
+      }
+    }
+    ::fclose(f);
+  }
+  return ret;
+}
+
 size_t os::large_page_size() {
   return _large_page_size;
 }

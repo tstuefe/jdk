@@ -331,6 +331,12 @@ class os: AllStatic {
   // Reserves virtual memory that starts at an address that is aligned to 'alignment'.
   static char*  reserve_memory_aligned(size_t size, size_t alignment, bool executable = false);
 
+  // Given an address range [from, to), a size and an alignment, look for a possible attach point
+  //  within that range to place a mapping of the given size at an address with the given alignment.
+  // Returns possible attach point or NULL. The attach point can be attached to with a high
+  //  probability; however no guarantee since this is inherently racy.
+  static address find_hole_in_range(address from, address to, size_t size, size_t alignment);
+
   // Attempts to reserve the virtual memory at [addr, addr + bytes).
   // Does not overwrite existing mappings.
   static char*  attempt_reserve_memory_at(char* addr, size_t bytes, bool executable = false);

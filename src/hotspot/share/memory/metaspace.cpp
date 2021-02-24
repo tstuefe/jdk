@@ -709,24 +709,26 @@ void Metaspace::global_initialize() {
     // case (b)
     ReservedSpace rs;
 
-    // If UseCompressedOops=1 and the java heap has been placed in coops-friendly
-    //  territory, i.e. its base is under 32G, then we attempt to place ccs
-    //  right above the java heap.
-    // Otherwise the lower 32G are still free. We try to place ccs at the lowest
-    // allowed mapping address.
-    address base = (UseCompressedOops && (uint64_t)CompressedOops::base() < OopEncodingHeapMax) ?
-                   CompressedOops::end() : (address)HeapBaseMinAddress;
-    base = align_up(base, Metaspace::reserve_alignment());
-
     const size_t size = align_up(CompressedClassSpaceSize, Metaspace::reserve_alignment());
-    if (base != NULL) {
-      if (CompressedKlassPointers::is_valid_base(base)) {
+
+    // Attempt to reserve the class space in the lower 4G; failing that, in the lower 32G.
+    if (!rs.is_reserved()) {
+      address candidate = os::find_hole_in_range(NULL, (address)(4*G), size, Metaspace::reserve_alignment());
+      if (candidate != NULL) {
         rs = ReservedSpace(size, Metaspace::reserve_alignment(),
-                           false /* large */, (char*)base);
+                           false /* large */, (char*)candidate);
+      }
+    }
+    if (!rs.is_reserved()) {
+      const size_t alignment = AARCH64_ONLY(4 * G) NOT_AARCH64(Metaspace::reserve_alignment());
+      address candidate = os::find_hole_in_range(NULL, (address)(32*G), size, alignment);
+      if (candidate != NULL) {
+        rs = ReservedSpace(size, Metaspace::reserve_alignment(),
+                           false /* large */, (char*)candidate);
       }
     }
 
-    // ...failing that, reserve anywhere, but let platform do optimized placement:
+    // ...failing that, reserve anywhere, but let platform do optimized placement: (still needed?)
     if (!rs.is_reserved()) {
       rs = Metaspace::reserve_address_space_for_compressed_classes(size);
     }

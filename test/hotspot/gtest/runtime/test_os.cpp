@@ -750,3 +750,149 @@ TEST_VM(os, dll_address_to_function_and_library_name) {
     }
   }
 }
+
+// Helper for find_hole_in_range
+static bool try_attach(address p, size_t len) {
+  assert(is_aligned(p, os::vm_allocation_granularity()), "Sanity");
+  assert(is_aligned(len, os::vm_allocation_granularity()), "Sanity");
+  address q = (address)os::attempt_reserve_memory_at((char*)p, len, false);
+  assert(q == p || q == NULL, "Sanity");
+  if (q != NULL) {
+    bool b = os::release_memory((char*)q, len);
+    assert(b, "sanity");
+    return true;
+  }
+  return false;
+}
+
+TEST_VM(os, find_hole_in_range) {
+
+  const size_t aglen = os::vm_allocation_granularity();
+  const size_t alig1 = aglen, alig2 = aglen * 4, alig3 = 4 * M;
+
+  // This should always work: searching for a moderately sized hole in a full address range
+  address p = os::find_hole_in_range(NULL, (address)(uintptr_t)SIZE_MAX, aglen, alig1);
+  EXPECT_NE(p, (address)NULL);
+  EXPECT_TRUE(is_aligned(p, alig1));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  p = os::find_hole_in_range(NULL, (address)(uintptr_t)SIZE_MAX, aglen, alig2);
+  EXPECT_NE(p, (address)NULL);
+  EXPECT_TRUE(is_aligned(p, alig2));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  p = os::find_hole_in_range(NULL, (address)(uintptr_t)SIZE_MAX, aglen, alig3);
+  EXPECT_NE(p, (address)NULL);
+  EXPECT_TRUE(is_aligned(p, alig3));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  // Reserve a 10M block; punch a 5M hole in it
+  size_t blocklen = 10 * M;
+  address block = (address)os::reserve_memory(blocklen);
+  EXPECT_NE(block, (address)NULL);
+  address blockend = block + blocklen;
+  size_t holelen = 5 * M;
+  address hole = block + M + aglen; // semi crooked hole start address
+  address holeend = hole + holelen;
+  os::release_memory((char*)hole, holelen);
+
+  //printf("[" PTR_FORMAT " [" PTR_FORMAT " " PTR_FORMAT ") " PTR_FORMAT ").\n",
+  //       p2i(block), p2i(hole), p2i(holeend), p2i(blockend));
+
+  p = os::find_hole_in_range(block, blockend, aglen, alig1);
+  EXPECT_EQ(p, hole);
+  EXPECT_TRUE(is_aligned(p, alig1));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  p = os::find_hole_in_range(block, blockend, aglen, alig2);
+  EXPECT_EQ(p, align_up(hole, alig2));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  p = os::find_hole_in_range(block, blockend, aglen, alig3);
+  EXPECT_EQ(p, align_up(hole, alig3));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  p = os::find_hole_in_range(hole, holeend, aglen, alig1);
+  EXPECT_EQ(p, hole);
+  EXPECT_TRUE(is_aligned(p, alig1));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  p = os::find_hole_in_range(hole + aglen, holeend, aglen, alig1);
+  EXPECT_EQ(p, hole + aglen);
+  EXPECT_TRUE(is_aligned(p, alig1));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  p = os::find_hole_in_range(holeend - aglen, holeend, aglen, alig1);
+  EXPECT_EQ(p, holeend - aglen);
+  EXPECT_TRUE(is_aligned(p, alig1));
+  EXPECT_TRUE(try_attach(p, aglen));
+
+  // Some negatives
+  p = os::find_hole_in_range(block, hole, aglen, alig1); // no hole
+  EXPECT_EQ(p, (void*)NULL);
+  p = os::find_hole_in_range(holeend, blockend, aglen, alig1); // no hole
+  EXPECT_EQ(p, (void*)NULL);
+  p = os::find_hole_in_range(hole, hole + aglen, aglen * 2, alig1); // too small hole
+  EXPECT_EQ(p, (void*)NULL);
+
+#ifdef _LP64
+  // Try several allocations inside the lower 32g
+  const int attempts = 100;
+  address attach_points[attempts] = {0};
+  for (int n = 0; n < attempts; n ++) {
+    p = os::find_hole_in_range((address)G, (address)(32 * G), M, alig1);
+    if (p != NULL) {
+      EXPECT_LT(p, (address)(32 * G));
+      EXPECT_TRUE(is_aligned(p, alig1));
+      attach_points[n] = (address)os::attempt_reserve_memory_at((char*)p, M, false);
+      EXPECT_NE(attach_points[n], (address)NULL);
+      //printf(PTR_FORMAT"\n", p2i(attach_points[n]));
+    }
+  }
+  for (int n = 0; n < attempts; n ++) {
+    if (attach_points[n] != NULL) {
+      os::release_memory((char*)attach_points[n], M);
+    }
+  }
+#endif
+
+  // Some more random tests
+  int hits = 0;
+  for (int tries = 500; tries > 0; tries --) {
+    address from = block + os::random() % blocklen;
+    address to = MIN2(blockend, from + os::random() % (blocklen / 2));
+    size_t len = align_up(os::random() % M, aglen);
+    int alignment = aglen * (1 << (os::random() % 16));
+    p = os::find_hole_in_range(from, to, len, alignment);
+    if (p != NULL) {
+      EXPECT_GE(p, from);
+      EXPECT_LT(p, to);
+      EXPECT_TRUE(is_aligned(p, alignment));
+      EXPECT_TRUE(try_attach(p, len));
+      hits ++;
+    }
+  }
+
+  //printf("%d\n", hits);
+  os::release_memory((char*)block, 3 * M);
+}
+
+#ifndef _WIN32
+TEST_VM(os, find_hole_in_range_dont_block_sbrk) {
+
+  // Try to block sbrk and see what happens
+  const size_t sbrk_zone = 128 * M;
+  address pbrk = (address)::sbrk(0);
+  address p = os::find_hole_in_range(pbrk, pbrk + sbrk_zone, os::vm_allocation_granularity(), os::vm_allocation_granularity());
+  EXPECT_EQ(p, (address)NULL);
+  if (p != NULL) {
+    address q = (address)os::attempt_reserve_memory_at((char*)p, os::vm_allocation_granularity(), false);
+    if (q != NULL) {
+      printf(PTR_FORMAT " - " PTR_FORMAT "\n", p2i(p), p2i(q));
+      // Now try to extend sbrk
+      void* p2 = ::sbrk(sbrk_zone * 2);
+      printf(PTR_FORMAT "\n", p2i(p2));
+    }
+  }
+}
+#endif // Posix only
