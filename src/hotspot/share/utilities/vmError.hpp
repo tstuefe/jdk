@@ -27,36 +27,21 @@
 #define SHARE_UTILITIES_VMERROR_HPP
 
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/fatalError.hpp"
 
 class Decoder;
 class frame;
 class VM_ReportJavaOutOfMemory;
 
+
 class VMError : public AllStatic {
   friend class VMStructs;
 
-  static int         _id;               // Solaris/Linux signals: 0 - SIGRTMAX
-                                        // Windows exceptions: 0xCxxxxxxx system errors
-                                        //                     0x8xxxxxxx system warnings
+  // The primary error (the one we are reporting). NULL if no error reporting is in progress.
+  static FatalError* _primary_error;
 
-  static const char* _message;
-  static char        _detail_msg[1024];
-
-  static Thread*     _thread;           // NULL if it's native thread
-
-  // additional info for crashes
-  static address     _pc;               // faulting PC
-  static void*       _siginfo;          // ExceptionRecord on Windows,
-                                        // siginfo_t on Solaris/Linux
-  static void*       _context;          // ContextRecord on Windows,
-                                        // ucontext_t on Solaris/Linux
-
-  // additional info for VM internal errors
-  static const char* _filename;
-  static int         _lineno;
-
-  // used by reporting about OOM
-  static size_t      _size;
+  // Chain of errors which happened concurrently or secondary errors:
+  static FatalError* _secondary_errors;
 
   // used by fatal error handler
   static int         _current_step;
