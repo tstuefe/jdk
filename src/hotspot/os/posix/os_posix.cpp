@@ -1966,6 +1966,12 @@ void os::shutdown() {
 // But note that os::shutdown() could also trigger secondary faults.
 void os::abort(bool dump_core, void* siginfo, const void* context) {
   os::shutdown();
+  // abort() may take longer than exit(), so prefer exit() if we know we won't
+  // get a core dump anyway.
+  struct rlimit lim;
+  if (getrlimit(RLIMIT_CORE, &lim) == 0 && lim.rlim_cur == 0) {
+    dump_core = false;
+  }
   if (dump_core) {
     LINUX_ONLY(if (DumpPrivateMappingsInCore) ClassLoader::close_jrt_image();)
     ::abort(); // dump core
