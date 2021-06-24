@@ -52,12 +52,14 @@
 #include "services/diagnosticCommand.hpp"
 #include "services/diagnosticFramework.hpp"
 #include "services/heapDumper.hpp"
+#include "services/mallocTrcCmd.hpp"
 #include "services/management.hpp"
 #include "services/writeableFlags.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/events.hpp"
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
+
 
 
 static void loadAgentModule(TRAPS) {
@@ -94,6 +96,9 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<RunFinalizationDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<FinalizerInfoDCmd>(full_export, true, false));
+
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<MallocTrcCmd>(full_export, true, false));
+
 #if INCLUDE_SERVICES
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassHistogramDCmd>(full_export, true, false));
