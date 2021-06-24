@@ -92,6 +92,11 @@
 #include "jfr/jfr.hpp"
 #endif
 
+// SapMachine 2021-09-01: malloc-trace
+#ifdef LINUX
+#include "malloctrace/mallocTrace.hpp"
+#endif
+
 GrowableArray<Method*>* collected_profiled_methods;
 
 int compare_methods(Method** a, Method** b) {
@@ -483,6 +488,10 @@ void before_exit(JavaThread* thread) {
 #ifdef LINUX
   if (DumpPerfMapAtExit) {
     CodeCache::write_perf_map();
+  }
+  // SapMachine 2021-09-01: malloc-trace
+  if (PrintMallocTraceAtExit) {
+    sap::MallocTracer::print(tty, true);
   }
 #endif
 
