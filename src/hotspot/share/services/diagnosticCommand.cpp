@@ -62,6 +62,7 @@
 #include "utilities/macros.hpp"
 #ifdef LINUX
 #include "trimCHeapDCmd.hpp"
+#include "services/mallocTrcCmd.hpp"
 #endif
 
 static void loadAgentModule(TRAPS) {
@@ -85,6 +86,10 @@ void DCmdRegistrant::register_dcmds(){
   // Third  argument specifies if the command is hidden
   uint32_t full_export = DCmd_Source_Internal | DCmd_Source_AttachAPI
                          | DCmd_Source_MBean;
+
+
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<MallocTrcCmd>(full_export, true, false));
+
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HelpDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VersionDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<CommandLineDCmd>(full_export, true, false));
