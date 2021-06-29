@@ -9,6 +9,79 @@
 #ifdef LINUX
 static pthread_mutex_t g_malloc_hook_lock = PTHREAD_MUTEX_INITIALIZER;
 
+#define PREFER_BACKTRACE 1
+
+class BackTraceWrapper {
+
+  typedef int (*backtrace_fun_t) (void **buffer, int size);
+
+  backtrace_fun_t _fun = NULL;
+
+  static backtrace_fun_t load_symbol() {
+    ::dlerror(); // clear state
+    void* sym = ::dlsym(RTLD_DEFAULT, "backtrace");
+    if (sym != NULL && ::dlerror() == NULL) {
+      return (backtrace_fun_t)sym;
+    }
+    return NULL;
+  }
+
+public:
+
+  BackTraceWrapper() : _fun(load_symbol()) {}
+
+  bool can_call() const { return PREFER_BACKTRACE ? _fun != NULL : false; }
+
+  bool call(address* stack, int frames) const {
+    if (_fun == NULL) {
+      return false;
+    }
+    _fun((void**)stack, frames);
+    return true;
+  }
+
+};
+
+static BackTraceWrapper g_backtrace_wrapper;
+
+static int get_native_stack(address* stack, int frames, int toSkip) {
+  if (g_backtrace_wrapper.call(stack, frames)) {
+    return frames;
+  }
+  int frame_idx = 0;
+  int num_of_frames;  // number of frames captured
+  frame fr = os::current_frame();
+  while (fr.pc() && frame_idx < frames) {
+    if (toSkip > 0) {
+      toSkip --;
+    } else {
+      stack[frame_idx ++] = fr.pc();
+    }
+    if (fr.fp() == NULL || fr.cb() != NULL ||
+        fr.sender_pc() == NULL || os::is_first_C_frame(&fr)) break;
+
+    if (fr.sender_pc() && !os::is_first_C_frame(&fr)) {
+      fr = os::get_sender_for_C_frame(&fr);
+    } else {
+      break;
+    }
+  }
+
+  // Usually we stop because the sender frame does not use the frame pointer;
+  // but the sender pc may still be valid here.
+  if (frame_idx < frames && fr.sender_pc() != NULL) {
+    stack[frame_idx] = fr.sender_pc();
+    frame_idx++;
+  }
+
+  num_of_frames = frame_idx;
+  for (; frame_idx < frames; frame_idx ++) {
+    stack[frame_idx] = NULL;
+  }
+
+  return num_of_frames;
+}
+
 class Locker {
   bool _locked;
 public:
@@ -31,9 +104,9 @@ class MallocStack {
   address _v[num_frames];
 public:
 
-  MallocStack() {
+  void fill() {
     ::memset(_v, 0, sizeof(_v));
-    os::get_native_stack(_v, num_frames, 0);
+    get_native_stack(_v, num_frames, 0);
   }
 
   unsigned int calculate_hash() const {
@@ -205,12 +278,17 @@ static uint64_t g_total_malloc_calls = 0;
 static void* my_malloc_hook(size_t size, const void *caller) {
   g_total_malloc_calls ++;
   Locker lck;
+
+  swap_malloc_hook(g_original_hook); // if stack uses backtrace(3) that uses malloc too
   MallocStack stack;
+  stack.fill();
+
   g_sites.add_site(&stack, size);
-  swap_malloc_hook(g_original_hook);
-//  ::printf("malloc called (" SIZE_FORMAT ") from " PTR_FORMAT ".\n", size, p2i(caller));
+
+  //swap_malloc_hook(g_original_hook);
   void* p = ::malloc(size);
   swap_malloc_hook((malloc_hook_fun_t)my_malloc_hook);
+
   return p;
 }
 
