@@ -23,11 +23,11 @@
  *
  */
 
+#include <services/nmtPreInitMallocHashTable.hpp>
 #include "precompiled.hpp"
 #include "jvm_io.h"
 #include "logging/log.hpp"
 #include "services/memTracker.hpp"
-#include "services/nmtPreInitBuffer.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"

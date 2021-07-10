@@ -65,7 +65,6 @@
 #include "services/mallocTracker.hpp"
 #include "services/memTracker.hpp"
 #include "services/nmtCommon.hpp"
-#include "services/nmtPreInitBuffer.hpp"
 #include "services/threadService.hpp"
 #include "utilities/align.hpp"
 #include "utilities/count_trailing_zeros.hpp"
@@ -75,6 +74,7 @@
 
 # include <signal.h>
 # include <errno.h>
+#include <services/nmtPreInitMallocHashTable.hpp>
 
 OSThread*         os::_starting_thread    = NULL;
 address           os::_polling_page       = NULL;

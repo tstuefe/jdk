@@ -21,6 +21,7 @@
  * questions.
  *
  */
+#include <services/nmtPreInitMallocHashTable.hpp>
 #include "precompiled.hpp"
 #include "jvm.h"
 #include "logging/log.hpp"
@@ -34,7 +35,6 @@
 #include "services/memReporter.hpp"
 #include "services/mallocTracker.inline.hpp"
 #include "services/memTracker.hpp"
-#include "services/nmtPreInitBuffer.hpp"
 #include "services/threadStackTracker.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/defaultStream.hpp"
