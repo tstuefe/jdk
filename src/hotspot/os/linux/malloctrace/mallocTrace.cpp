@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 
+#include "malloctrace/allocationTable.hpp"
 #include "malloctrace/assertHandling.hpp"
 #include "malloctrace/locker.hpp"
 #include "malloctrace/mallocTrace.hpp"
@@ -46,10 +47,12 @@ PRAGMA_DISABLE_GCC_WARNING("-Wdeprecated-declarations")
 typedef void* (*malloc_hook_fun_t) (size_t len, const void* caller);
 typedef void* (*realloc_hook_fun_t) (void* old, size_t len, const void* caller);
 typedef void* (*memalign_hook_fun_t) (size_t alignment, size_t size, const void* caller);
+typedef void  (*free_hook_fun_t) (void* old, const void* caller);
 
 static void* my_malloc_hook(size_t size, const void *caller);
 static void* my_realloc_hook(void* old, size_t size, const void *caller);
 static void* my_memalign_hook(size_t alignment, size_t size, const void *caller);
+static void  my_free_hook(void* old, const void *caller);
 
 // Hook changes, hook ownership:
 //
@@ -93,6 +96,7 @@ class HookControl : public AllStatic {
   static malloc_hook_fun_t    _old_malloc_hook;
   static realloc_hook_fun_t   _old_realloc_hook;
   static memalign_hook_fun_t  _old_memalign_hook;
+  static free_hook_fun_t      _old_free_hook;
 
 public:
 
@@ -133,6 +137,8 @@ public:
     __realloc_hook = my_realloc_hook;
     _old_memalign_hook = __memalign_hook;
     __memalign_hook = my_memalign_hook;
+    _old_free_hook = __free_hook;
+    __free_hook = my_free_hook;
     _hooks_are_active = true;
   }
 
@@ -142,6 +148,7 @@ public:
     __malloc_hook = _old_malloc_hook;
     __realloc_hook = _old_realloc_hook;
     __memalign_hook = _old_memalign_hook;
+    __free_hook = _old_free_hook;
     _hooks_are_active = false;
   }
 };
@@ -150,6 +157,7 @@ bool HookControl::_hooks_are_active = false;
 malloc_hook_fun_t HookControl::_old_malloc_hook = NULL;
 realloc_hook_fun_t HookControl::_old_realloc_hook = NULL;
 memalign_hook_fun_t HookControl::_old_memalign_hook = NULL;
+free_hook_fun_t HookControl::_old_free_hook = NULL;
 
 // A stack mark for temporarily disabling hooks - if they are active - and
 // restoring the old state
@@ -172,7 +180,10 @@ public:
 
 static SiteTable* g_sites = NULL;
 
+static AllocationTable* g_allocations = NULL;
+
 static bool g_use_backtrace = true;
+static bool g_track_memory = true;
 static uint64_t g_num_captures = 0;
 static uint64_t g_num_captures_without_stack = 0;
 
@@ -181,15 +192,38 @@ static int g_times_enabled = 0;
 static int g_times_printed = 0;
 #endif
 
-#define CAPTURE_STACK_AND_ADD_TO_SITE_TABLE \
-{ \
-  Stack stack; \
-	if (Stack::capture_stack(&stack, g_use_backtrace)) {  \
-		malloctrace_assert(g_sites != NULL, "Site table not allocated");  \
-	  g_sites->add_site(&stack, alloc_size); \
-	} else { \
-	  g_num_captures_without_stack ++; \
-	} \
+static void register_allocation_with_stack(const Stack* stack, const void* ptr, size_t alloc_size) {
+  malloctrace_assert(g_sites != NULL, "Site table not allocated");
+  Site* const site = g_sites->add_site(stack);
+  site->invocations ++;
+  site->invocations_delta ++;
+  site->max_alloc_size = MAX2((uint32_t)alloc_size, site->max_alloc_size);
+  site->min_alloc_size = MIN2((uint32_t)alloc_size, site->min_alloc_size);
+  if (g_track_memory) {
+    site->num_outstanding_allocations ++;
+    site->num_outstanding_bytes += alloc_size;
+    g_allocations->add_allocation(ptr, alloc_size, site);
+  }
+}
+
+static void unregister_allocation(const void* ptr) {
+  if (g_track_memory) {
+    malloctrace_assert(g_sites != NULL, "Site table not allocated");
+    malloctrace_assert(g_allocations != NULL, "Allocation table not allocated");
+    size_t old_size = 0;
+    Site* const site = g_allocations->remove_allocation(ptr, &old_size);
+    if (site != NULL) {
+      // Note: we may have neg. overflow due to missed mallocs. Just cap at 0.
+      if (site->num_outstanding_allocations > 0) {
+        site->num_outstanding_allocations --;
+      }
+      if (site->num_outstanding_bytes >= old_size) {
+        site->num_outstanding_bytes -= old_size;
+      } else {
+        site->num_outstanding_bytes = 0;
+      }
+    }
+  }
 }
 
 static void* my_malloc_or_realloc_hook(void* old, size_t alloc_size) {
@@ -219,10 +253,34 @@ static void* my_malloc_or_realloc_hook(void* old, size_t alloc_size) {
   //    glibc sources, I believe it does not.)
   HookControl::disable();
 
-  CAPTURE_STACK_AND_ADD_TO_SITE_TABLE
-
-  // Now do the actual allocation for the caller
+  // Do the actual allocation for the caller
   void* p = old != NULL ? ::realloc(old, alloc_size) : ::malloc(alloc_size);
+
+  Stack stack;
+  if (Stack::capture_stack(&stack, g_use_backtrace)) {
+    malloctrace_assert(g_sites != NULL, "Site table not allocated");
+    Site* site = g_sites->add_site(&stack);
+    site->invocations ++;
+    site->invocations_delta ++;
+    site->max_alloc_size = MAX2((uint32_t)alloc_size, site->max_alloc_size);
+    site->min_alloc_size = MIN2((uint32_t)alloc_size, site->min_alloc_size);
+    if (g_track_memory) {
+      site->num_outstanding_allocations ++;
+      site->num_outstanding_bytes += alloc_size;
+      // We treat realloc as free and alloc
+      if (old != NULL) {
+        size_t old_alloc_size = 0;
+        Site* old_alloc_site = g_allocations->remove_allocation(old, &old_alloc_size);
+        if (old_alloc_site != NULL) {
+          old_alloc_site->num_outstanding_allocations --;
+          old_alloc_site->num_outstanding_bytes -= old_alloc_size;
+        }
+      }
+      g_allocations->add_allocation(old, alloc_size, site);
+    }
+  } else {
+    g_num_captures_without_stack ++;
+  }
 
 #ifdef ASSERT
   if ((g_num_captures % 10000) == 0) { // expensive, do this only sometimes
@@ -236,12 +294,98 @@ static void* my_malloc_or_realloc_hook(void* old, size_t alloc_size) {
   return p;
 }
 
-static void* my_malloc_hook(size_t size, const void *caller) {
-  return my_malloc_or_realloc_hook(NULL, size);
+static void* my_malloc_hook(size_t alloc_size, const void *caller) {
+  Locker lck;
+  g_num_captures ++;
+
+  // If someone switched off tracing while we waited for the lock, just quietly do
+  // malloc/realloc and tippytoe out of this function. Don't modify hooks, don't
+  // collect stacks.
+  if (HookControl::hooks_are_active() == false) {
+    return ::malloc(alloc_size);
+  }
+
+  // From here on disable hooks. We will collect a stack, then register it with
+  // the site table, then call the real malloc to satisfy the allocation for the
+  // caller. All of these things may internally malloc (even the sitemap, which may
+  // assert). These recursive mallocs should not end up in this hook otherwise we
+  // deadlock.
+  //
+  // Concurrency note: Concurrent threads will not be disturbed by this since:
+  // - either they already entered this function, in which case they wait at the lock
+  // - or they call malloc/realloc after we restored the hooks. In that case they
+  //   just will end up doing the original malloc. We loose them for the statistic,
+  //   but we wont disturb them, nor they us.
+  //   (caveat: we assume here that the order in which we restore the hooks - which
+  //    will appear random for outside threads - does not matter. After studying the
+  //    glibc sources, I believe it does not.)
+  HookControl::disable();
+
+  // Do the actual allocation for the caller
+  void* p = ::malloc(alloc_size);
+
+  if (p != NULL) {
+    Stack stack;
+    if (Stack::capture_stack(&stack, g_use_backtrace)) {
+      register_allocation_with_stack(&stack, p, alloc_size);
+#ifdef ASSERT
+      if ((g_num_captures % 10000) == 0) { // expensive, do this only sometimes
+        g_sites->verify();
+      }
+      if ((g_num_captures % 100000) == 0) { // expensive, do this only sometimes
+        g_allocations->verify();
+      }
+#endif
+    } else {
+      g_num_captures_without_stack ++;
+    }
+  }
+
+  // Reinstate my hooks
+  HookControl::enable();
+
+  return p;
 }
 
-static void* my_realloc_hook(void* old, size_t size, const void *caller) {
-  return my_malloc_or_realloc_hook(old, size);
+static void* my_realloc_hook(void* old, size_t alloc_size, const void *caller) {
+
+  if (old == NULL) {
+    return my_malloc_hook(alloc_size, caller);
+  }
+
+  // --> Comments see malloc hook <--
+
+  Locker lck;
+  g_num_captures ++;
+
+  if (HookControl::hooks_are_active() == false) {
+    return ::realloc(old, alloc_size);
+  }
+
+  HookControl::disable();
+
+  // We treat realloc as free+malloc
+  if (old != NULL) {
+    unregister_allocation(old);
+  }
+
+  // Do the actual allocation for the caller
+  void* p = ::realloc(old, alloc_size);
+
+  if (p != NULL) {
+    Stack stack;
+    if (Stack::capture_stack(&stack, g_use_backtrace)) {
+      register_allocation_with_stack(&stack, p, alloc_size);
+    } else {
+      g_num_captures_without_stack ++;
+    }
+  }
+
+  // Reinstate my hooks
+  HookControl::enable();
+
+  return p;
+
 }
 
 static void* posix_memalign_wrapper(size_t alignment, size_t size) {
@@ -264,16 +408,17 @@ static void* my_memalign_hook(size_t alignment, size_t alloc_size, const void *c
 
   HookControl::disable();
 
-  CAPTURE_STACK_AND_ADD_TO_SITE_TABLE
-
-  // Now do the actual allocation for the caller
+  // Do the actual allocation for the caller
   void* p = posix_memalign_wrapper(alignment, alloc_size);
 
-#ifdef ASSERT
-  if ((g_num_captures % 10000) == 0) { // expensive, do this only sometimes
-    g_sites->verify();
+  if (p != NULL) {
+    Stack stack;
+    if (Stack::capture_stack(&stack, g_use_backtrace)) {
+      register_allocation_with_stack(&stack, p, alloc_size);
+    } else {
+      g_num_captures_without_stack ++;
+    }
   }
-#endif
 
   // Reinstate my hooks
   HookControl::enable();
@@ -281,46 +426,80 @@ static void* my_memalign_hook(size_t alignment, size_t alloc_size, const void *c
   return p;
 }
 
+static void my_free_hook(void* old, size_t alloc_size, const void *caller) {
+  Locker lck;
+
+  if (HookControl::hooks_are_active() == false) {
+    ::free(old);
+    return;
+  }
+
+  HookControl::disable();
+
+  // Do the actual free for the caller
+  ::free(old);
+
+  unregister_allocation(old);
+
+  // Reinstate my hooks
+  HookControl::enable();
+}
 
 /////////// Externals /////////////////////////
 
-bool MallocTracer::enable(bool use_backtrace) {
+void MallocTracer::enable(outputStream* st, bool use_backtrace, bool trace_allocations) {
   Locker lck;
   if (!HookControl::hooks_are_active()) {
     if (g_sites == NULL) {
       // First time malloc trace is enabled, allocate the site table. We don't want to preallocate it
       // unconditionally since it costs several MB.
       g_sites = SiteTable::create();
+      if (g_sites == NULL) {
+        st->print_cr("No memory for call site table");
+        return;
+      }
+      if (trace_allocations) {
+        g_track_memory = true;
+        g_allocations = AllocationTable::create();
+        if (g_allocations == NULL) {
+          st->print_cr("No memory for allocation table -> allocation trace will remain disabled (only counting invocations, not outstanding bytes)");
+          g_track_memory = false;
+        }
+      }
     }
     HookControl::enable(); // << from this moment on concurrent threads may enter our hooks but will then wait on the lock
     g_use_backtrace = use_backtrace;
     DEBUG_ONLY(g_times_enabled ++;)
-    return true;
+    st->print_cr("Hooks enabled (use-bt: %d, trace: %d).", g_use_backtrace, g_track_memory);
+  } else {
+    st->print_cr("Hooks already enabled (use-bt: %d, trace: %d), nothing changed.",
+                 g_use_backtrace, g_track_memory);
   }
-  return false;
+  return;
 }
 
-bool MallocTracer::disable() {
+bool MallocTracer::disable(outputStream* st) {
   Locker lck;
   if (HookControl::hooks_are_active()) {
     HookControl::disable();
+    st->print_cr("Hooks disabled.");
     return true;
+  } else {
+    st->print_cr("Hooks already disabled, nothing changed.");
   }
   return false;
 }
 
-void MallocTracer::reset() {
+void MallocTracer::reset(outputStream* st) {
   Locker lck;
+  g_num_captures = g_num_captures_without_stack = 0;
   if (g_sites != NULL) {
     g_sites->reset();
-    g_num_captures = g_num_captures_without_stack = 0;
+    st->print_cr("Callsite table was reset.");
   }
-}
-
-void MallocTracer::reset_deltas() {
-  Locker lck;
-  if (g_sites != NULL) {
-    g_sites->reset_deltas();
+  if (g_allocations != NULL) {
+    g_sites->reset();
+    st->print_cr("Allocation table was reset.");
   }
 }
 

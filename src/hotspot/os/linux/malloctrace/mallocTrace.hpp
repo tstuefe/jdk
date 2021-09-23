@@ -37,12 +37,9 @@ namespace sap {
 
 class MallocTracer : public AllStatic {
 public:
-  // Enable tracing; return true if it was enabled, false if it had already been enabled.
-  static bool enable(bool use_backtrace = false);
-  // Disable tracing; return true if it was disabled, false if it had already been disabled.
-  static bool disable();
-  static void reset();
-  static void reset_deltas();
+  static void enable(outputStream* st, bool use_backtrace, bool trace_allocations);
+  static void disable(outputStream* st);
+  static void reset(outputStream* st);
   static void print(outputStream* st, bool all);
   static void print_on_error(outputStream* st);
 };

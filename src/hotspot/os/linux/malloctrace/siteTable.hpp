@@ -27,6 +27,7 @@
 #define OS_LINUX_MALLOCTRACE_SITETABLE_HPP
 
 #include "malloctrace/assertHandling.hpp"
+#include "malloctrace/itemHeap.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 #ifdef __GLIBC__
@@ -89,6 +90,8 @@ struct Site {
   uint32_t max_alloc_size;        //  from that call site
                                   // (note: can be zero: we also trace zero-sized allocs since malloc(0)
                                   //  could also be a leak)
+  uint64_t num_outstanding_allocations;
+  size_t num_outstanding_bytes;
 };
 
 ///// SiteTable ////////////////////
@@ -109,26 +112,7 @@ class SiteTable {
   // We preallocate all nodes in this table to avoid
   // swamping the VM with internal malloc calls while the
   // trace is running.
-  class NodeHeap {
-    Node _nodes[SiteTable::_max_entries];
-    int _used;
-  public:
-    NodeHeap() : _used(0) {
-      ::memset(_nodes, 0, sizeof(_nodes));
-    }
-    Node* get_node() {
-      Node* n = NULL;
-      if (_used < SiteTable::_max_entries) {
-        n = _nodes + _used;
-        _used ++;
-      }
-      return n;
-    }
-    void reset() {
-      ::memset(_nodes, 0, sizeof(_nodes));
-      _used = 0;
-    }
-  };
+  typedef sap::ItemHeap<Node, _max_entries> NodeHeap;
 
   NodeHeap _nodeheap;
   const static int table_size = 8171; //prime
@@ -149,7 +133,7 @@ public:
 
   SiteTable();
 
-  void add_site(const Stack* stack, uint32_t alloc_size) {
+  Site* add_site(const Stack* stack) {
     _invocations ++;
 
     const unsigned slot = slot_for_stack(stack);
@@ -158,28 +142,24 @@ public:
     for (Node* p = _table[slot]; p != NULL; p = p->next) {
       if (p->site.stack.equals(stack)) {
         // Call site already presented in table
-        p->site.invocations ++;
-        p->site.invocations_delta ++;
-        p->site.max_alloc_size = MAX2(p->site.max_alloc_size, alloc_size);
-        p->site.min_alloc_size = MIN2(p->site.min_alloc_size, alloc_size);
-        return;
+        return &(p->site);
       } else {
         _collisions ++;
       }
     }
 
-    Node* n = _nodeheap.get_node();
+    Node* n = _nodeheap.alloc_item();
     if (n == NULL) { // hashtable too full, reject.
       assert(_size == max_entries(), "sanity");
       _lost ++;
-      return;
+      return NULL;
     }
-    n->site.invocations = n->site.invocations_delta = 1;
-    n->site.max_alloc_size = n->site.min_alloc_size = alloc_size;
+    ::memset(n, 0, sizeof(Node));
     stack->copy_to(&(n->site.stack));
     n->next = _table[slot];
     _table[slot] = n;
     _size ++;
+    return &(n->site);
   }
 
   void print_table(outputStream* st, bool raw) const;

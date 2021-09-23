@@ -41,8 +41,9 @@ const bool use_backtrace_default = false;
 
 void MallocTraceDCmd::execute(DCmdSource source, TRAPS) {
   const char* const subopt = _suboption.value();
-  if (::strcmp(_option.value(), "on") == 0) {
+  if (::strcmp(_option.value(), "on") == 0 || ::strcmp(_option.value(), "trace") == 0) {
     bool use_backtrace = use_backtrace_default;
+    bool trace_allocations = false;
     if (subopt != NULL) {
       if (::strcmp(subopt, "bt") == 0) {
         use_backtrace = true;
@@ -53,11 +54,13 @@ void MallocTraceDCmd::execute(DCmdSource source, TRAPS) {
         return;
       }
     }
-    if (MallocTracer::enable(use_backtrace)) {
-      _output->print_raw("Tracing activated");
-    } else {
-      _output->print_raw("Tracing already active");
+    if (::strcmp(_option.value(), "trace") == 0) {
+      trace_allocations = true;
     }
+    bool enabled_successfully = MallocTracer::enable(_output, use_backtrace, trace_allocations);
+    _output->print_cr("Tracing %s (method: %s, trace allocations: %d)",
+                      (enabled_successfully ? "enabled" : "already active, nothing changed"),
+                      (use_backtrace ? "bt" : "internal"), trace_allocations);
   } else if (::strcmp(_option.value(), "off") == 0) {
     if (MallocTracer::disable()) {
       _output->print_raw("Tracing deactivated");
@@ -93,6 +96,8 @@ static const char* const usage_for_option =
   "Valid Values:\n"
   " - on [bt|nmt]\n"
   "    Switches trace on. Optional second parameter overrides the stack walk method.\n"
+  " - trace [bt|nmt]\n"
+  "    Switches trace on, including allocation tracing. Optional second parameter overrides the stack walk method.\n"
   " - off\n"
   "    Switches trace off.\n"
   " - print [all]\n"
