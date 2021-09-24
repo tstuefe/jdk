@@ -117,7 +117,7 @@ TEST_VM(MallocTrace, site_table_basics) {
   unsigned expected_unique_callsites = 0;
   for (int invocs_per_stack = 0; invocs_per_stack < 10; invocs_per_stack++) {
     for (unsigned num_callstacks = 0; num_callstacks < safe_to_add_without_overflow; num_callstacks++) {
-      table->add_site(random_stacks + num_callstacks, 1024);
+      table->find_or_add_site(random_stacks + num_callstacks);
       expected_invocs ++;
       if (invocs_per_stack == 0) {
         // On the first iteration we expect a new callsite table node to be created for this stack
@@ -134,7 +134,7 @@ TEST_VM(MallocTrace, site_table_basics) {
   // Now cause table to overflow by adding further unique call stacks. Table should reject these new stacks
   // and count them in lost counter
   for (int overflow_num = 0; overflow_num < 100; overflow_num++) {
-    table->add_site(random_stacks + safe_to_add_without_overflow + overflow_num, 1024);
+    table->find_or_add_site(random_stacks + safe_to_add_without_overflow + overflow_num);
     ASSERT_EQ(table->size(), expected_unique_callsites);                 // Should stay constant, no further adds should be accepted
     ASSERT_EQ(table->lost(), (uint64_t)(overflow_num + 1));              // Lost counter should go up
     ASSERT_EQ(table->invocations(), expected_invocs + overflow_num + 1); // Invocations counter includes lost
@@ -168,7 +168,7 @@ TEST_VM(MallocTrace, site_table_random) {
   // Now register these stacks randomly, a lot of times.
   for (int i = 0; i < 1000*1000; i ++) {
     Stack* stack = random_stacks + (os::random() % num_stacks);
-    table->add_site(stack, 1024);
+    table->find_or_add_site(stack);
     ASSERT_EQ(table->invocations(), (uint64_t)i + 1);
   }
 

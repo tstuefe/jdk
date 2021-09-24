@@ -63,8 +63,7 @@ class AllocationTable {
   Entry* _table[table_size];
 
   unsigned _size;        // Number of entries
-  uint64_t _lost;        // lost adds due to table full
-  uint64_t _collisions;  // hash collisions
+  uint64_t _num_lost;    // lost adds due to table full
 
   static unsigned calculate_hash(const void* p) {
     uint32_t v = (uint32_t) (((uintptr_t)p) >> 3);
@@ -78,23 +77,20 @@ class AllocationTable {
   }
 
   static unsigned slot_for_pointer(const void* p) {
-    unsigned hash = calculate_hash(p);
-    return hash % table_size;
+    return calculate_hash(p) % table_size;
   }
 
   Entry* remove_entry_for_pointer(const void* p) {
     const unsigned slot = slot_for_pointer(p);
-    Entry* e = _table[slot];
-    Entry* e2 = NULL;
-    while(e != NULL) {
-      if (e->ptr == p) {
-        if (e2 != NULL) {
-          e2->next = e->next;
-        }
+    Entry** pe = &(_table[slot]);
+    while (*pe) {
+      if ((*pe)->ptr == p) {
+        Entry* e = *pe;
+        *pe = (*pe)->next;
+        _size --;
         return e;
       }
-      e2 = e;
-      e = e->next;
+      pe = &((*pe)->next);
     }
     return NULL;
   }
@@ -104,11 +100,10 @@ public:
   AllocationTable();
 
   void add_allocation(const void* p, size_t size, Site* site) {
-    malloctrace_assert(remove_entry_for_pointer(p) == NULL, "adding pointer twice?");
+    malloctrace_assert(remove_entry_for_pointer(p) == NULL, "added twice?");
     Entry* e = _entryheap.alloc_item();
     if (e == NULL) { // hashtable too full, reject.
-      assert(_size == max_entries(), "sanity");
-      _lost ++;
+      _num_lost ++;
       return;
     }
     e->ptr = p;
@@ -145,7 +140,7 @@ public:
   unsigned size() const         { return _size; }
 
   // Number of invocations lost because table was full.
-  uint64_t lost() const         { return _lost; }
+  uint64_t lost() const         { return _num_lost; }
 
 };
 

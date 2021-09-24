@@ -4621,7 +4621,7 @@ jint os::init_2(void) {
 
   // SapMachine 2021-09-01: malloc-trace
   if (EnableMallocTrace) {
-    sap::MallocTracer::enable();
+    sap::MallocTracer::enable(NULL, false);
   }
 
   return JNI_OK;

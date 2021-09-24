@@ -39,6 +39,14 @@
 
 namespace sap {
 
+// backtrace(3) gives sometimes more precise results, but also very rarely crashes.
+// In addition to that it allocates C-Heap memory itself, so when using it, one needs to
+// switch off hooks for the duration of the call.
+
+//#define USE_BACKTRACE
+
+#ifdef USE_BACKTRACE
+
 /////// Wrapper for the glibc backtrace(3) function;
 // (we need to load it dynamically since it is not always guaranteed to be there.)
 
@@ -67,6 +75,8 @@ public:
 
 static BackTraceWrapper g_backtrace_wrapper;
 
+#else
+
 /////// NMT-like callstack function
 
 static bool capture_stack_nmt_like(Stack* stack) {
@@ -86,6 +96,8 @@ static bool capture_stack_nmt_like(Stack* stack) {
   }
   return num_frames > 0;
 }
+
+#endif // !USE_BACKTRACE
 
 void Stack::print_on(outputStream* st) const {
   char tmp[256];
@@ -107,13 +119,18 @@ void Stack::print_on(outputStream* st) const {
 
 // Capture stack; try both methods and use the result from the
 // one getting the better results.
-bool Stack::capture_stack(Stack* stack, bool use_backtrace) {
+bool Stack::capture_stack(Stack* stack) {
   stack->reset();
-  return use_backtrace ? g_backtrace_wrapper.call(stack) : capture_stack_nmt_like(stack);
+#ifdef USE_BACKTRACE
+  return g_backtrace_wrapper.call(stack);
+#else
+  return capture_stack_nmt_like(stack);
+#endif
 }
 
 #ifdef ASSERT
 void SiteTable::verify() const {
+  _nodeheap.verify();
   unsigned num_sites_found = 0;
   uint64_t num_invocations_found = 0;
   for (unsigned slot = 0; slot < table_size; slot ++) {
@@ -122,7 +139,6 @@ void SiteTable::verify() const {
       num_invocations_found += n->site.invocations;
       malloctrace_assert(slot_for_stack(&n->site.stack) == slot, "hash mismatch");
       malloctrace_assert(n->site.invocations > 0, "sanity");
-      malloctrace_assert(n->site.invocations >= n->site.invocations_delta, "sanity");
     }
   }
   malloctrace_assert(num_sites_found <= _max_entries && num_sites_found == _size,
@@ -130,19 +146,12 @@ void SiteTable::verify() const {
   malloctrace_assert(num_invocations_found + _lost == _invocations,
          "mismatch (" UINT64_FORMAT " vs " UINT64_FORMAT, num_invocations_found, _invocations);
   malloctrace_assert(num_sites_found <= max_entries(), "sanity");
+  malloctrace_assert(_size == _nodeheap.in_use(), "sanity");
 }
 #endif // ASSERT
 
 SiteTable::SiteTable() {
   reset();
-}
-
-void SiteTable::reset_deltas() {
-  for (unsigned slot = 0; slot < table_size; slot ++) {
-    for (Node* n = _table[slot]; n != NULL; n = n->next) {
-      n->site.invocations_delta = 0;
-    }
-  }
 }
 
 void SiteTable::reset() {
@@ -214,14 +223,8 @@ void SiteTable::print_table(outputStream* st, bool all) const {
     // For each call site, print out ranking, number of invocation,
     //  alloc size or alloc size range if non-uniform sizes, and stack.
     st->print_cr("---- %d ----", i);
-    st->print_cr("Invocs: " UINT64_FORMAT " (+" UINT64_FORMAT ")",
-                 sorted_items[i].invocations, sorted_items[i].invocations_delta);
-    if (sorted_items[i].max_alloc_size == sorted_items[i].min_alloc_size) {
-      st->print_cr("Alloc Size: " UINT32_FORMAT, sorted_items[i].max_alloc_size);
-    } else {
-      st->print_cr("Alloc Size Range: " UINT32_FORMAT " - " UINT32_FORMAT,
-                   sorted_items[i].min_alloc_size, sorted_items[i].max_alloc_size);
-    }
+    st->print_cr("Invocations: " UINT64_FORMAT ", " UINT64_FORMAT " open allocations with a total of " SIZE_FORMAT " bytes.",
+                 sorted_items[i].invocations, sorted_items[i].num_outstanding_allocations, sorted_items[i].num_outstanding_bytes);
     sorted_items[i].stack.print_on(st);
   }
   if (max_show < _size) {

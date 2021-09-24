@@ -44,44 +44,62 @@ class ItemHeap {
   STATIC_ASSERT(sizeof(FreeListEntry) <= sizeof(T));
   FreeListEntry* _freelist;
 
-  unsigned _used;
+  // Number of items carved out of the heap (only goes up)
+  unsigned _hwm;
+  // ... of those, number of items in the freelist
+  unsigned _in_freelist;
 
 public:
 
-  ItemHeap() : _freelist(NULL), _used(0) {
-    ::memset(_items, 0, sizeof(_items));
+  ItemHeap() {
+    reset();
   }
 
   T* alloc_item() {
     T* item = NULL;
-    if (_freelist != NULL) {
+    if (_freelist != NULL) { // take from freelist
       item = (T*) _freelist;
       _freelist = _freelist->next;
+      _in_freelist--;
     } else {
-      if (_used < num_items) {
-        item = _items + _used;
-        _used ++;
+      if (_hwm < num_items) {
+        item = _items + _hwm;
+        _hwm ++;
       }
     }
     return item;
   }
 
   void return_item(T* item) {
-#ifdef ASSERT
-    ::memset(item, 0, sizeof(T));
-#endif
     FreeListEntry* fi = (FreeListEntry*) item;
     fi->next = _freelist;
     _freelist = fi;
-    _used --;
+    _in_freelist++;
   }
 
   void reset() {
     ::memset(_items, 0, sizeof(_items));
-    _used = 0;
     _freelist = NULL;
+    _in_freelist = 0;
+    _hwm = 0;
   };
 
+  // How many items are in use
+  unsigned in_use() const {
+    return _hwm - _in_freelist;
+  }
+
+#ifdef ASSERT
+  void verify() const {
+    malloctrace_assert(_hwm <= num_items, "sanity");
+    malloctrace_assert(_hwm >= _in_freelist, "sanity");
+    if (_freelist != NULL) {
+      malloctrace_assert(_in_freelist > 0, "sanity");
+    } else {
+      malloctrace_assert(_in_freelist == 0, "sanity");
+    }
+  }
+#endif
 };
 
 } // namespace sap

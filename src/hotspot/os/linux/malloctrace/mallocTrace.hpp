@@ -37,11 +37,12 @@ namespace sap {
 
 class MallocTracer : public AllStatic {
 public:
-  static void enable(outputStream* st, bool use_backtrace, bool trace_allocations);
+  static void enable(outputStream* st, bool trace_allocations);
   static void disable(outputStream* st);
   static void reset(outputStream* st);
   static void print(outputStream* st, bool all);
   static void print_on_error(outputStream* st);
+  static void disable_on_error();
 };
 
 }

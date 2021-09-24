@@ -46,6 +46,7 @@ void AllocationTable::verify() const {
   }
   malloctrace_assert(num_found <= _max_entries && num_found == _size,
          "mismatch (found: %u, max: %u, size: %u)", num_found, _max_entries, _size);
+  malloctrace_assert(_size == _entryheap.in_use(), "sanity");
 }
 #endif // ASSERT
 
@@ -55,7 +56,7 @@ AllocationTable::AllocationTable() {
 
 void AllocationTable::reset() {
   _size = 0;
-  _lost = _collisions = 0;
+  _num_lost = 0;
   ::memset(_table, 0, sizeof(_table));
   _entryheap.reset();
 };
@@ -78,9 +79,8 @@ void AllocationTable::print_stats(outputStream* st) const {
       used_slots ++;
     }
   }
-  st->print("Table size: %u, num_entries: %u, used slots: %u, longest chain: %u, lost: " UINT64_FORMAT ", collisions: " UINT64_FORMAT,
-             table_size, _size, used_slots, longest_chain,
-             _lost, _collisions);
+  st->print("Table size: %u, num_entries: %u, used slots: %u, longest chain: %u, lost: " UINT64_FORMAT,
+             table_size, _size, used_slots, longest_chain, _num_lost);
 }
 
 } // namespace sap

@@ -44,7 +44,7 @@ static void init_random_randomly() {
   os::init_random((int)os::elapsed_counter());
 }
 
-//#define LOG
+#define LOG
 
 static size_t random_size() { return os::random() % 123; }
 
@@ -96,9 +96,9 @@ struct MyTestRunnable_mixed_all : public TestRunnable {
     stringStream ss(buf, sizeof(buf));
     int chance = os::random() % 100;
     if (chance < 20) {
-      (void) MallocTracer::disable();
+      (void) MallocTracer::disable(NULL);
       os::naked_short_sleep(1);
-      (void) MallocTracer::enable(true);
+      (void) MallocTracer::enable(NULL, true);
     } else if (chance < 25) {
       MallocTracer::print(&ss, false);
     } else {
@@ -113,13 +113,12 @@ struct MyTestRunnable_mixed_all : public TestRunnable {
 
 // Mark to switch on tracing and restore the old state
 class TraceRestorer {
-  const bool _restore;
 public:
-  TraceRestorer() : _restore(MallocTracer::enable(true)) {}
+  TraceRestorer() {
+    MallocTracer::enable(NULL, true);
+  }
   ~TraceRestorer() {
-    if (_restore) {
-      MallocTracer::disable();
-    }
+    MallocTracer::disable(NULL);
   }
 };
 

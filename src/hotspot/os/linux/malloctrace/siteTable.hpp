@@ -36,16 +36,6 @@ class outputStream;
 
 namespace sap {
 
-////////////////////////////////////////////////////
-// We currently support two ways to get a stack trace:
-// - using backtrace(3)
-// - using an NMT-like callstack walker
-// I am not sure yet which is better. Have to experiment.
-
-enum class capture_method_t {
-  nmt_like = 0, using_backtrace = 1
-};
-
 ///// Stack ////////////////////
 // simple structure holding a fixed-sized native stack
 
@@ -75,7 +65,7 @@ struct Stack {
 
   void print_on(outputStream* st) const;
 
-  static bool capture_stack(Stack* stack, bool use_backtrace);
+  static bool capture_stack(Stack* stack);
 
 };
 
@@ -85,11 +75,7 @@ struct Stack {
 struct Site {
   Stack stack;
   uint64_t invocations;
-  uint64_t invocations_delta;     // delta since last printing
-  uint32_t min_alloc_size;        // min and max allocation size
-  uint32_t max_alloc_size;        //  from that call site
-                                  // (note: can be zero: we also trace zero-sized allocs since malloc(0)
-                                  //  could also be a leak)
+  // Note: lossy. May be imprecise:
   uint64_t num_outstanding_allocations;
   size_t num_outstanding_bytes;
 };
@@ -133,7 +119,9 @@ public:
 
   SiteTable();
 
-  Site* add_site(const Stack* stack) {
+  // Adds a new site for a given callstack, or returns an existing site for
+  // the stack. Also increases invocation counters.
+  Site* find_or_add_site(const Stack* stack) {
     _invocations ++;
 
     const unsigned slot = slot_for_stack(stack);
@@ -141,6 +129,7 @@ public:
     // Find entry
     for (Node* p = _table[slot]; p != NULL; p = p->next) {
       if (p->site.stack.equals(stack)) {
+        p->site.invocations ++;
         // Call site already presented in table
         return &(p->site);
       } else {
@@ -155,6 +144,7 @@ public:
       return NULL;
     }
     ::memset(n, 0, sizeof(Node));
+    n->site.invocations = 1;
     stack->copy_to(&(n->site.stack));
     n->next = _table[slot];
     _table[slot] = n;
@@ -164,7 +154,6 @@ public:
 
   void print_table(outputStream* st, bool raw) const;
   void print_stats(outputStream* st) const;
-  void reset_deltas();
   void reset();
   DEBUG_ONLY(void verify() const;)
 

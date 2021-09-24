@@ -34,39 +34,15 @@ namespace sap {
 
 #ifdef __GLIBC__
 
-// By default, lets use nmt-like capturing. I see (very rarely) crashes with backtrace(3)
-// on x86. backtrace(3) gives us better callstack but runs a (small) risk of crashing, especially
-// on x86.
-const bool use_backtrace_default = false;
 
 void MallocTraceDCmd::execute(DCmdSource source, TRAPS) {
   const char* const subopt = _suboption.value();
-  if (::strcmp(_option.value(), "on") == 0 || ::strcmp(_option.value(), "trace") == 0) {
-    bool use_backtrace = use_backtrace_default;
-    bool trace_allocations = false;
-    if (subopt != NULL) {
-      if (::strcmp(subopt, "bt") == 0) {
-        use_backtrace = true;
-      } else if (::strcmp(subopt, "nmt") == 0) {
-        use_backtrace = false;
-      } else {
-        _output->print_cr("Invalid sub option");
-        return;
-      }
-    }
-    if (::strcmp(_option.value(), "trace") == 0) {
-      trace_allocations = true;
-    }
-    bool enabled_successfully = MallocTracer::enable(_output, use_backtrace, trace_allocations);
-    _output->print_cr("Tracing %s (method: %s, trace allocations: %d)",
-                      (enabled_successfully ? "enabled" : "already active, nothing changed"),
-                      (use_backtrace ? "bt" : "internal"), trace_allocations);
+  if (::strcmp(_option.value(), "on") == 0) {
+    MallocTracer::enable(_output, false);
+  } else if (::strcmp(_option.value(), "trace") == 0) {
+    MallocTracer::enable(_output, true);
   } else if (::strcmp(_option.value(), "off") == 0) {
-    if (MallocTracer::disable()) {
-      _output->print_raw("Tracing deactivated");
-    } else {
-      _output->print_raw("Tracing was already deactivated");
-    }
+    MallocTracer::disable(_output);
   } else if (::strcmp(_option.value(), "print") == 0) {
     bool all = false;
     if (subopt != NULL) {
@@ -79,8 +55,7 @@ void MallocTraceDCmd::execute(DCmdSource source, TRAPS) {
     }
     MallocTracer::print(_output, all);
   } else if (::strcmp(_option.value(), "reset") == 0) {
-    MallocTracer::reset();
-    _output->print_raw("Tracing table reset");
+    MallocTracer::reset(_output);
   } else {
     _output->print_cr("unknown sub command %s", _option.value());
   }

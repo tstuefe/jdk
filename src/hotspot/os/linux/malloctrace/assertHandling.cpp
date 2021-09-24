@@ -37,18 +37,19 @@ static volatile bool g_asserting = false;
 
 bool prepare_assert() {
 
+  // Note: we only assert under lock protection of the Locker.
+
   // Ignore all but the first assert
   if (Atomic::cmpxchg(&g_asserting, false, true) != false) {
     ::printf("Ignoring secondary assert in malloc trace...\n");
     return false;
   }
 
+  // manually raw-disable hooks with no assert and no lock protection
+  MallocTracer::disable_on_error();
+
   // manually disable lock.
   Locker::unlock();
-
-  // disable hooks (if this asserts too,
-  // the assert is just ignored, see above)
-  MallocTracer::disable();
 
   return true;
 }
