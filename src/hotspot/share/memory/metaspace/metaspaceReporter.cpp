@@ -29,6 +29,7 @@
 #include "memory/metaspace.hpp"
 #include "memory/metaspace/chunkHeaderPool.hpp"
 #include "memory/metaspace/chunkManager.hpp"
+#include "memory/metaspace/histogram.hpp"
 #include "memory/metaspace/internalStats.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "memory/metaspace/metaspaceReporter.hpp"
@@ -183,6 +184,12 @@ void MetaspaceReporter::print_basic_report(outputStream* out, size_t scale) {
   out->cr();
   InternalStats::print_on(out);
   out->cr();
+
+  if (Metaspace::using_class_space()) {
+    out->cr();
+    out->print_cr("Allocation Histogram class-space:");
+    Histogram::histogram_class()->print_on(out);
+  }
 }
 
 void MetaspaceReporter::print_report(outputStream* out, size_t scale, int flags) {
@@ -358,6 +365,13 @@ void MetaspaceReporter::print_report(outputStream* out, size_t scale, int flags)
   print_scaled_words(out, ChunkHeaderPool::pool()->memory_footprint_words(), scale);
   out->print(".");
   out->cr();
+
+  // Print allocation size histograms
+  if (Metaspace::using_class_space()) {
+    out->cr();
+    out->print_cr("Allocation Histogram class-space:");
+    Histogram::histogram_class()->print_on(out);
+  }
 
   // Print internal statistics
   out->cr();

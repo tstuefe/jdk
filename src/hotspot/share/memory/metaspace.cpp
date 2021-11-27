@@ -35,6 +35,7 @@
 #include "memory/metaspace/chunkHeaderPool.hpp"
 #include "memory/metaspace/chunkManager.hpp"
 #include "memory/metaspace/commitLimiter.hpp"
+#include "memory/metaspace/histogram.hpp"
 #include "memory/metaspace/internalStats.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "memory/metaspace/metaspaceContext.hpp"
@@ -61,6 +62,7 @@
 
 using metaspace::ChunkManager;
 using metaspace::CommitLimiter;
+using metaspace::Histogram;
 using metaspace::MetaspaceContext;
 using metaspace::MetaspaceReporter;
 using metaspace::RunningCounters;
@@ -882,6 +884,12 @@ MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
   MetaspaceCriticalAllocation::block_if_concurrent_purge();
 
   MetadataType mdtype = (type == MetaspaceObj::ClassType) ? ClassType : NonClassType;
+
+#ifdef ASSERT
+  if (mdtype == ClassType) {
+    Histogram::histogram_class()->register_word_size(word_size);
+  }
+#endif
 
   // Try to allocate metadata.
   MetaWord* result = loader_data->metaspace_non_null()->allocate(word_size, mdtype);

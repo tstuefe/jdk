@@ -125,6 +125,7 @@ typedef AbstractCounter<size_t>   SizeCounter;
 typedef AbstractCounter<unsigned> IntCounter;
 
 typedef AbstractAtomicCounter<size_t> SizeAtomicCounter;
+typedef AbstractAtomicCounter<unsigned> IntAtomicCounter;
 
 // We often count memory ranges (blocks, chunks etc).
 // Make a helper class for that.
