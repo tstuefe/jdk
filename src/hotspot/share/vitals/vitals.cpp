@@ -25,6 +25,7 @@
  */
 
 #include "precompiled.hpp"
+
 #include "jvm_io.h"
 
 #include "gc/shared/collectedHeap.hpp"
@@ -51,6 +52,10 @@
 #include <locale.h>
 #include <time.h>
 
+// JDK-8280583: "Always build NMT" did away with INCLUDE_NMT for JDK19++
+#ifdef JDK_MAINLINE
+#define INCLUDE_NMT 1
+#endif
 
 namespace sapmachine_vitals {
 
