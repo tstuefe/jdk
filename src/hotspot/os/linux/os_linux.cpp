@@ -66,6 +66,7 @@
 #include "semaphore_posix.hpp"
 #include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
+#include "trimCHeap.hpp"
 #include "utilities/align.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
@@ -2167,10 +2168,17 @@ void os::Linux::print_process_memory_info(outputStream* st) {
                  total_allocated / K,
                  might_have_wrapped ? " (may have wrapped)" : "");
   }
+
   // Tunables
   print_glibc_malloc_tunables(st);
   st->cr();
-#endif
+
+  // If the glibc auto trimmer is active, report its state as a terse one liner
+  if (AutoTrimNativeHeap) {
+    AutoTrimCHeap::report(st);
+    st->cr();
+  }
+#endif // __GLIBC__
 }
 
 bool os::Linux::print_ld_preload_file(outputStream* st) {

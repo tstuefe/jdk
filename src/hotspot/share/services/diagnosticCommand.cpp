@@ -61,7 +61,7 @@
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #ifdef LINUX
-#include "trimCHeapDCmd.hpp"
+#include "trimCHeap.hpp"
 #endif
 
 static void loadAgentModule(TRAPS) {

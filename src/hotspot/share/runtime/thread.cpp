@@ -147,6 +147,10 @@
 #include "jfr/jfr.hpp"
 #endif
 
+#ifdef LINUX
+#include "trimCHeap.hpp"
+#endif
+
 // Initialization after module runtime initialization
 void universe_post_module_init();  // must happen after call_initPhase2
 
@@ -2917,6 +2921,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 
   Chunk::start_chunk_pool_cleaner_task();
+
+#ifdef LINUX
+  AutoTrimCHeap::start();
+#endif
 
   // Start the service thread
   // The service thread enqueues JVMTI deferred events and does various hashtable
