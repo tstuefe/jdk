@@ -65,6 +65,7 @@
 #include "semaphore_posix.hpp"
 #include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
+#include "trimCHeap.hpp"
 #include "utilities/align.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
@@ -2138,6 +2139,11 @@ void os::Linux::print_process_memory_info(outputStream* st) {
   }
 #endif // __GLIBC__
 
+  // If the glibc auto trimmer is active, report its state in a terse one liner
+  if (AutoTrimNativeHeap) {
+    AutoTrimCHeap::report(st);
+    st->cr();
+  }
 }
 
 bool os::Linux::print_ld_preload_file(outputStream* st) {

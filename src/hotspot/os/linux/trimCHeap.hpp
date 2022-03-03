@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2021 SAP SE. All rights reserved.
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2022 SAP SE. All rights reserved.
+ * Copyright (c) 2021, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,12 +23,21 @@
  *
  */
 
-#ifndef OS_LINUX_TRIMCHEAPDCMD_HPP
-#define OS_LINUX_TRIMCHEAPDCMD_HPP
+#ifndef OS_LINUX_TRIMCHEAP_HPP
+#define OS_LINUX_TRIMCHEAP_HPP
 
 #include "services/diagnosticCommand.hpp"
 
 class outputStream;
+
+// Note: all functionality in this header depends on glibc. On non-glibc platforms,
+// these will be noops.
+
+class AutoTrimCHeap : public AllStatic {
+public:
+  static void start();
+  static void report(outputStream* st);
+};
 
 class TrimCLibcHeapDCmd : public DCmd {
 public:
@@ -49,4 +58,4 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
-#endif // OS_LINUX_TRIMCHEAPDCMD_HPP
+#endif // OS_LINUX_TRIMCHEAP_HPP

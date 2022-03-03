@@ -60,7 +60,7 @@
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #ifdef LINUX
-#include "trimCHeapDCmd.hpp"
+#include "trimCHeap.hpp"
 #endif
 
 // SapMachine 2019-02-20 : vitals

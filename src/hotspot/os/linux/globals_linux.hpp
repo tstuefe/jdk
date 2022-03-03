@@ -82,7 +82,18 @@
           "Use CPU_ALLOC code path in os::active_processor_count ")     \
                                                                         \
   product(bool, DumpPerfMapAtExit, false, DIAGNOSTIC,                   \
-          "Write map file for Linux perf tool at exit")
+          "Write map file for Linux perf tool at exit")                 \
+                                                                        \
+  product(bool, AutoTrimNativeHeap, false, DIAGNOSTIC,                  \
+         "Trim native heap in regular intervals (default: 10s)")        \
+                                                                        \
+  product(int, AutoTrimNativeHeapInterval, 10, DIAGNOSTIC,              \
+         "If AutoTrimNativeHeap is true, interval, in seconds, "        \
+         "in which the native heap will be trimmed")                    \
+                                                                        \
+  product(bool, AutoTrimNativeHeapIntervalAdaptive, false, DIAGNOSTIC,  \
+         "If AutoTrimNativeHeap is true, adapt trim interval depending" \
+         " on perceived malloc load")
 
 // end of RUNTIME_OS_FLAGS
 

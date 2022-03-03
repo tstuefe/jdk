@@ -42,9 +42,10 @@ public class TrimLibcHeapTest {
     public void run(CommandExecutor executor) {
         OutputAnalyzer output = executor.execute("System.trim_native_heap");
         output.reportDiagnosticSummary();
-        output.shouldMatch("(Done|Not available)"); // Not available could happen on Linux + non-glibc (eg. muslc)
-        if (output.firstMatch("Done") != null) {
-            output.shouldMatch("(Virtual size before|RSS before|Swap before|No details available)");
+        // We eiter report "Not available" (on non-glibc platforms) or something like:
+        // "Trim native heap: virt: 21149996k->21149868k (-128k), rss: 655556k->649944k (-5612k), swap: 0k->0k (0k)"
+        if (output.firstMatch("Not available") == null) {
+            output.shouldMatch("Trim native heap:.*virt.*rss.*swap");
         }
     }
 
