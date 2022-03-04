@@ -93,7 +93,11 @@
                                                                         \
   product(int, AutoTrimNativeHeapInterval, 10, DIAGNOSTIC,              \
          "If AutoTrimNativeHeap is true, interval, in seconds, "        \
-         "in which the native heap will be trimmed")
+         "in which the native heap will be trimmed")                    \
+                                                                        \
+  product(bool, AutoTrimNativeHeapIntervalAdaptive, false, DIAGNOSTIC,  \
+         "If AutoTrimNativeHeap is true, adapt trim interval depending" \
+         " on perceived malloc load")
 
 // end of RUNTIME_OS_FLAGS
 

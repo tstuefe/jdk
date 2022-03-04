@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 #include "logging/log.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/os.hpp"
 #include "runtime/task.hpp"
 #include "utilities/debug.hpp"
@@ -112,12 +113,38 @@ void TrimCLibcHeapDCmd::execute(DCmdSource source, TRAPS) {
 
 class AutoTrimmerTask : public PeriodicTask {
   unsigned _count;
+  unsigned _quiet_period_countdown;
+  ssize_t _last_deltas[3];
 public:
-  AutoTrimmerTask(int interval_seconds) : PeriodicTask(interval_seconds * 1000), _count(0) {}
+  AutoTrimmerTask(int interval_seconds) : PeriodicTask(interval_seconds * 1000), _count(0), _quiet_period_countdown(0) {
+    _last_deltas[0] = _last_deltas[1] = _last_deltas[2] = 0;
+  }
   void task() {
-    memory_footprint_change_t info;
-    trim_and_measure(&info);
-    report_trim_result(&info, NULL);
+    if (_quiet_period_countdown == 0) {
+
+      // Trim, measure, report
+      memory_footprint_change_t info;
+      trim_and_measure(&info);
+      report_trim_result(&info, NULL);
+
+      if (AutoTrimNativeHeapIntervalAdaptive) {
+        // If we routinely release a lot of memory,
+        // then we have to assume we are in a constant malloc churn, and therefore it makes
+        // sense to lay off trimming for a bit.
+        if (info.have_values) {
+          const ssize_t delta = info.before.vmrss - info.after.vmrss; // Note: reverse, so result is positive
+          _last_deltas[2] = _last_deltas[1];
+          _last_deltas[1] = _last_deltas[0];
+          _last_deltas[0] = delta;
+          if (_last_deltas[2] > (ssize_t)M && _last_deltas[1] > (ssize_t)M && _last_deltas[0] > (ssize_t)M) {
+            _last_deltas[0] = _last_deltas[1] = _last_deltas[2] = 0;
+            _quiet_period_countdown = 20;
+          }
+        }
+      }
+    } else {
+      _quiet_period_countdown --;
+    }
     _count ++;
   }
   unsigned count() const { return _count; }
