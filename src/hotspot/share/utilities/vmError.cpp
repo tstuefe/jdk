@@ -1158,7 +1158,8 @@ void VMError::report(outputStream* st, bool _verbose) {
      if (_verbose) {
        sapmachine_vitals::print_info_t info;
        sapmachine_vitals::default_settings(&info);
-       info.sample_now = true; // About the only place where we do this apart from explicitly setting the "now" parm on jcmd
+       info.sample_now = true;
+       st->print_cr("Vitals:");
        sapmachine_vitals::print_report(st);
      }
 
@@ -1345,6 +1346,7 @@ void VMError::print_vm_info(outputStream* st) {
   sapmachine_vitals::print_info_t info;
   sapmachine_vitals::default_settings(&info);
   info.sample_now = false;
+  st->print_cr("Vitals:");
   sapmachine_vitals::print_report(st);
 
   // STEP("printing system")
