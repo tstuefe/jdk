@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +27,77 @@
 #define SHARE_RUNTIME_SAFEFETCH_INLINE_HPP
 
 // No safefetch.hpp
+#include "memory/allStatic.hpp"
+#include "utilities/debug.hpp"
+#include "utilities/macros.hpp"
+#include "utilities/globalDefinitions.hpp"
+
+#ifdef _WIN32
+
+#include "safefetch_windows.hpp"
+#define SAFEFETCH_METHOD_SEH
+
+#elif defined(ZERO) || defined(PPC) || defined(S390)
+
+#define SAFEFETCH_METHOD_STUBROUTINES
+
+#else
+
+#define SAFEFETCH_METHOD_STATIC_ASSEMBLY
+
+#endif
+
+
+#ifdef SAFEFETCH_METHOD_STATIC_ASSEMBLY
+
+extern "C" int _SafeFetch32(int* adr, int errValue);
+extern "C" char _SafeFetch32_continuation[] __attribute__ ((visibility ("hidden")));
+extern "C" char _SafeFetch32_fault[] __attribute__ ((visibility ("hidden")));
+
+#ifdef _LP64
+extern "C" uint64_t _SafeFetch64(uint64_t* adr, uint64_t errValue);
+extern "C" char _SafeFetch64_continuation[] __attribute__ ((visibility ("hidden")));
+extern "C" char _SafeFetch64_fault[] __attribute__ ((visibility ("hidden")));
+#endif // _LP64
+
+inline int SafeFetch32(int* adr, int errValue) {
+  return _SafeFetch32(adr, errValue);
+}
+
+inline intptr_t SafeFetchN(intptr_t* adr, intptr_t errValue) {
+  return
+      LP64_ONLY((intptr_t)_SafeFetch64((uint64_t*)adr, (uint64_t) errValue))
+      NOT_LP64((intptr_t)_SafeFetch32((int*)adr, (int) errValue));
+}
+
+inline bool CanUseSafeFetch32() { return true; }
+inline bool CanUseSafeFetchN()  { return true; }
+
+struct SafeFetchHelper : public AllStatic {
+
+  static bool is_safefetch_fault(address pc) {
+    return pc == (address)_SafeFetch32_fault
+                 LP64_ONLY(|| pc == (address)_SafeFetch64_fault);
+  }
+
+  static address continuation_for_safefetch_fault(address pc) {
+    if (pc == (address)_SafeFetch32_fault) {
+      return (address)_SafeFetch32_continuation;
+    }
+#ifdef _LP64
+    else if (pc == (address)_SafeFetch64_fault) {
+      return (address)_SafeFetch64_continuation;
+    }
+#endif
+    else {
+      ShouldNotReachHere();
+    }
+    return NULL;
+  }
+
+};
+
+#elif defined(SAFEFETCH_METHOD_STUBROUTINES)
 
 #include "runtime/stubRoutines.hpp"
 #include "runtime/threadWXSetters.inline.hpp"
@@ -34,41 +106,33 @@
 // to be valid. If the load causes a fault, the error value is returned.
 inline int SafeFetch32(int* adr, int errValue) {
   assert(StubRoutines::SafeFetch32_stub(), "stub not yet generated");
-#if defined(__APPLE__) && defined(AARCH64)
-  Thread* thread = Thread::current_or_null_safe();
-  assert(thread != NULL, "required for W^X management");
-  ThreadWXEnable wx(WXExec, thread);
-#endif // __APPLE__ && AARCH64
   return StubRoutines::SafeFetch32_stub()(adr, errValue);
 }
 
 inline intptr_t SafeFetchN(intptr_t* adr, intptr_t errValue) {
   assert(StubRoutines::SafeFetchN_stub(), "stub not yet generated");
-#if defined(__APPLE__) && defined(AARCH64)
-  Thread* thread = Thread::current_or_null_safe();
-  assert(thread != NULL, "required for W^X management");
-  ThreadWXEnable wx(WXExec, thread);
-#endif // __APPLE__ && AARCH64
   return StubRoutines::SafeFetchN_stub()(adr, errValue);
 }
 
 // returns true if SafeFetch32 and SafeFetchN can be used safely (stubroutines are already generated)
 inline bool CanUseSafeFetch32() {
-#if defined (__APPLE__) && defined(AARCH64)
-  if (Thread::current_or_null_safe() == NULL) { // workaround for JDK-8282475
-    return false;
-  }
-#endif // __APPLE__ && AARCH64
   return StubRoutines::SafeFetch32_stub() ? true : false;
 }
 
 inline bool CanUseSafeFetchN() {
-#if defined (__APPLE__) && defined(AARCH64)
-  if (Thread::current_or_null_safe() == NULL) {
-    return false;
-  }
-#endif // __APPLE__ && AARCH64
   return StubRoutines::SafeFetchN_stub() ? true : false;
 }
+
+class SafeFetchHelper : public AllStatic {
+public:
+  static bool is_safefetch_fault(address pc) {
+    return StubRoutines::is_safefetch_fault(pc);
+  }
+  static address continuation_for_safefetch_fault(address pc) {
+    return StubRoutines::continuation_for_safefetch_fault(pc);
+  }
+};
+
+#endif // SAFEFETCH_METHOD_XXX
 
 #endif // SHARE_RUNTIME_SAFEFETCH_INLINE_HPP

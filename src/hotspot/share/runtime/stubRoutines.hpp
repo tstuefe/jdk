@@ -429,7 +429,7 @@ class StubRoutines: AllStatic {
   static address select_fill_function(BasicType t, bool aligned, const char* &name);
 
   //
-  // Safefetch stub support
+  // Safefetch stub support (stub-routine based)
   //
 
   typedef int      (*SafeFetch32Stub)(int*      adr, int      errValue);

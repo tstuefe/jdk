@@ -33,6 +33,7 @@
 #include "runtime/timerTrace.hpp"
 #include "runtime/safefetch.inline.hpp"
 #include "runtime/sharedRuntime.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "utilities/align.hpp"
 #include "utilities/copy.hpp"
 #ifdef COMPILER2
