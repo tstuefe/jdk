@@ -28,25 +28,10 @@
 
 // No safefetch.hpp
 #include "memory/allStatic.hpp"
+#include "runtime/safefetch.method.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/globalDefinitions.hpp"
-
-#ifdef _WIN32
-
-#include "safefetch_windows.hpp"
-#define SAFEFETCH_METHOD_SEH
-
-#elif defined(ZERO) || defined(PPC) || defined(S390)
-
-#define SAFEFETCH_METHOD_STUBROUTINES
-
-#else
-
-#define SAFEFETCH_METHOD_STATIC_ASSEMBLY
-
-#endif
-
 
 #ifdef SAFEFETCH_METHOD_STATIC_ASSEMBLY
 

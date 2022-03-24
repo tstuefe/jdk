@@ -23,30 +23,33 @@
  *
  */
 
-#ifndef OS_WINDOWS_SAFEFETCH_WINDOWS_HPP
-#define OS_WINDOWS_SAFEFETCH_WINDOWS_HPP
+#ifndef SHARE_RUNTIME_SAFEFETCH_METHOD_HPP
+#define SHARE_RUNTIME_SAFEFETCH_METHOD_HPP
 
+#include "utilities/macros.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-// On windows, we use structured exception handling to implement SafeFetch
-#define SAFEFETCH_METHOD_SEH
+#ifdef _WIN32
 
-template <class T>
-inline T SafeFetchXX(const T* adr, T errValue) {
-  T v = 0;
-  __try {
-    v = *adr;
-  }
-  __except(EXCEPTION_EXECUTE_HANDLER) {
-    v = errValue;
-  }
-  return v;
-}
+// Windows uses Structured Exception Handling
+#include "safefetch_windows.hpp"
 
-inline int SafeFetch32(const int* adr, int errValue)                { return SafeFetchXX<int>(adr, errValue); }
-inline intptr_t SafeFetchN(const intptr_t* adr, intptr_t errValue)  { return SafeFetchXX<intptr_t>(adr, errValue); }
+#elif defined(ZERO) || defined (_AIX) || defined(PPC) || defined(S390)
 
-inline bool CanUseSafeFetch32() { return true; }
-inline bool CanUseSafeFetchN()  { return true; }
+// These platforms use Posix sigsetjmp
+#include "safefetch_posix.hpp"
+
+#elif defined(PPC) || defined(S390)
+
+// These platforms use dynamically generated assembly. That has a number
+// of disadvantages compared with static assembly (see JDK-8283326)
+#define SAFEFETCH_METHOD_STUBROUTINES
+
+#else
+
+// These platforms use statically generated assembly
+#define SAFEFETCH_METHOD_STATIC_ASSEMBLY
 
 #endif
+
+#endif // SHARE_RUNTIME_SAFEFETCH_METHOD_HPP

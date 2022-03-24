@@ -30,6 +30,7 @@
 #include "prims/vectorSupport.hpp"
 #include "runtime/frame.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "runtime/safefetch.method.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "utilities/macros.hpp"
 
@@ -250,6 +251,7 @@ class StubRoutines: AllStatic {
   static address _dlibm_tan_cot_huge;
   static address _dtan;
 
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
   // Safefetch stubs.
   static address _safefetch32_entry;
   static address _safefetch32_fault_pc;
@@ -257,6 +259,7 @@ class StubRoutines: AllStatic {
   static address _safefetchN_entry;
   static address _safefetchN_fault_pc;
   static address _safefetchN_continuation_pc;
+#endif // SAFEFETCH_METHOD_STUBROUTINES
 
   // Vector Math Routines
   static address _vector_f_math[VectorSupport::NUM_VEC_SIZES][VectorSupport::NUM_SVML_OP];
@@ -428,6 +431,8 @@ class StubRoutines: AllStatic {
 
   static address select_fill_function(BasicType t, bool aligned, const char* &name);
 
+
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
   //
   // Safefetch stub support (stub-routine based)
   //
@@ -455,6 +460,8 @@ class StubRoutines: AllStatic {
     ShouldNotReachHere();
     return NULL;
   }
+
+#endif // SAFEFETCH_METHOD_STUBROUTINES
 
   //
   // Default versions of the above arraycopy functions for platforms which do

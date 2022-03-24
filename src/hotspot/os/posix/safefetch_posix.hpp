@@ -23,30 +23,26 @@
  *
  */
 
-#ifndef OS_WINDOWS_SAFEFETCH_WINDOWS_HPP
-#define OS_WINDOWS_SAFEFETCH_WINDOWS_HPP
+#ifndef CPU_ZERO_SAFEFETCH_ZERO_HPP
+#define CPU_ZERO_SAFEFETCH_ZERO_HPP
 
 #include "utilities/globalDefinitions.hpp"
 
-// On windows, we use structured exception handling to implement SafeFetch
-#define SAFEFETCH_METHOD_SEH
+// On Posix platforms that don't do anything better - or cannot, like Zero -
+// SafeFetch is implemented using setjmp/longjmp. That is reliable and portable,
+// but slower than other methods, and needs more thread stack (the sigjmp buffer
+// lives on the thread stack).
+#define SAFEFETCH_METHOD_SIGSETJMP
 
-template <class T>
-inline T SafeFetchXX(const T* adr, T errValue) {
-  T v = 0;
-  __try {
-    v = *adr;
-  }
-  __except(EXCEPTION_EXECUTE_HANDLER) {
-    v = errValue;
-  }
-  return v;
-}
-
-inline int SafeFetch32(const int* adr, int errValue)                { return SafeFetchXX<int>(adr, errValue); }
-inline intptr_t SafeFetchN(const intptr_t* adr, intptr_t errValue)  { return SafeFetchXX<intptr_t>(adr, errValue); }
+int SafeFetch32(int* adr, int errValue);
+intptr_t SafeFetchN(intptr_t* adr, intptr_t errValue);
 
 inline bool CanUseSafeFetch32() { return true; }
 inline bool CanUseSafeFetchN()  { return true; }
+
+// Handle safefetch, sigsetjmp style. Only call from signal handler.
+// If a safefetch jump had been established and the sig qualifies, we
+// jump back to the established jump point (and hence out of signal handling).
+void handle_safefetch(int sig);
 
 #endif
