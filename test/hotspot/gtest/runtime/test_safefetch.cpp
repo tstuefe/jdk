@@ -30,6 +30,7 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/vmError.hpp"
 #include "unittest.hpp"
+#include "testutils.hpp"
 
 // Note: beyond these tests, there exist additional tests testing that safefetch in error handling
 // (in the context of signal handling) works, see runtime/ErrorHandling
@@ -37,73 +38,94 @@
 static const intptr_t patternN = LP64_ONLY(0xABCDABCDABCDABCDULL) NOT_LP64(0xABCDABCD);
 static const int pattern32 = 0xABCDABCD;
 
-static intptr_t* invalid_addressN =   (intptr_t*)VMError::segfault_address;
-static int* invalid_address32 =       (int*)VMError::segfault_address;
-
 TEST_VM(os, safefetch_can_use) {
   // Once VM initialization is through,
   // safefetch should work on every platform.
   ASSERT_TRUE(CanUseSafeFetch32());
 }
 
-static void test_safefetchN_positive() {
-  intptr_t v = patternN;
-  intptr_t a = SafeFetchN(&v, 1);
+// A little piece of memory in hopefully high address area, so that its address has bits
+// set in the upper 32bit word too.
+template <class T>
+class TestMemory {
+  void* const _p;
+  const size_t _size;
+
+public:
+
+  TestMemory(bool readable) : _p(GtestUtils::reserve_memory_upstairs(os::vm_allocation_granularity())),
+                              _size(os::vm_allocation_granularity())
+  {
+    assert(_p != NULL, "failed to reserve " SIZE_FORMAT " bytes", _size);
+    os::commit_memory_or_exit((char*)_p, _size, false, "testmemory");
+    if (!readable) {
+      bool rc = os::protect_memory((char*)_p, _size, os::MEM_PROT_NONE);
+      assert(rc, "protect memory failed");
+    }
+  }
+
+  ~TestMemory() {
+    if (_p != NULL) {
+      os::release_memory((char*)_p, _size);
+    }
+  }
+
+  T* p() const { return (T*)_p; }
+
+}; // end TestMemory
+
+static void test_safefetchN_positive(intptr_t* location) {
+  *location = patternN;
+  intptr_t a = SafeFetchN(location, 1);
   ASSERT_EQ(patternN, a);
 }
 
-static void test_safefetch32_positive() {
-  int v[2] = { pattern32, ~pattern32 };
-  uint64_t a = SafeFetch32(v, 1);
+static void test_safefetch32_positive(int* location) {
+  *location = pattern32;
+  uint64_t a = SafeFetch32(location, 1);
   ASSERT_EQ((uint64_t)pattern32, a);
 }
 
-static void test_safefetchN_negative() {
-  // Non-NULL invalid
-  intptr_t a = SafeFetchN(invalid_addressN, patternN);
+static void test_safefetchN_negative(intptr_t* location) {
+  intptr_t a = SafeFetchN(location, patternN);
   ASSERT_EQ(patternN, a);
-  a = SafeFetchN(invalid_addressN, ~patternN);
+  a = SafeFetchN(location, ~patternN);
   ASSERT_EQ(~patternN, a);
-
-  // Also try NULL
-#ifndef AIX
-  a = SafeFetchN(nullptr, patternN);
-  ASSERT_EQ(patternN, a);
-  a = SafeFetchN(nullptr, ~patternN);
-  ASSERT_EQ(~patternN, a);
-#endif
 }
 
-static void test_safefetch32_negative() {
-  // Non-NULL invalid
-  int a = SafeFetch32(invalid_address32, pattern32);
+static void test_safefetch32_negative(int* location) {
+  int a = SafeFetch32(location, pattern32);
   ASSERT_EQ(pattern32, a);
-  a = SafeFetch32(invalid_address32, ~pattern32);
+  a = SafeFetch32(location, ~pattern32);
   ASSERT_EQ(~pattern32, a);
-
-  // Also try NULL
-#ifndef AIX
-  a = SafeFetch32(nullptr, pattern32);
-  ASSERT_EQ(pattern32, a);
-  a = SafeFetch32(nullptr, ~pattern32);
-  ASSERT_EQ(~pattern32, a);
-#endif
 }
 
 TEST_VM(os, safefetchN_positive) {
-  test_safefetchN_positive();
+  TestMemory<intptr_t> tm(true);
+  test_safefetchN_positive(tm.p());
 }
 
 TEST_VM(os, safefetch32_positive) {
-  test_safefetch32_positive();
+  TestMemory<int> tm(true);
+  test_safefetch32_positive(tm.p());
 }
 
 TEST_VM(os, safefetchN_negative) {
-  test_safefetchN_negative();
+  TestMemory<intptr_t> tm(false);
+  test_safefetchN_negative(tm.p());
+  // also test NULL
+#ifndef _AIX
+  test_safefetchN_negative(NULL);
+#endif
 }
 
 TEST_VM(os, safefetch32_negative) {
-  test_safefetch32_negative();
+  TestMemory<int> tm(false);
+  test_safefetch32_negative(tm.p());
+  // also test NULL
+#ifndef _AIX
+  test_safefetch32_negative(NULL);
+#endif
 }
 
 // Try with Thread::current being NULL. SafeFetch should work then too.
@@ -121,24 +143,44 @@ public:
   }
 };
 
-TEST_VM(os, safefetchN_positive_thread_current_null) {
-  ThreadCurrentNullMark tcnm;
-  test_safefetchN_positive();
+TEST_VM(os, safefetchN_positive_current_null) {
+  TestMemory<intptr_t> tm(true);
+  {
+    ThreadCurrentNullMark tcnmark;
+    test_safefetchN_positive(tm.p());
+  }
 }
 
-TEST_VM(os, safefetch32_positive_thread_current_null) {
-  ThreadCurrentNullMark tcnm;
-  test_safefetch32_positive();
+TEST_VM(os, safefetch32_positive_current_null) {
+  TestMemory<int> tm(true);
+  {
+    ThreadCurrentNullMark tcnmark;
+    test_safefetch32_positive(tm.p());
+  }
 }
 
-TEST_VM(os, safefetchN_negative_thread_current_null) {
-  ThreadCurrentNullMark tcnm;
-  test_safefetchN_negative();
+TEST_VM(os, safefetchN_negative_current_null) {
+  TestMemory<intptr_t> tm(false);
+  {
+    ThreadCurrentNullMark tcnmark;
+    test_safefetchN_negative(tm.p());
+    // also test NULL
+#ifndef _AIX
+    test_safefetchN_negative(NULL);
+#endif
+  }
 }
 
-TEST_VM(os, safefetch32_negative_thread_current_null) {
-  ThreadCurrentNullMark tcnm;
-  test_safefetch32_negative();
+TEST_VM(os, safefetch32_negative_current_null) {
+  TestMemory<int> tm(false);
+  {
+    ThreadCurrentNullMark tcnmark;
+    test_safefetch32_negative(tm.p());
+    // also test NULL
+#ifndef _AIX
+    test_safefetch32_negative(NULL);
+#endif
+  }
 }
 
 class VM_TestSafeFetchAtSafePoint : public VM_GTestExecuteAtSafepoint {
@@ -146,7 +188,7 @@ public:
   void doit() {
     // Regression test for JDK-8257828
     // Should not crash.
-    test_safefetchN_negative();
+    test_safefetchN_negative((intptr_t*)VMError::segfault_address);
   }
 };
 

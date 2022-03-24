@@ -45,6 +45,12 @@ public:
   static void mark_range(void* p, size_t s)           { mark_range_with(p, s, 32); }
   static bool check_range(const void* p, size_t s)    { return check_range(p, s, 32); }
 
+  // Given a size in bytes - aligned to vm_allocation_granularity - reserve a range of memory
+  // at an "interesting" location, mainly with a pointer where all 16bit segments contain set bits.
+  // This is a best-effort function: if it does not succeed, it gives up and reserves anywhere.
+  // The returned memory is uncommitted, small-paged, and should be released with os::release_memory.
+  static void* reserve_memory_upstairs(size_t bytes);
+
 };
 
 #define ASSERT_RANGE_IS_MARKED_WITH(p, size, mark)  ASSERT_TRUE(GtestUtils::check_range(p, size, mark))

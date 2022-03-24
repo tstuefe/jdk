@@ -67,3 +67,35 @@ bool GtestUtils::check_range(const void* p, size_t s, uint8_t expected) {
 
   return first_wrong == NULL;
 }
+
+// Given a size in bytes - aligned to vm_allocation_granularity - reserve a range of memory
+// at an "interesting" location, mainly with a pointer where, if possible, all 16bit segments contain
+// set bits.
+// This is a best-effort function: if it does not succeed, it gives up and reserves anywhere.
+// The returned memory is uncommitted, small-paged, and should be released with os::release_memory.
+void* GtestUtils::reserve_memory_upstairs(size_t bytes) {
+  void* p = NULL;
+#ifdef _LP64
+  assert(is_aligned(bytes, os::vm_allocation_granularity()), "lets keep things aligned");
+  static const uint64_t wish_addresses[] = {
+      0x0001000100010001ULL,
+      0x100010001ULL,
+      0x400010001ULL,
+      0x900010001ULL,
+      0xA00010001ULL,
+      0x1100010001ULL,
+      0
+  };
+  for (int i = 0; wish_addresses[i] != 0 && p == NULL; i ++) {
+    char* const wishaddress = align_up((char*)wish_addresses[i], os::vm_allocation_granularity());
+    p = os::attempt_reserve_memory_at(wishaddress, bytes, false);
+  }
+#endif // _LP64
+  // give up, just reserve anywhere
+  // on 32-bit this is all we do.
+  if (p == NULL) {
+    p = os::reserve_memory(bytes, false, mtTest);
+  }
+  printf("%p\n", p);
+  return p;
+}
