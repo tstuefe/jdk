@@ -38,6 +38,7 @@
 #include "prims/methodHandles.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/safefetch.method.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -1457,6 +1458,7 @@ class StubGenerator: public StubCodeGenerator {
     StubRoutines::_arrayof_oop_arraycopy_uninit = generate_conjoint_oop_copy  (true, "arrayof_oop_arraycopy_uninit", true);
   }
 
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
   void generate_safefetch(const char* name, int size, address* entry, address* fault_pc, address* continuation_pc) {
 
     // safefetch signatures:
@@ -1494,6 +1496,7 @@ class StubGenerator: public StubCodeGenerator {
     __ z_br(Z_R14);
 
   }
+#endif // SAFEFETCH_METHOD_STUBROUTINES
 
   // Call interface for AES_encryptBlock, AES_decryptBlock stubs.
   //
@@ -2338,9 +2341,12 @@ class StubGenerator: public StubCodeGenerator {
     // Comapct string intrinsics: Translate table for string inflate intrinsic. Used by trot instruction.
     StubRoutines::zarch::_trot_table_addr = (address)StubRoutines::zarch::_trot_table;
 
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
     // safefetch stubs
     generate_safefetch("SafeFetch32", sizeof(int),      &StubRoutines::_safefetch32_entry, &StubRoutines::_safefetch32_fault_pc, &StubRoutines::_safefetch32_continuation_pc);
     generate_safefetch("SafeFetchN",  sizeof(intptr_t), &StubRoutines::_safefetchN_entry,  &StubRoutines::_safefetchN_fault_pc,  &StubRoutines::_safefetchN_continuation_pc);
+#endif // SAFEFETCH_METHOD_STUBROUTINES
+
   }
 
 

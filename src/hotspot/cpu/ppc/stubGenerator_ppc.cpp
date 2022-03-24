@@ -38,6 +38,7 @@
 #include "prims/methodHandles.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/safefetch.method.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -3159,6 +3160,7 @@ class StubGenerator: public StubCodeGenerator {
 #endif
   }
 
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
   // Safefetch stubs.
   void generate_safefetch(const char* name, int size, address* entry, address* fault_pc, address* continuation_pc) {
     // safefetch signatures:
@@ -3197,6 +3199,7 @@ class StubGenerator: public StubCodeGenerator {
     __ mr(R3_RET, R4_ARG2);
     __ blr();
   }
+#endif // SAFEFETCH_METHOD_STUBROUTINES
 
   // Stub for BigInteger::multiplyToLen()
   //
@@ -4574,6 +4577,7 @@ class StubGenerator: public StubCodeGenerator {
       StubRoutines::_updateBytesCRC32C = generate_CRC32_updateBytes(true);
     }
 
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
     // Safefetch stubs.
     generate_safefetch("SafeFetch32", sizeof(int),     &StubRoutines::_safefetch32_entry,
                                                        &StubRoutines::_safefetch32_fault_pc,
@@ -4581,6 +4585,7 @@ class StubGenerator: public StubCodeGenerator {
     generate_safefetch("SafeFetchN", sizeof(intptr_t), &StubRoutines::_safefetchN_entry,
                                                        &StubRoutines::_safefetchN_fault_pc,
                                                        &StubRoutines::_safefetchN_continuation_pc);
+#endif // SAFEFETCH_METHOD_STUBROUTINES
   }
 
   void generate_all() {
