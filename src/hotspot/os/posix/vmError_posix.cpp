@@ -26,7 +26,7 @@
 #include "precompiled.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "runtime/os.hpp"
-#include "runtime/safefetch.hpp"
+#include "runtime/safefetch.inline.hpp"
 #include "runtime/thread.hpp"
 #include "signals_posix.hpp"
 #include "utilities/debug.hpp"

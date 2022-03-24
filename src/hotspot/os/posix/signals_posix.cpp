@@ -32,7 +32,7 @@
 #include "runtime/java.hpp"
 #include "runtime/os.hpp"
 #include "runtime/osThread.hpp"
-#include "runtime/safefetch.hpp"
+#include "runtime/safefetch.inline.hpp"
 #include "runtime/semaphore.inline.hpp"
 #include "runtime/thread.hpp"
 #include "signals_posix.hpp"

@@ -24,7 +24,7 @@
  */
 
 #include "precompiled.hpp"
-#include "runtime/safefetch.method.hpp"
+#include "runtime/safefetch_method.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 

@@ -30,7 +30,7 @@
 #include "prims/vectorSupport.hpp"
 #include "runtime/frame.hpp"
 #include "runtime/mutexLocker.hpp"
-#include "runtime/safefetch.method.hpp"
+#include "runtime/safefetch_method.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "utilities/macros.hpp"
 
