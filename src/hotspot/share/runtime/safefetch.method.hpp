@@ -39,7 +39,7 @@
 // These platforms use Posix sigsetjmp
 #include "safefetch_posix.hpp"
 
-#elif defined(PPC) || defined(S390)
+#elif defined(PPC) || defined(S390) || defined(RISCV)
 
 // These platforms use dynamically generated assembly. That has a number
 // of disadvantages compared with static assembly (see JDK-8283326)

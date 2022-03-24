@@ -40,6 +40,7 @@
 #include "prims/methodHandles.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/safefetch.method.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -2196,6 +2197,7 @@ class StubGenerator: public StubCodeGenerator {
     StubRoutines::_arrayof_jint_fill = generate_fill(T_INT, true, "arrayof_jint_fill");
   }
 
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
   // Safefetch stubs.
   void generate_safefetch(const char* name, int size, address* entry,
                           address* fault_pc, address* continuation_pc) {
@@ -2235,6 +2237,7 @@ class StubGenerator: public StubCodeGenerator {
     __ mv(x10, c_rarg1);
     __ ret();
   }
+#endif // SAFEFETCH_METHOD_STUBROUTINES
 
   // code for comparing 16 bytes of strings with same encoding
   void compare_string_16_bytes_same(Label &DIFF1, Label &DIFF2) {
@@ -3767,6 +3770,7 @@ class StubGenerator: public StubCodeGenerator {
       generate_throw_exception("delayed StackOverflowError throw_exception",
                                CAST_FROM_FN_PTR(address,
                                                 SharedRuntime::throw_delayed_StackOverflowError));
+#ifdef SAFEFETCH_METHOD_STUBROUTINES
     // Safefetch stubs.
     generate_safefetch("SafeFetch32", sizeof(int),     &StubRoutines::_safefetch32_entry,
                                                        &StubRoutines::_safefetch32_fault_pc,
@@ -3774,6 +3778,7 @@ class StubGenerator: public StubCodeGenerator {
     generate_safefetch("SafeFetchN", sizeof(intptr_t), &StubRoutines::_safefetchN_entry,
                                                        &StubRoutines::_safefetchN_fault_pc,
                                                        &StubRoutines::_safefetchN_continuation_pc);
+#endif // SAFEFETCH_METHOD_STUBROUTINES
   }
 
   void generate_all() {
