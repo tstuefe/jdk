@@ -3161,6 +3161,7 @@ class StubGenerator: public StubCodeGenerator {
   }
 
 #ifdef SAFEFETCH_METHOD_STUBROUTINES
+  // Can be removed once AIX is confirmed to work with the sigsetjmp method
   // Safefetch stubs.
   void generate_safefetch(const char* name, int size, address* entry, address* fault_pc, address* continuation_pc) {
     // safefetch signatures:
