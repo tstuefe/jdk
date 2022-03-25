@@ -23,33 +23,33 @@
  *
  */
 
-#ifndef SHARE_RUNTIME_SAFEFETCH_METHOD_HPP
-#define SHARE_RUNTIME_SAFEFETCH_METHOD_HPP
+    .globl _SafeFetch64
+    .globl _SafeFetch64_fault
+    .globl _SafeFetch64_continuation
+    .globl _SafeFetch32
+    .globl _SafeFetch32_fault
+    .globl _SafeFetch32_continuation
 
-#include "utilities/macros.hpp"
-#include "utilities/globalDefinitions.hpp"
+    # Support for int SafeFetch32(int* address, int defaultval);
+    #
+    #  x10 : address
+    #  x11 : defaultval
+    #  x10 : retval
+_SafeFetch32:
+_SafeFetch32_fault:
+    lw       %x11, 0(%x10)
+_SafeFetch32_continuation:
+    mv       %x10, %x11
+    ret
 
-#ifdef _WIN32
-
-// Windows uses Structured Exception Handling
-#include "safefetch_windows.hpp"
-
-#elif defined(ZERO) || defined (_AIX)
-
-// These platforms use Posix sigsetjmp
-#include "safefetch_posix.hpp"
-
-#elif defined(LINUX) || defined(BSD)
-
-// These platforms use statically generated assembly
-#define SAFEFETCH_METHOD_STATIC_ASSEMBLY
-
-#else
-
-// These platforms use dynamically generated assembly. That has a number
-// of disadvantages compared with static assembly (see JDK-8283326)
-#define SAFEFETCH_METHOD_STUBROUTINES
-
-#endif
-
-#endif // SHARE_RUNTIME_SAFEFETCH_METHOD_HPP
+    # Support for uint64_t SafeFetch64(uint64_t* address, uint64_t defaultval);
+    #
+    #  x10 : address
+    #  x11 : defaultval
+    #  x10 : retval
+_SafeFetch64:
+_SafeFetch64_fault:
+    ld       %x11, 0(%x10)
+_SafeFetch64_continuation:
+    mv       %x10, %x11
+    ret
