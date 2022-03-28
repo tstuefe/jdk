@@ -37,7 +37,7 @@
     #  x10 : retval
 _SafeFetch32:
 _SafeFetch32_fault:
-    lwu      x11, 0(x10)
+    lw       x11, 0(x10)
 _SafeFetch32_continuation:
     mv       x10, x11
     ret
