@@ -37,9 +37,9 @@
     #  x10 : retval
 _SafeFetch32:
 _SafeFetch32_fault:
-    lw       %x11, 0(%x10)
+    lwu      x11, 0(x10)
 _SafeFetch32_continuation:
-    mv       %x10, %x11
+    mv       x10, x11
     ret
 
     # Support for uint64_t SafeFetch64(uint64_t* address, uint64_t defaultval);
@@ -49,7 +49,7 @@ _SafeFetch32_continuation:
     #  x10 : retval
 _SafeFetch64:
 _SafeFetch64_fault:
-    ld       %x11, 0(%x10)
+    ld       x11, 0(x10)
 _SafeFetch64_continuation:
-    mv       %x10, %x11
+    mv       x10, x11
     ret
