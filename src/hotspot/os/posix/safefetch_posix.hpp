@@ -32,7 +32,6 @@
 // SafeFetch is implemented using setjmp/longjmp. That is reliable and portable,
 // but slower than other methods, and needs more thread stack (the sigjmp buffer
 // lives on the thread stack).
-#define SAFEFETCH_METHOD_SIGSETJMP
 
 int SafeFetch32(int* adr, int errValue);
 intptr_t SafeFetchN(intptr_t* adr, intptr_t errValue);

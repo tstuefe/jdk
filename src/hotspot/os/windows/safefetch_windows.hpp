@@ -29,7 +29,6 @@
 #include "utilities/globalDefinitions.hpp"
 
 // On windows, we use structured exception handling to implement SafeFetch
-#define SAFEFETCH_METHOD_SEH
 
 template <class T>
 inline T SafeFetchXX(const T* adr, T errValue) {

@@ -82,42 +82,6 @@ struct SafeFetchHelper : public AllStatic {
 
 };
 
-#elif defined(SAFEFETCH_METHOD_STUBROUTINES)
-
-#include "runtime/stubRoutines.hpp"
-#include "runtime/threadWXSetters.inline.hpp"
-
-// Safefetch allows to load a value from a location that's not known
-// to be valid. If the load causes a fault, the error value is returned.
-inline int SafeFetch32(int* adr, int errValue) {
-  assert(StubRoutines::SafeFetch32_stub(), "stub not yet generated");
-  return StubRoutines::SafeFetch32_stub()(adr, errValue);
-}
-
-inline intptr_t SafeFetchN(intptr_t* adr, intptr_t errValue) {
-  assert(StubRoutines::SafeFetchN_stub(), "stub not yet generated");
-  return StubRoutines::SafeFetchN_stub()(adr, errValue);
-}
-
-// returns true if SafeFetch32 and SafeFetchN can be used safely (stubroutines are already generated)
-inline bool CanUseSafeFetch32() {
-  return StubRoutines::SafeFetch32_stub() ? true : false;
-}
-
-inline bool CanUseSafeFetchN() {
-  return StubRoutines::SafeFetchN_stub() ? true : false;
-}
-
-class SafeFetchHelper : public AllStatic {
-public:
-  static bool is_safefetch_fault(address pc) {
-    return StubRoutines::is_safefetch_fault(pc);
-  }
-  static address continuation_for_safefetch_fault(address pc) {
-    return StubRoutines::continuation_for_safefetch_fault(pc);
-  }
-};
-
-#endif // SAFEFETCH_METHOD_XXX
+#endif // SAFEFETCH_METHOD_STATIC_ASSEMBLY
 
 #endif // SHARE_RUNTIME_SAFEFETCH_INLINE_HPP

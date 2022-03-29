@@ -33,11 +33,13 @@
 
 // Windows uses Structured Exception Handling
 #include "safefetch_windows.hpp"
+#define SAFEFETCH_METHOD_SEH
 
 #elif defined(ZERO) || defined (_AIX)
 
 // These platforms use Posix sigsetjmp
 #include "safefetch_posix.hpp"
+#define SAFEFETCH_METHOD_SIGSETJMP
 
 #elif defined(LINUX) || defined(BSD)
 
@@ -46,9 +48,7 @@
 
 #else
 
-// These platforms use dynamically generated assembly. That has a number
-// of disadvantages compared with static assembly (see JDK-8283326)
-#define SAFEFETCH_METHOD_STUBROUTINES
+#error define safefetch method
 
 #endif
 

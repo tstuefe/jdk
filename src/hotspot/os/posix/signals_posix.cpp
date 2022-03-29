@@ -595,7 +595,7 @@ int JVM_HANDLE_XXX_SIGNAL(int sig, siginfo_t* info,
 
   if (!signal_was_handled) {
     // Handle SafeFetch access.
-#if defined(SAFEFETCH_METHOD_STUBROUTINES) || defined(SAFEFETCH_METHOD_STATIC_ASSEMBLY)
+#if defined(SAFEFETCH_METHOD_STATIC_ASSEMBLY)
     if (uc != NULL) {
       address pc = os::Posix::ucontext_get_pc(uc);
       if (SafeFetchHelper::is_safefetch_fault(pc)) {

@@ -168,15 +168,6 @@ address StubRoutines::_dlibm_reduce_pi04l = NULL;
 address StubRoutines::_dlibm_tan_cot_huge = NULL;
 address StubRoutines::_dtan = NULL;
 
-#ifdef SAFEFETCH_METHOD_STUBROUTINES
-address StubRoutines::_safefetch32_entry                 = NULL;
-address StubRoutines::_safefetch32_fault_pc              = NULL;
-address StubRoutines::_safefetch32_continuation_pc       = NULL;
-address StubRoutines::_safefetchN_entry                  = NULL;
-address StubRoutines::_safefetchN_fault_pc               = NULL;
-address StubRoutines::_safefetchN_continuation_pc        = NULL;
-#endif
-
 address StubRoutines::_vector_f_math[VectorSupport::NUM_VEC_SIZES][VectorSupport::NUM_SVML_OP] = {{NULL}, {NULL}};
 address StubRoutines::_vector_d_math[VectorSupport::NUM_VEC_SIZES][VectorSupport::NUM_SVML_OP] = {{NULL}, {NULL}};
 
