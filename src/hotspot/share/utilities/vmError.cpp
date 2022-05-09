@@ -61,13 +61,17 @@
 #include "utilities/events.hpp"
 #include "utilities/vmError.hpp"
 #include "utilities/macros.hpp"
-// SapMachine 2019-02-20 : vitals
-#include "vitals/vitals.hpp"
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
 #endif
 #if INCLUDE_JVMCI
 #include "jvmci/jvmci.hpp"
+#endif
+
+// SapMachine 2019-02-20 : vitals
+#include "vitals/vitals.hpp"
+#ifdef LINUX
+#include "vitals_linux_himemreport.hpp"
 #endif
 
 #ifndef PRODUCT
@@ -1188,6 +1192,13 @@ void VMError::report(outputStream* st, bool _verbose) {
        sapmachine_vitals::print_report(st, &info);
      }
 
+#ifdef LINUX
+  STEP("Vitals HiMemReport")
+    st->cr();
+  sapmachine_vitals::print_himemreport_state(st);
+    st->cr();
+#endif // LINUX
+
   STEP("printing system")
 
      if (_verbose) {
@@ -1376,9 +1387,16 @@ void VMError::print_vm_info(outputStream* st) {
   // STEP("Vitals")
   sapmachine_vitals::print_info_t info;
   sapmachine_vitals::default_settings(&info);
-  info.sample_now = false;
+  info.sample_now = true;
   st->print_cr("Vitals:");
   sapmachine_vitals::print_report(st, &info);
+
+#ifdef LINUX
+  // STEP("Vitals HiMemReport")
+  st->cr();
+  sapmachine_vitals::print_himemreport_state(st);
+  st->cr();
+#endif // LINUX
 
   // STEP("printing system")
 
