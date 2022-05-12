@@ -1236,6 +1236,9 @@ bool initialize() {
 
   success &= initialize_sampler_thread();
 
+  if (UseNewCode)
+  initialize_decoy_watcher_thread();
+
   if (success) {
     log_info(os)("Vitals intialized. Sample interval: " UINTX_FORMAT " seconds.", VitalsSampleInterval);
   } else {

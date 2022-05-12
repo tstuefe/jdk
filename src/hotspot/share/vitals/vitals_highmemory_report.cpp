@@ -38,10 +38,20 @@
 #include "utilities/ostream.hpp"
 #include "utilities/vmError.hpp"
 #include "vitals/vitals_internals.hpp"
+#include "vitals/vitalsLocker.hpp"
+
+#include "runtime/thread.hpp"
+#include "runtime/nonJavaThread.hpp"
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#include <sys/prctl.h>
 
 namespace sapmachine_vitals {
 
 static bool g_high_memory_report_done = false; // We only do this once, if at all
+
+static Lock g_highmem_report_lock("himemlck");
 
 static void print_high_memory_report_header(outputStream* st) {
   char tmp[255];
@@ -53,6 +63,8 @@ static void print_high_memory_report_header(outputStream* st) {
 }
 
 static void print_high_memory_report(outputStream* st) {
+
+  AutoLock autlock(&g_highmem_report_lock);
 
   // Note that this report may be interrupted by VM death, e.g. OOM killed.
   // Therefore we frequently flush, and print the most important things first.
@@ -115,7 +127,7 @@ void trigger_high_memory_report() {
   outputStream* const stderr_stream = &fds;
   bool failed_to_open_dump_file = false;
 
-  if (!g_high_memory_report_done && HighMemoryThreshold > 0) {
+  if (!g_high_memory_report_done) {
     g_high_memory_report_done = true;
     if (DumpReportOnHighMemory) {
       char filename[255];
@@ -137,6 +149,49 @@ void trigger_high_memory_report() {
       print_high_memory_report(stderr_stream);
     }
   }
+}
+
+static void* spawn_oom_killer_decoy_process(void* dummy) {
+  int child = ::fork();
+  if (child == 0) {
+    printf("oom killer live (%d)\n", ::getpid()); ::fflush(stdout);
+    // Obnoxious child, raise oom killer probability drastically
+    prctl(PR_SET_PDEATHSIG, SIGKILL);
+    prctl(PR_SET_NAME, "oomdecoy");
+    int fd = ::open("/proc/self/oom_score_adj", O_WRONLY);
+    if (fd == -1) {
+      printf("Error opening /proc/self/oom_score_ad (%s)\n", ::strerror(errno));
+      return NULL;
+    }
+    int written = ::write(fd, "1000", 5);
+    if (written != 5) {
+      printf("Error adjusting oom_score_adj (%s)\n", ::strerror(errno));
+      return NULL;
+    }
+    close(fd);
+    for (;;) {
+      ::sleep(1000);
+    }
+  } else {
+    int status = 0;
+    ::waitpid(child, &status, 0);
+    printf("oom killer decoy lost: %d %d %d %d\n", WIFEXITED(status), WEXITSTATUS(status), WIFSIGNALED(status), WTERMSIG(status));
+    if (WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL) {
+      printf("oom killer decoy was killed. May be OOM");
+      trigger_high_memory_report();
+    }
+    fflush(stdout);
+  }
+  return NULL;
+}
+
+void initialize_decoy_watcher_thread() {
+  pthread_t pt;
+  pthread_attr_t attr;
+  ::pthread_attr_init(&attr);
+  ::pthread_attr_setstacksize(&attr, 64 * K);
+  ::pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+  pthread_create(&pt, &attr, spawn_oom_killer_decoy_process, NULL);
 }
 
 } // namespace sapmachine_vitals

@@ -201,6 +201,8 @@ namespace sapmachine_vitals {
   // Called by platform samplers
   void trigger_high_memory_report();
 
+  void initialize_decoy_watcher_thread();
+
   void sample_platform_values(Sample* sample);
   void sample_jvm_values(Sample* sample, bool avoid_locking);
 
