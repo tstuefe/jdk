@@ -82,12 +82,6 @@ static void print_date_and_time_underscored(outputStream *st, time_t t) {
   STRFTIME_FROM_TIME_T(st, "%Y_%m_%d_%H_%M_%S", t);
 }
 
-static void print_current_date_and_time(outputStream *st) {
-  time_t t;
-  time(&t);
-  print_date_and_time(st, t);
-}
-
 //////////// Alert state ////////////////////////////////////////////
 
 class AlertState : public CHeapObj<mtInternal> {
@@ -333,14 +327,14 @@ public:
       if (::mkdir(path(), S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH) != -1) {
         log_info(vitals)("HiMemReportDir: Created report directory \"%s\"", path());
       } else {
-        log_warning(vitals)("HiMemReportDir: Failed to create report directory \"%s\" (%d)", path(), errno);
+        log_info(vitals)("HiMemReportDir: Failed to create report directory \"%s\" (%d)", path(), errno);
         return false;
       }
     } else {
       if (S_ISDIR(s.st_mode)) {
         log_info(vitals)("HiMemReportDir: Found existing report directory at \"%s\"", path());
       } else {
-        log_warning(vitals)("HiMemReportDir: \"%s\" exists, but its not a directory.", path());
+        log_info(vitals)("HiMemReportDir: \"%s\" exists, but its not a directory.", path());
         return false;
       }
     }
@@ -348,12 +342,15 @@ public:
     // and write the VM start time and some other info into it.
     stringStream testfile;
     testfile.print("%sVM_start.pid%d.log", path(), os::current_process_id());
-    fileStream fs(testfile.base());
-    if (!fs.is_open()) {
-      log_warning(os)("HiMemReportDir: Cannot write to \"%s\" (%d)", testfile.base(), errno);
-      return false;
+    {
+      fileStream fs(testfile.base());
+      if (!fs.is_open()) {
+        log_info(os)("HiMemReportDir: Cannot write to \"%s\" (%d)", testfile.base(), errno);
+        return false;
+      }
     }
-    print_current_date_and_time(&fs);
+    ::unlink(testfile.base());
+
     return true;
   }
 };
@@ -664,7 +661,7 @@ struct VerifyJCmdClosure : public JcmdClosure {
   bool do_it(const char* command_string) override {
     log_info(vitals)("HiMemReportExec: storing command \"%s\".", command_string);
     if (!ParsedCommand(command_string).is_valid()) {
-      log_warning(vitals)("HiMemReportExec: Command \"%s\" invalid.", command_string);
+      log_info(vitals)("HiMemReportExec: Command \"%s\" invalid.", command_string);
       return false;
     }
     return true;
@@ -850,7 +847,7 @@ extern void initialize_himem_report_facility() {
   }
 
   if (limit == 0) {
-    log_warning(vitals)("Vitals HiMemReport: limit could not be established; will disable high memory reports "
+    log_info(vitals)("Vitals HiMemReport: limit could not be established; will disable high memory reports "
                     "(specify HiMemReportMax to establish a manual limit).");
     FLAG_SET_ERGO(HiMemReport, false);
     return;
@@ -862,8 +859,9 @@ extern void initialize_himem_report_facility() {
   if (HiMemReportDir != NULL && ::strlen(HiMemReportDir) > 0) {
     g_report_dir = new ReportDir(HiMemReportDir);
     if (!g_report_dir->create_if_needed()) {
-      log_warning(vitals)("Vitals: Cannot access HiMemReportDir %s.", g_report_dir->path());
-      vm_exit_during_initialization("Vitals HiMemReport: Failed to create or access HiMemReportDir.");
+      log_info(vitals)("Vitals: Cannot access HiMemReportDir %s.", g_report_dir->path());
+      FLAG_SET_ERGO(HiMemReport, false);
+      //vm_exit_during_initialization("Vitals HiMemReport: Failed to create or access HiMemReportDir.");
       return;
     }
   }
@@ -871,7 +869,7 @@ extern void initialize_himem_report_facility() {
   g_alert_state = new AlertState(limit);
 
   if (!initialize_reporter_thread()) {
-    log_warning(vitals)("Vitals HiMemReport: Failed to start monitor thread. Will disable.");
+    log_info(vitals)("Vitals HiMemReport: Failed to start monitor thread. Will disable.");
     FLAG_SET_ERGO(HiMemReport, false);
     return;
   }
