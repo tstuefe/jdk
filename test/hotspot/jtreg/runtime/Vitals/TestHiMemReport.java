@@ -309,7 +309,7 @@ public class TestHiMemReport {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args[0].equals("print"))
+        if (args[0].equals("prdddddint"))
             testPrint();
         else if (args[0].equals("dump"))
             testDump();
