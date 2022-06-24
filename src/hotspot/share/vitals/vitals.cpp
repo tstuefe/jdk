@@ -1285,7 +1285,7 @@ bool initialize() {
     log_warning(vitals)("Failed to initialize Vitals.");
   }
 
-  return true;
+  return success;
 
 }
 
