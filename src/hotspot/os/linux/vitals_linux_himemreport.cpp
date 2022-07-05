@@ -41,6 +41,7 @@
 #include "services/memReporter.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 #include "vitals/vitals_internals.hpp"
 
@@ -48,6 +49,13 @@
 #include <spawn.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+// Newer JDKS: NMT is always on and this macro does not exist
+// Older JDKs: NMT can be off at compile time; in that case INCLUDE_NMT
+//  will be defined=0 via CFLAGS; or on, in that case it will be defined=1 in macros.hpp.
+#ifndef INCLUDE_NMT
+#define INCLUDE_NMT 1
+#endif
 
 // Logging and output:
 // We log during initialization phase to UL using the "vitals" tag.
@@ -213,6 +221,7 @@ static const char* describe_maximum_by_compare_type(compare_type t) {
 // NMT is nice, but the interface is unnecessary convoluted. For now, to keep merge surface small,
 // we work with what we have
 
+#if INCLUDE_NMT
 class NMTStuff : public AllStatic {
 
   static MemBaseline _baseline;
@@ -299,7 +308,7 @@ public:
 
 MemBaseline NMTStuff::_baseline;
 time_t NMTStuff::_baseline_time = 0;
-
+#endif // INCLUDE_NMT
 
 //////////// Reporting //////////////////////////////////////////////
 
@@ -402,10 +411,12 @@ static void print_high_memory_report(outputStream* st) {
   st->cr();
   st->flush();
 
+#if INCLUDE_NMT
   st->cr();
   st->print_cr("--- NMT report ---");
   NMTStuff::report_as_best_as_possible(st);
   st->print_cr("--- /NMT report ---");
+#endif
 
   st->cr();
   st->cr();
@@ -525,18 +536,16 @@ static bool spawn_command(const char** argv, const char* outFile, const char* er
 
   if (outFile != NULL) { // Redirect stdout, stderr to files
         assert(errFile != NULL, "Require both");
-    rc &= (::posix_spawn_file_actions_addopen(&fa.v, 1,
-        outFile, O_WRONLY | O_CREAT | O_TRUNC, 0664) == 0);
-    rc &= (::posix_spawn_file_actions_addopen(&fa.v, 2,
-        errFile, O_WRONLY | O_CREAT | O_TRUNC, 0664) == 0);
+    rc = rc && (::posix_spawn_file_actions_addopen(&fa.v, 1, outFile, O_WRONLY | O_CREAT | O_TRUNC, 0664) == 0) &&
+               (::posix_spawn_file_actions_addopen(&fa.v, 2, errFile, O_WRONLY | O_CREAT | O_TRUNC, 0664) == 0);
   } else { // Dup stdout to stderr
-    rc &= (::posix_spawn_file_actions_adddup2 (&fa.v, 2, 1) == 0);
+    rc = rc && (::posix_spawn_file_actions_adddup2 (&fa.v, 2, 1) == 0);
   }
   pid_t child_pid = -1;
 
   // Hint toward vfork. Note that newer glibcs (2.24+) will ignore this, but they use clone(),
   // so its alright.
-  rc &= (posix_spawnattr_setflags(&atr.v, POSIX_SPAWN_USEVFORK) == 0);
+  rc = rc && (posix_spawnattr_setflags(&atr.v, POSIX_SPAWN_USEVFORK) == 0);
 
   if (rc == false) {
     err_msg->print("Error during posix_spawn setup");
@@ -548,7 +557,7 @@ static bool spawn_command(const char** argv, const char* outFile, const char* er
   //  in the child process, except for those whose close-on- exec flag FD_CLOEXEC is set (see fcntl)."
   // (https://pubs.opengroup.org/onlinepubs/9699919799/functions/posix_spawnp.html)
   // - which I assume means they get closed if we specify a file actions object, which we do.
-  rc &= (::posix_spawn(&child_pid, argv[0], &fa.v, &atr.v, (char**)argv, os::get_environ()) == 0);
+  rc = rc && (::posix_spawn(&child_pid, argv[0], &fa.v, &atr.v, (char**)argv, os::get_environ()) == 0);
 
   if (rc) {
     int status;
@@ -770,6 +779,7 @@ void pulse_himem_report() {
       }
       // If the alert level increased to a new value, trigger a new report
       trigger_high_memory_report(new_alvl, spikeno, new_percentage, rss_swap);
+#if INCLUDE_NMT
       // Upon first alert, do a NMT baseline
       if (old_alvl == 0 && new_alvl > 0) {
         if (NMTStuff::is_enabled()) {
@@ -777,11 +787,14 @@ void pulse_himem_report() {
           stderr_stream.print_cr("HiMemoryReport: ... captured NMT baseline");
         }
       }
+#endif // INCLUDE_NMT
     } else if (old_alvl > 0 && new_alvl == 0){
       // Memory usage recovered, and we hit the decay time, and now all is well again.
       stderr_stream.print_cr("HiMemoryReport: rss+swap=" SIZE_FORMAT " K - seems we recovered. Resetting alert level.",
                              rss_swap / K);
+#if INCLUDE_NMT
       NMTStuff::reset();
+#endif
     }
   }
 }
