@@ -74,6 +74,10 @@
 #ifdef LINUX
 #include "vitals_linux_himemreport.hpp"
 #endif
+// SapMachine 2021-09-01: malloc-trace
+#ifdef LINUX
+#include "malloctrace/mallocTrace.hpp"
+#endif
 
 #ifndef PRODUCT
 #include <signal.h>
@@ -1235,6 +1239,17 @@ void VMError::report(outputStream* st, bool _verbose) {
        st->cr();
      }
 
+  // SapMachine 2021-09-01: malloc-trace
+#if defined(LINUX) && defined(__GLIBC__)
+  STEP("printing Malloc Trace info")
+
+    if (_verbose) {
+      st->print_cr("sapmachine malloc trace");
+      sap::MallocTracer::print_on_error(st);
+      st->cr();
+    }
+#endif
+
   // print a defined marker to show that error handling finished correctly.
   STEP("printing end marker")
 
@@ -1424,6 +1439,12 @@ void VMError::print_vm_info(outputStream* st) {
 
   st->print_cr("vm_info: %s", VM_Version::internal_vm_info_string());
   st->cr();
+
+#if defined(LINUX) && defined(__GLIBC__)
+  // SapMachine 2021-09-01: malloc-trace
+  st->print_cr("sapmachine malloc trace");
+  sap::MallocTracer::print_on_error(st);
+#endif
 
   // print a defined marker to show that error handling finished correctly.
   // STEP("printing end marker")
