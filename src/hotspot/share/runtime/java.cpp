@@ -60,8 +60,6 @@
 #include "runtime/continuation.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/flags/flagSetting.hpp"
-// SapMachine 2019-09-01: vitals.
-#include "runtime/globals.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
@@ -81,8 +79,6 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/vmError.hpp"
-// SapMachine 2019-09-01: vitals.
-#include "vitals/vitals.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Compiler.hpp"
 #include "c1/c1_Runtime1.hpp"
@@ -95,6 +91,15 @@
 #endif
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
+#endif
+
+// SapMachine 2019-09-01: vitals.
+#include "runtime/globals.hpp"
+#include "vitals/vitals.hpp"
+
+// SapMachine 2021-09-01: malloc-trace
+#ifdef LINUX
+#include "malloctrace/mallocTrace.hpp"
 #endif
 
 GrowableArray<Method*>* collected_profiled_methods;
@@ -498,6 +503,12 @@ void before_exit(JavaThread* thread, bool halt) {
   if (DumpPerfMapAtExit) {
     CodeCache::write_perf_map();
   }
+#ifdef __GLIBC__
+  // SapMachine 2021-09-01: malloc-trace
+  if (PrintMallocTraceAtExit) {
+    sap::MallocTracer::print(tty, true);
+  }
+#endif // __GLIBC__
 #endif
 
   if (JvmtiExport::should_post_thread_life()) {
@@ -542,6 +553,11 @@ void before_exit(JavaThread* thread, bool halt) {
       tty->print_cr("ERROR: fail_cnt=" SIZE_FORMAT, fail_cnt);
       guarantee(fail_cnt == 0, "unexpected StringTable verification failures");
     }
+  }
+
+  // SapMachine 2021-09-01: shutdown vitals thread
+  if (EnableVitals) {
+    sapmachine_vitals::cleanup();
   }
 
   #undef BEFORE_EXIT_NOT_RUN
