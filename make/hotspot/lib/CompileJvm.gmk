@@ -35,6 +35,13 @@ include lib/JvmFlags.gmk
 JVM_OUTPUTDIR := $(JVM_VARIANT_OUTPUTDIR)/libjvm
 JVM_MAPFILE := $(JVM_OUTPUTDIR)/mapfile
 
+
+# test jemalloc
+
+JVM_CFLAGS += -I /shared/projects/jemalloc/install/include/jemalloc/
+JVM_LIBS += -ljemalloc
+JVM_LDFLAGS += -L /shared/projects/jemalloc/install/lib -Wl,-rpath
+
 ################################################################################
 # Platform independent setup
 
