@@ -73,6 +73,12 @@
 #include "utilities/events.hpp"
 #include "utilities/powerOfTwo.hpp"
 
+#define TEST_JEMALLOC 1
+
+#ifdef TEST_JEMALLOC
+#include "jemalloc.h"
+#endif
+
 #ifndef _WINDOWS
 # include <poll.h>
 #endif
@@ -658,7 +664,8 @@ void* os::malloc(size_t size, MEMFLAGS memflags, const NativeCallStack& stack) {
 
   const size_t outer_size = size + MemTracker::overhead_per_malloc();
 
-  ALLOW_C_FUNCTION(::malloc, void* const outer_ptr = ::malloc(outer_size);)
+  //ALLOW_C_FUNCTION(::malloc, void* const outer_ptr = ::malloc(outer_size);)
+  void* const outer_ptr = ::je1_malloc(outer_size);
   if (outer_ptr == NULL) {
     return NULL;
   }
@@ -708,7 +715,8 @@ void* os::realloc(void *memblock, size_t size, MEMFLAGS memflags, const NativeCa
   // If NMT is enabled, this checks for heap overwrites, then de-accounts the old block.
   void* const old_outer_ptr = MemTracker::record_free(memblock);
 
-  ALLOW_C_FUNCTION(::realloc, void* const new_outer_ptr = ::realloc(old_outer_ptr, new_outer_size);)
+  //ALLOW_C_FUNCTION(::realloc, void* const new_outer_ptr = ::realloc(old_outer_ptr, new_outer_size);)
+  void* const new_outer_ptr = ::je1_realloc(old_outer_ptr, new_outer_size);
   if (new_outer_ptr == NULL) {
     return NULL;
   }
@@ -736,7 +744,8 @@ void  os::free(void *memblock) {
   // If NMT is enabled, this checks for heap overwrites, then de-accounts the old block.
   void* const old_outer_ptr = MemTracker::record_free(memblock);
 
-  ALLOW_C_FUNCTION(::free, ::free(old_outer_ptr);)
+  //ALLOW_C_FUNCTION(::free, ::free(old_outer_ptr);)
+  ::je1_free(old_outer_ptr);
 }
 
 void os::init_random(unsigned int initval) {
