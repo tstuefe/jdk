@@ -40,7 +40,7 @@ JVM_MAPFILE := $(JVM_OUTPUTDIR)/mapfile
 
 JVM_CFLAGS += -I /shared/projects/jemalloc/install/include/jemalloc/
 JVM_LIBS += -ljemalloc
-JVM_LDFLAGS += -L /shared/projects/jemalloc/install/lib -Wl,-rpath
+JVM_LDFLAGS += -L /shared/projects/jemalloc/install/lib -Wl,-rpath,/shared/projects/jemalloc/install/lib
 
 ################################################################################
 # Platform independent setup
