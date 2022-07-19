@@ -2081,6 +2081,10 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   develop(bool, TraceOptimizedUpcallStubs, false,                           \
                 "Trace optimized upcall stub generation")                   \
+                                                                            \
+  product(bool, UseJemalloc, false, DIAGNOSTIC,                             \
+	              "Use jemalloc instead of malloc in hotspot.")               \
+	                                                                          \
 
 // end of RUNTIME_FLAGS
 

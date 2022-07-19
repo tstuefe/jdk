@@ -80,6 +80,8 @@ class MemTracker : AllStatic {
     return _tracking_level != NMT_unknown;
   }
 
+  static bool use_jemalloc() { return _use_jemalloc; }
+
   static inline NMT_TrackingLevel tracking_level() {
     return _tracking_level;
   }
@@ -245,6 +247,8 @@ class MemTracker : AllStatic {
   static MemBaseline      _baseline;
   // Query lock
   static Mutex*           _query_lock;
+
+  static bool _use_jemalloc;
 };
 
 #endif // SHARE_SERVICES_MEMTRACKER_HPP

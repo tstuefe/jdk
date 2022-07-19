@@ -51,9 +51,13 @@ NMT_TrackingLevel MemTracker::_cmdline_tracking_level = NMT_unknown;
 
 MemBaseline MemTracker::_baseline;
 
+bool MemTracker::_use_jemalloc = false;
+
 void MemTracker::initialize() {
   bool rc = true;
   assert(_tracking_level == NMT_unknown, "only call once");
+
+  _use_jemalloc = UseJemalloc;
 
   NMT_TrackingLevel level = NMTUtil::parse_tracking_level(NativeMemoryTracking);
   // Should have been validated before in arguments.cpp
@@ -85,6 +89,7 @@ void MemTracker::initialize() {
     LogStream ls(lt);
     ls.print_cr("NMT initialized: %s", NMTUtil::tracking_level_to_string(_tracking_level));
     ls.print_cr("Preinit state: ");
+    ls.print_cr("Use %s", _use_jemalloc ? "jemalloc" : "malloc");
     NMTPreInit::print_state(&ls);
     ls.cr();
   }

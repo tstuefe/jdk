@@ -35,7 +35,7 @@
 #include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/os.hpp"
-#include "runtime/vmOperations.hpp"
+//#include "runtime/vmOperations.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/memBaseline.hpp"
 #include "services/memReporter.hpp"
