@@ -1379,7 +1379,7 @@ void dump_reports() {
         false, // csv
         false, // no_legend
         true,  // reverse_ordering
-        0,     // scale
+        1 * K, // scale
         true   // sample_now
     };
     print_report(&fs, &settings);
