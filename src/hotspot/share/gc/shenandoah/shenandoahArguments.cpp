@@ -30,6 +30,7 @@
 #include "gc/shenandoah/shenandoahCollectorPolicy.hpp"
 #include "gc/shenandoah/shenandoahHeap.inline.hpp"
 #include "gc/shenandoah/shenandoahHeapRegion.hpp"
+#include "gc/shared/gc_globals.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
 #include "utilities/defaultStream.hpp"
@@ -166,6 +167,11 @@ void ShenandoahArguments::initialize() {
   // to converge faster over smaller number of resizing decisions.
   if (FLAG_IS_DEFAULT(TLABAllocationWeight)) {
     FLAG_SET_DEFAULT(TLABAllocationWeight, 90);
+  }
+
+  if (GCTrimNativeHeap && os::can_trim_native_heap() == false) {
+    FLAG_SET_ERGO(GCTrimNativeHeap, false);
+    log_info(gc)("Platform does not support trim-native, disabling GCTrimNativeHeap.");
   }
 }
 

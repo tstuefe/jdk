@@ -40,6 +40,7 @@
 #include "gc/shenandoah/shenandoahVMOperations.hpp"
 #include "gc/shenandoah/shenandoahWorkerPolicy.hpp"
 #include "gc/shenandoah/heuristics/shenandoahHeuristics.hpp"
+#include "gc/shared/gc_globals.hpp"
 #include "memory/iterator.hpp"
 #include "memory/metaspaceUtils.hpp"
 #include "memory/metaspaceStats.hpp"
@@ -86,6 +87,8 @@ void ShenandoahControlThread::run_service() {
 
   double last_shrink_time = os::elapsedTime();
   double last_sleep_adjust_time = os::elapsedTime();
+
+  double last_trim_time = os::elapsedTime();
 
   // Shrink period avoids constantly polling regions for shrinking.
   // Having a period 10x lower than the delay would mean we hit the
@@ -293,6 +296,12 @@ void ShenandoahControlThread::run_service() {
 
     double current = os::elapsedTime();
 
+    if (GCTrimNativeHeap && (explicit_gc_requested || ((current - last_trim_time) > GCTrimNativeHeapDelay))) {
+      service_trim_native();
+      heap->phase_timings()->flush_cycle_to_global();
+      last_trim_time = current;
+    }
+
     if (ShenandoahUncommit && (explicit_gc_requested || soft_max_changed || (current - last_shrink_time > shrink_period))) {
       // Explicit GC tries to uncommit everything down to min capacity.
       // Soft max change tries to uncommit everything down to target capacity.
@@ -310,6 +319,7 @@ void ShenandoahControlThread::run_service() {
       heap->phase_timings()->flush_cycle_to_global();
       last_shrink_time = current;
     }
+
 
     // Wait before performing the next action. If allocation happened during this wait,
     // we exit sooner, to let heuristics re-evaluate new conditions. If we are at idle,
@@ -467,6 +477,13 @@ void ShenandoahControlThread::service_uncommit(double shrink_before, size_t shri
 
   if (has_work) {
     heap->entry_uncommit(shrink_before, shrink_until);
+  }
+}
+
+void ShenandoahControlThread::service_trim_native() {
+  ShenandoahHeap* heap = ShenandoahHeap::heap();
+  if (os::should_trim_native_heap()) {
+    heap->entry_trim_native();
   }
 }
 

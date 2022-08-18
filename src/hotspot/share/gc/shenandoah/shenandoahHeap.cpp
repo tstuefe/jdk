@@ -2227,6 +2227,27 @@ void ShenandoahHeap::entry_uncommit(double shrink_before, size_t shrink_until) {
   op_uncommit(shrink_before, shrink_until);
 }
 
+void ShenandoahHeap::entry_trim_native() {
+  static const char *msg = "Concurrent trim-native";
+  ShenandoahConcurrentPhase gc_phase(msg, ShenandoahPhaseTimings::conc_trim, false);
+  EventMark em("%s", msg);
+  os::size_change_t sc;
+  if (os::trim_native_heap(&sc, GCTrimNativeHeapRetainSize)) {
+    if (sc.after != SIZE_MAX) {
+      const size_t scale_to_use = sc.before > (10 * M) ? M : K;
+      const char scale_c = scale_to_use == K ? 'K' : 'M';
+      const size_t m_before = sc.before / scale_to_use;
+      const size_t m_after = sc.after / scale_to_use;
+      log_info(gc)("Trimming native heap (retain size: " SIZE_FORMAT "M): "
+                   "RSS+Swap: " SIZE_FORMAT "%c->" SIZE_FORMAT "%c (" SSIZE_FORMAT "%c)",
+                   GCTrimNativeHeapRetainSize / M,
+                   m_before, scale_c, m_after, scale_c, ((ssize_t)m_after - (ssize_t)m_before), scale_c);
+    } else {
+      log_info(gc)("Trimming native heap (no details)");
+    }
+  }
+}
+
 void ShenandoahHeap::try_inject_alloc_failure() {
   if (ShenandoahAllocFailureALot && !cancelled_gc() && ((os::random() % 1000) > 950)) {
     _inject_alloc_failure.set();

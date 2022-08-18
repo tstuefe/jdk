@@ -97,6 +97,7 @@ private:
   void service_stw_full_cycle(GCCause::Cause cause);
   void service_stw_degenerated_cycle(GCCause::Cause cause, ShenandoahGC::ShenandoahDegenPoint point);
   void service_uncommit(double shrink_before, size_t shrink_until);
+  void service_trim_native();
 
   bool try_set_alloc_failure_gc();
   void notify_alloc_failure_waiters();

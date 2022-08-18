@@ -350,7 +350,7 @@ public:
 public:
   // Elastic heap support
   void entry_uncommit(double shrink_before, size_t shrink_until);
-  void op_uncommit(double shrink_before, size_t shrink_until);
+  void entry_trim_native();
 
 private:
   // GC support
@@ -374,6 +374,8 @@ private:
 
   void rendezvous_threads();
   void recycle_trash();
+
+  void op_uncommit(double shrink_before, size_t shrink_until);
 public:
   void notify_gc_progress()    { _progress_last_gc.set();   }
   void notify_gc_no_progress() { _progress_last_gc.unset(); }
