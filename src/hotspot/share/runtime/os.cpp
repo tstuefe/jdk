@@ -476,7 +476,7 @@ void os::initialize_jdk_signal_support(TRAPS) {
     JavaThread::start_internal_daemon(THREAD, thread, thread_oop, NearMaxPriority);
 
     // Handle ^BREAK
-    os::signal(SIGBREAK, os::user_handler());
+   // os::signal(SIGBREAK, os::user_handler());
   }
 }
 

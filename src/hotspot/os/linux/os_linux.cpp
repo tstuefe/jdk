@@ -4555,6 +4555,13 @@ jint os::init_2(void) {
     return JNI_ERR;
   }
 
+if (UseNewCode)
+{
+   ::printf("Now I'm sleeping. Send me some SIGQUITs! (pid: %d)", ::getpid()); ::fflush(stdout);
+   ::sleep(60);
+   ::printf("Now I'm awake. I will now process the SIGQUITS."); fflush(stdout);
+}
+
 #if defined(IA32) && !defined(ZERO)
   // Need to ensure we've determined the process's initial stack to
   // perform the workaround

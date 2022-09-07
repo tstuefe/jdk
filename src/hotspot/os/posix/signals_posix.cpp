@@ -1307,14 +1307,17 @@ void install_signal_handlers() {
   set_signal_handler(SIGBUS);
   set_signal_handler(SIGILL);
   set_signal_handler(SIGFPE);
+
+  os::signal(SIGQUIT, os::user_handler());
+
   PPC64_ONLY(set_signal_handler(SIGTRAP);)
   set_signal_handler(SIGXFSZ);
-  if (!ReduceSignalUsage) {
+ /* if (!ReduceSignalUsage) {
     // This is just for early initialization phase. Intercepting the signal here reduces the risk
     // that an attach client accidentally forces HotSpot to quit prematurely. We skip the periodic
     // check because late initialization will overwrite it to UserHandler.
     set_signal_handler(BREAK_SIGNAL, false);
-  }
+  }*/
 #if defined(__APPLE__)
   // lldb (gdb) installs both standard BSD signal handlers, and mach exception
   // handlers. By replacing the existing task exception handler, we disable lldb's mach
