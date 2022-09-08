@@ -1820,13 +1820,18 @@ int PosixSignals::init() {
     return JNI_ERR;
   }
 
+  // Initialize data for jdk.internal.misc.Signal
+  if (!ReduceSignalUsage) {
+    jdk_misc_signal_init();
+  }
+
   signal_sets_init();
 
   install_signal_handlers();
 
-  // Initialize data for jdk.internal.misc.Signal
-  if (!ReduceSignalUsage) {
-    jdk_misc_signal_init();
+  // Test-send ourselves a SIGQUIT. Should come delayed at the end of VM initialization, when dispatcher thread is up and running.
+  if (UseNewCode) {
+    ::kill(::getpid(), SIGQUIT);
   }
 
   return JNI_OK;
