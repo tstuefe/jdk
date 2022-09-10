@@ -396,10 +396,6 @@ void print_statistics() {
     MetaspaceUtils::print_basic_report(tty, 0);
   }
 
-  if (LogTouchedMethods && PrintTouchedMethodsAtExit) {
-    Method::print_touched_methods(tty);
-  }
-
   // SapMachine 2019-09-01: vitals.
   if (DumpVitalsAtExit) {
     sapmachine_vitals::dump_reports();
