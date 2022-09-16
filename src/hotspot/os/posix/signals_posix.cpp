@@ -344,7 +344,7 @@ static const struct {
 ////////////////////////////////////////////////////////////////////////////////
 // sun.misc.Signal and BREAK_SIGNAL support
 
-void jdk_misc_signal_init() {
+static void jdk_misc_signal_init() {
   // Initialize signal structures
   ::memset((void*)pending_signals, 0, sizeof(pending_signals));
 
@@ -384,7 +384,7 @@ int os::signal_wait() {
 ////////////////////////////////////////////////////////////////////////////////
 // signal chaining support
 
-struct sigaction* get_chained_signal_action(int sig) {
+static struct sigaction* get_chained_signal_action(int sig) {
   struct sigaction *actp = NULL;
 
   if (libjsig_is_loaded) {
@@ -1220,7 +1220,7 @@ int os::get_signal_number(const char* signal_name) {
   return -1;
 }
 
-void set_signal_handler(int sig) {
+static void set_signal_handler(int sig) {
   // Check for overwrite.
   struct sigaction oldAct;
   sigaction(sig, (struct sigaction*)NULL, &oldAct);
@@ -1276,7 +1276,7 @@ void set_signal_handler(int sig) {
 
 // install signal handlers for signals that HotSpot needs to
 // handle in order to support Java-level exception handling.
-void install_signal_handlers() {
+static void install_signal_handlers() {
   // signal-chaining
   typedef void (*signal_setting_t)();
   signal_setting_t begin_signal_setting = NULL;
@@ -1700,7 +1700,7 @@ static void SR_handler(int sig, siginfo_t* siginfo, ucontext_t* context) {
   errno = old_errno;
 }
 
-int SR_initialize() {
+static int SR_initialize() {
   struct sigaction act;
   char *s;
   // Get signal number to use for suspend/resume
