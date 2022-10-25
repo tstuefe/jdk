@@ -41,23 +41,21 @@ static void check_expected_malloc_header(const void* payload, MEMFLAGS type, siz
   EXPECT_EQ(hdr->flags(), type);
 }
 
-// Check that a malloc with an overflowing size is rejected (with and without NMT enabled).
+// Check that a malloc with an overflowing size is rejected.
 TEST_VM(NMT, malloc_failure1) {
-  // We test this with NMT both enabled and disabled, to check all paths.
   void* p = os::malloc(SIZE_MAX, mtTest);
   EXPECT_NULL(p);
 }
 
-// Check that gigantic mallocs are rejected (with and without NMT enabled).
+// Check that gigantic mallocs are rejected, even if no size overflow happens.
 TEST_VM(NMT, malloc_failure2) {
-  // We test this with NMT both enabled and disabled, to check all paths.
   void* p = os::malloc(SIZE_MAX - M, mtTest);
   EXPECT_NULL(p);
 }
 
 static void check_failing_realloc(size_t failing_request_size) {
 
-  // We test this with NMT enabled and disabled too.
+  // We test this with both NMT enabled and disabled.
   bool nmt_enabled = MemTracker::enabled();
   const size_t first_size = 0x100;
 
@@ -81,9 +79,10 @@ static void check_failing_realloc(size_t failing_request_size) {
   os::free(p);
 }
 
-// Check that a reallocation that would overflow is correctly rejected (with and without NMT enabled).
+// Check that a reallocation that would overflow is correctly rejected.
 TEST_VM(NMT, realloc_failure1) {
   check_failing_realloc(SIZE_MAX);
+  check_failing_realloc(SIZE_MAX - MemTracker::overhead_per_malloc());
 }
 
 // Check that a reallocation that fails because if too large size is rejected and
@@ -91,4 +90,47 @@ TEST_VM(NMT, realloc_failure1) {
 // the original block untouched).
 TEST_VM(NMT, realloc_failure2) {
   check_failing_realloc(SIZE_MAX - M);
+}
+
+// Check a simple sequence of mallocs and reallocs. We expect the
+// newly allocated memory to be zapped (in debug)
+// while the old section should be left intact.
+TEST_VM(NMT, malloc_realloc) {
+  bool nmt_enabled = MemTracker::enabled();
+
+  void* p = os::malloc(1024, mtTest);
+  ASSERT_NOT_NULL(p);
+  if (nmt_enabled) {
+    check_expected_malloc_header(p, mtTest, 1024);
+  }
+
+#ifdef ASSERT
+  GtestUtils::check_range(p, 1024, uninitBlockPad);
+#endif
+  GtestUtils::mark_range_with(p, 1024, '-');
+
+  // Enlarging realloc
+  void* p2 = os::realloc(p, 4096, mtTest);
+  ASSERT_NOT_NULL(p2);
+  if (nmt_enabled) {
+    check_expected_malloc_header(p2, mtTest, 4096);
+  }
+  GtestUtils::check_range(p2, 1024, '-');
+#ifdef ASSERT
+  GtestUtils::check_range((char*)p2 + 1024, 4096 - 1024, uninitBlockPad);
+#endif
+
+  GtestUtils::mark_range_with(p2, 4096, '+');
+
+  // Shrinking realloc
+  void* p3 = os::realloc(p, 256, mtTest);
+  ASSERT_NOT_NULL(p3);
+  if (nmt_enabled) {
+    check_expected_malloc_header(p3, mtTest, 256);
+  }
+#ifdef ASSERT
+  GtestUtils::check_range(p3, 256, '+');
+#endif
+
+  os::free(p3);
 }

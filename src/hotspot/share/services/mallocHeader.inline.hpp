@@ -38,7 +38,6 @@ inline MallocHeader::MallocHeader(size_t size, MEMFLAGS flags, uint32_t mst_mark
   : _size(size), _mst_marker(mst_marker), _flags(NMTUtil::flag_to_index(flags)),
     _unused(0), _canary(_header_canary_life_mark)
 {
-  //assert(size < max_reasonable_malloc_size, "Too large allocation size?");
   // On 32-bit we have some bits more, use them for a second canary
   // guarding the start of the header.
   NOT_LP64(_alt_canary = _header_alt_canary_life_mark;)
@@ -129,10 +128,12 @@ inline bool MallocHeader::check_block_integrity(char* msg, size_t msglen, addres
 }
 
 inline const MallocHeader* MallocHeader::header_for(const void* p) {
+  assert(p != NULL, "NULL pointer");
   return (const MallocHeader*)((const char*)p - sizeof(MallocHeader));
 }
 
 inline MallocHeader* MallocHeader::header_for(void* p) {
+  assert(p != NULL, "NULL pointer");
   return (MallocHeader*)((char*)p - sizeof(MallocHeader));
 }
 

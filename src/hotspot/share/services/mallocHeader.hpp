@@ -134,8 +134,7 @@ class MallocHeader {
   // hex dump surrounding the broken block), then trigger a fatal error
   inline void assert_block_integrity() const;
 
-  // Given a payload pointer, return malloc header
-  // (no checks are done, this pointer may be invalid. Caller is responsible to hand in a valid p).
+  // Given a payload pointer, return malloc header.
   inline static const MallocHeader* header_for(const void* p);
   inline static MallocHeader* header_for(void* p);
 

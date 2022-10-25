@@ -707,6 +707,7 @@ void* os::realloc(void *memblock, size_t size, MEMFLAGS memflags, const NativeCa
   }
 
   if (MemTracker::enabled()) {
+    // NMT realloc handling
 
     const size_t new_outer_size = size + MemTracker::overhead_per_malloc();
 
@@ -715,30 +716,32 @@ void* os::realloc(void *memblock, size_t size, MEMFLAGS memflags, const NativeCa
       return NULL;
     }
 
-    // Retrieve old size before old header becomes invalid.
     const size_t old_size = MallocHeader::header_for(memblock)->size();
 
-    // Optimistically de-account old block with NMT. Needed *before* realloc(3) since it may invalidate
-    // the old block and its header. This will also do block integrity checks.
+    // De-account the old block from NMT *before* calling the real realloc(3) since it
+    // may invalidate old block including its header. This will also perform integrity checks
+    // on the old block (e.g. overwriters) and mark the old header as dead.
     void* const old_outer_ptr = MemTracker::record_free(memblock);
 
-    // real realloc
+    // the real realloc
     ALLOW_C_FUNCTION(::realloc, void* const new_outer_ptr = ::realloc(old_outer_ptr, new_outer_size);)
 
     if (new_outer_ptr == NULL) {
-      // realloc(3) failed: old block is still valid. We need to restore its accounting info with NMT
-      // and revive the header, lest we get false double free errors on subsequent os::free()s.
+      // If realloc(3) failed, the old block still exists. We must re-instantiate the old
+      // NMT header then, since we marked it dead already. Otherwise subsequent os::realloc()
+      // or os::free() calls would trigger block integrity asserts.
       void* p = MemTracker::record_malloc(old_outer_ptr, old_size, memflags, stack);
       assert(p == memblock, "sanity");
       return NULL;
     }
 
-    // Register resized block with NMT.
+    // After a successful realloc(3), we re-account the resized block with its new size
+    // to NMT. This re-instantiates the NMT header.
     void* const new_inner_ptr = MemTracker::record_malloc(new_outer_ptr, size, memflags, stack);
 
 #ifdef ASSERT
-    // Zap new portion of block.
     if (old_size < size) {
+      // We also zap the newly extended region.
       ::memset((char*)new_inner_ptr + old_size, uninitBlockPad, size - old_size);
     }
 #endif
