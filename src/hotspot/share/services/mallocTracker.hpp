@@ -313,15 +313,6 @@ class MallocTracker : AllStatic {
   // signals popping up, e.g. when writing an hs_err file.
   static bool print_pointer_information(const void* p, outputStream* st);
 
- private:
-  static inline MallocHeader* malloc_header(void *memblock) {
-    assert(memblock != NULL, "NULL pointer");
-    return (MallocHeader*)((char*)memblock - sizeof(MallocHeader));
-  }
-  static inline const MallocHeader* malloc_header(const void *memblock) {
-    assert(memblock != NULL, "NULL pointer");
-    return (const MallocHeader*)((const char*)memblock - sizeof(MallocHeader));
-  }
 };
 
 #endif // SHARE_SERVICES_MALLOCTRACKER_HPP

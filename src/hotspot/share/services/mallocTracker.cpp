@@ -184,7 +184,7 @@ void* MallocTracker::record_malloc(void* malloc_base, size_t size, MEMFLAGS flag
 #ifdef ASSERT
   // Read back
   {
-    MallocHeader* const header2 = malloc_header(memblock);
+    const MallocHeader* const header2 = MallocHeader::header_for(memblock);
     assert(header2->size() == size, "Wrong size");
     assert(header2->flags() == flags, "Wrong flags");
     header2->assert_block_integrity();
@@ -198,7 +198,7 @@ void* MallocTracker::record_free(void* memblock) {
   assert(MemTracker::enabled(), "Sanity");
   assert(memblock != NULL, "precondition");
 
-  MallocHeader* const header = malloc_header(memblock);
+  MallocHeader* const header = MallocHeader::header_for(memblock);
   header->assert_block_integrity();
 
   MallocMemorySummary::record_free(header->size(), header->flags());
@@ -220,7 +220,7 @@ bool MallocTracker::print_pointer_information(const void* p, outputStream* st) {
   assert(MemTracker::enabled(), "NMT must be enabled");
   if (os::is_readable_pointer(p)) {
     const NMT_TrackingLevel tracking_level = MemTracker::tracking_level();
-    const MallocHeader* mhdr = malloc_header(p);
+    const MallocHeader* mhdr = MallocHeader::header_for(p);
     char msg[256];
     address p_corrupted;
     if (os::is_readable_pointer(mhdr) &&
