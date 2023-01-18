@@ -103,6 +103,12 @@ public:
   // null otherwise.
   static MetaspaceContext* context_class()        { return _class_space_context; }
 
+  // Returns number of reserved words in this context (according to underlying vslist)
+  size_t reserved_words() const                   { return _vslist->reserved_words(); }
+
+  // Returns number of committed words in this context (according to underlying vslist)
+  size_t committed_words() const                  { return _vslist->committed_words(); }
+
 };
 
 } // end namespace

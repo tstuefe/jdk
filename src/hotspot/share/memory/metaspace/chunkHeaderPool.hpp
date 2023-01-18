@@ -28,8 +28,8 @@
 
 #include "memory/allocation.hpp"
 #include "memory/metaspace/counters.hpp"
+#include "memory/metaspace/dllist.hpp"
 #include "memory/metaspace/metachunk.hpp"
-#include "memory/metaspace/metachunkList.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -61,7 +61,7 @@ class ChunkHeaderPool : public CHeapObj<mtMetaspace> {
 
   IntCounter _num_handed_out;
 
-  MetachunkList _freelist;
+  DlList<Metachunk> _freelist;
 
   void allocate_new_slab();
 
@@ -78,7 +78,7 @@ public:
     DEBUG_ONLY(verify());
 
     Metachunk* c = nullptr;
-    c = _freelist.remove_first();
+    c = _freelist.pop_front();
     assert(c == nullptr || c->is_dead(), "Not a freelist chunk header?");
     if (c == nullptr) {
       if (_current_slab == nullptr ||
@@ -104,11 +104,9 @@ public:
 #ifdef ASSERT
     // In debug, fill dead header with pattern.
     c->zap_header(0xCC);
-    c->set_next(nullptr);
-    c->set_prev(nullptr);
 #endif
     c->set_dead();
-    _freelist.add(c);
+    _freelist.push_front(c);
     _num_handed_out.decrement();
   }
 

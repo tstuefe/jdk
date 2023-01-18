@@ -26,73 +26,29 @@
 #ifndef SHARE_MEMORY_METASPACE_METACHUNKLIST_HPP
 #define SHARE_MEMORY_METASPACE_METACHUNKLIST_HPP
 
-#include "memory/metaspace/counters.hpp"
 #include "memory/metaspace/metachunk.hpp"
+#include "memory/metaspace/dllist.inline.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 class outputStream;
 
 namespace metaspace {
 
-// A simple single-linked list of chunks, used in MetaspaceArena to keep
-//  a list of retired chunks, as well as in the ChunkHeaderPool to keep
-//  a cache of unused chunk headers.
+typedef DlList<Metachunk> MetachunkListType;
 
-class MetachunkList {
-
-  Metachunk* _first;
-  IntCounter _num_chunks;
-
-  // Note: The chunks inside this list may be dead (->chunk header pool).
-  // So, do not call c->word size on them or anything else which may not
-  // work with dead chunks.
-
-  // Check that list does not contain the given chunk; Note that since that check
-  //  is expensive, it is subject to VerifyMetaspaceInterval.
-  DEBUG_ONLY(void verify_does_not_contain(const Metachunk* c) const;)
-
+// A simple list of chunks.
+class MetachunkList : public MetachunkListType {
 public:
 
-  MetachunkList() : _first(nullptr), _num_chunks() {}
-
-  int count() const { return _num_chunks.get(); }
-
-  void add(Metachunk* c) {
-    DEBUG_ONLY(verify_does_not_contain(c);)
-    c->set_next(_first);
-    if (_first) {
-      _first->set_prev(c);
-    }
-    _first = c;
-    _num_chunks.increment();
-  }
-
-  Metachunk* remove_first() {
-    if (_first) {
-      Metachunk* c = _first;
-      _first = _first->next();
-      if (_first) {
-        _first->set_prev(nullptr);
-      }
-      _num_chunks.decrement();
-      c->set_prev(nullptr);
-      c->set_next(nullptr);
-      return c;
-    }
-    return nullptr;
-  }
-
-  Metachunk* first()              { return _first; }
-  const Metachunk* first() const  { return _first; }
-
 #ifdef ASSERT
-  // Note: linear search
-  bool contains(const Metachunk* c) const;
-  void verify() const;
+  void verify() const override;
 #endif
 
   size_t calc_committed_word_size() const;
   size_t calc_word_size() const;
+
+  // Look for the chunk containing the given pointer
+  const Metachunk* find_chunk_containing(const MetaWord* p) const;
 
   void print_on(outputStream* st) const;
 

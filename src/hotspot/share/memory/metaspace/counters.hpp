@@ -51,6 +51,7 @@ public:
   AbstractCounter() : _c(0) {}
 
   T get() const           { return _c; }
+  void set(T c)           { _c = c; }
 
   void increment() { increment_by(1); }
   void decrement() { decrement_by(1); }

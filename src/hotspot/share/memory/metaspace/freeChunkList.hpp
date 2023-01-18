@@ -36,6 +36,8 @@ class outputStream;
 
 namespace metaspace {
 
+class FreeChunkListVector;
+
 // This is the free list underlying the ChunkManager.
 //
 // Chunks are kept in a vector of double-linked double-headed lists
@@ -56,97 +58,33 @@ namespace metaspace {
 // fully uncommitted chunks; either way search will stop at the first chunk.
 
 class FreeChunkList {
+  friend class FreeChunkListVector;
 
-  Metachunk* _first;
-  Metachunk* _last;
-
-  IntCounter _num_chunks;
-
-  void add_front(Metachunk* c) {
-    if (_first == nullptr) {
-      assert(_last == nullptr, "Sanity");
-      _first = _last = c;
-      c->set_prev(nullptr);
-      c->set_next(nullptr);
-    } else {
-      assert(_last != nullptr, "Sanity");
-      c->set_next(_first);
-      c->set_prev(nullptr);
-      _first->set_prev(c);
-      _first = c;
-    }
-  }
-
-  // Add chunk to the back of the list.
-  void add_back(Metachunk* c) {
-    if (_last == nullptr) {
-      assert(_first == nullptr, "Sanity");
-      _last = _first = c;
-      c->set_prev(nullptr);
-      c->set_next(nullptr);
-    } else {
-      assert(_first != nullptr, "Sanity");
-      c->set_next(nullptr);
-      c->set_prev(_last);
-      _last->set_next(c);
-      _last = c;
-    }
-  }
+  MetachunkList _list;
 
 public:
 
-  FreeChunkList() :
-    _first(nullptr),
-    _last(nullptr)
-  {}
-
   // Remove given chunk from anywhere in the list.
-  Metachunk* remove(Metachunk* c) {
-    assert(contains(c), "Must be contained here");
-    Metachunk* pred = c->prev();
-    Metachunk* succ = c->next();
-    if (pred) {
-      pred->set_next(succ);
-    }
-    if (succ) {
-      succ->set_prev(pred);
-    }
-    if (_first == c) {
-      _first = succ;
-    }
-    if (_last == c) {
-      _last = pred;
-    }
-    c->set_next(nullptr);
-    c->set_prev(nullptr);
-    _num_chunks.decrement();
-    return c;
-  }
+  void remove(Metachunk* c) { _list.remove(c); }
 
   void add(Metachunk* c) {
     assert(contains(c) == false, "Chunk already in freelist");
-    assert(_first == nullptr || _first->level() == c->level(),
+    assert(first() == nullptr || first()->level() == c->level(),
            "List should only contains chunks of the same level.");
+    assert(c->is_free(), "chunk not free");
     // Uncommitted chunks go to the back, fully or partially committed to the front.
     if (c->committed_words() == 0) {
-      add_back(c);
+      _list.push_back(c);
     } else {
-      add_front(c);
+      _list.push_front(c);
     }
-    _num_chunks.increment();
   }
 
-  // Removes the first chunk from the list and returns it. Returns null if list is empty.
-  Metachunk* remove_first() {
-    Metachunk* c = _first;
-    if (c != nullptr) {
-      remove(c);
-    }
-    return c;
-  }
+  // Removes the first chunk from the list and returns it. Returns nullptr if list is empty.
+  Metachunk* remove_first() { return _list.pop_front(); }
 
-  // Returns reference to the first chunk in the list, or null
-  Metachunk* first() const { return _first; }
+  // Returns reference to the first chunk in the list, or nullptr
+  Metachunk* first() const { return const_cast<Metachunk*>(_list.front()); }
 
   // Returns reference to the fist chunk in the list with a committed word
   // level >= min_committed_words, or null.
@@ -167,17 +105,17 @@ public:
   }
 
 #ifdef ASSERT
-  bool contains(const Metachunk* c) const;
+  bool contains(const Metachunk* c) const { return _list.contains(c); }
   void verify() const;
 #endif
 
   // Returns number of chunks
-  int num_chunks() const { return _num_chunks.get(); }
+  int num_chunks() const { return _list.count(); }
 
   // Calculates total number of committed words over all chunks (walks chunks).
-  size_t calc_committed_word_size() const;
+  size_t calc_committed_word_size() const { return _list.calc_committed_word_size(); }
 
-  void print_on(outputStream* st) const;
+  void print_on(outputStream* st) const { _list.print_on(st); }
 
 };
 
@@ -214,7 +152,7 @@ public:
     return list_for_level(lvl)->num_chunks();
   }
 
-  // Returns reference to first chunk at this level, or null if sublist is empty.
+  // Returns reference to first chunk at this level, or nullptr if sublist is empty.
   Metachunk* first_at_level(chunklevel_t lvl) const {
     return list_for_level(lvl)->first();
   }
@@ -229,6 +167,9 @@ public:
   // return the first chunk whose committed words >= min_committed_words.
   // Return null if no such chunk was found.
   Metachunk* search_chunk_descending(chunklevel_t level, size_t min_committed_words);
+
+  // Look for a root chunk that has <num> adjacent root chunks following in memory
+  Metachunk* search_adjacent_root_chunks(int num);
 
   // Returns total size in all lists (including uncommitted areas)
   size_t word_size() const;

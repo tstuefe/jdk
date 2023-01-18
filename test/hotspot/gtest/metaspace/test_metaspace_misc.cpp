@@ -52,25 +52,6 @@ TEST_VM(metaspace, misc_sizes)   {
 
 }
 
-TEST_VM(metaspace, misc_max_alloc_size)   {
-
-  // Make sure we can allocate what we promise to allocate...
-  for (int i = 0; i < 2; i ++) {
-    const bool in_class_space = (i == 0);
-    const Metaspace::MetadataType mdType = in_class_space ? Metaspace::ClassType : Metaspace::NonClassType;
-    const size_t sz = Metaspace::max_allocation_word_size();
-    ClassLoaderData* cld = ClassLoaderData::the_null_class_loader_data();
-    MetaWord* p = cld->metaspace_non_null()->allocate(sz, mdType);
-    if (p == nullptr) {
-      // Have we run into the GC threshold?
-      p = cld->metaspace_non_null()->expand_and_allocate(sz, mdType);
-      ASSERT_NOT_NULL(p);
-    }
-    // And also, successfully deallocate it.
-    cld->metaspace_non_null()->deallocate(p, sz, in_class_space);
-  }
-}
-
 TEST_VM(metaspace, chunklevel_utils)   {
 
   // These tests seem to be really basic, but it is amazing what one can

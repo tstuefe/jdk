@@ -251,14 +251,13 @@ public:
   MetaWord* top() const           { return base() + _used_words; }
   MetaWord* committed_top() const { return base() + _committed_words; }
   MetaWord* end() const           { return base() + word_size(); }
+  bool contains(const MetaWord* p) const { return p >= base() && p < end(); }
 
   // Chunk list wiring
   void set_prev(Metachunk* c)     { _prev = c; }
   Metachunk* prev() const         { return _prev; }
   void set_next(Metachunk* c)     { _next = c; }
   Metachunk* next() const         { return _next; }
-
-  DEBUG_ONLY(bool in_list() const { return _prev != nullptr || _next != nullptr; })
 
   // Physical neighbors wiring
   void set_prev_in_vs(Metachunk* c) { DEBUG_ONLY(assert_have_expand_lock()); _prev_in_vs = c; }

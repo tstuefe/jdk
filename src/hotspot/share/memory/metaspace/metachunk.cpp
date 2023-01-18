@@ -168,8 +168,10 @@ void Metachunk::set_committed_words(size_t v) {
 //
 MetaWord* Metachunk::allocate(size_t request_word_size) {
   // Caller must have made sure this works
-  assert(free_words() >= request_word_size, "Chunk too small.");
-  assert(free_below_committed_words() >= request_word_size, "Chunk not committed.");
+  assert(free_words() >= request_word_size, "Chunk too small "
+         "(have: " SIZE_FORMAT " words, need " SIZE_FORMAT " words).", free_words(), request_word_size);
+  assert(free_below_committed_words() >= request_word_size, "Chunk not committed enough (committed: "
+         SIZE_FORMAT " words, need " SIZE_FORMAT " words).", free_below_committed_words(), request_word_size);
   MetaWord* const p = top();
   _used_words += request_word_size;
   SOMETIMES(verify();)

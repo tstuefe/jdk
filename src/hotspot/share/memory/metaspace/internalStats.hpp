@@ -47,6 +47,9 @@ class InternalStats : public AllStatic {
   /* Number of allocations. */                      \
   DEBUG_ONLY(x_atomic(num_allocs))                  \
                                                     \
+  /* Number of humonguous allocations. */           \
+	DEBUG_ONLY(x_atomic(num_humonguous_allocs))       \
+	                                                  \
   /* Number of external deallocations */            \
   /* (excluding retired chunk remains) */           \
   DEBUG_ONLY(x_atomic(num_deallocs))                \

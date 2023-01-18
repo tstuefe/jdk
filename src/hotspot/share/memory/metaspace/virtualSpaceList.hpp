@@ -29,6 +29,7 @@
 #include "memory/allocation.hpp"
 #include "memory/metaspace/commitLimiter.hpp"
 #include "memory/metaspace/counters.hpp"
+#include "memory/metaspace/metachunkList.hpp"
 #include "memory/metaspace/virtualSpaceNode.hpp"
 #include "memory/virtualspace.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -67,6 +68,10 @@ class VirtualSpaceList : public CHeapObj<mtClass> {
   // Head of the list (last added).
   VirtualSpaceNode* volatile _first_node;
 
+  // List of salvaged root chunks if allocate_multiple_root_chunks() retired
+  // a non-full node.
+  MetachunkList _salvaged_root_chunks;
+
   // Number of nodes (kept for statistics only).
   IntCounter _nodes_counter;
 
@@ -87,7 +92,11 @@ class VirtualSpaceList : public CHeapObj<mtClass> {
   // Create a new node and append it to the list. After
   // this function, _current_node shall point to a new empty node.
   // List must be expandable for this to work.
-  void create_new_node();
+  void create_new_node(size_t word_size);
+
+  // Helper function; salvage all remaining root chunks from the
+  // first node.
+  void salvage_first_node();
 
 public:
 
@@ -106,6 +115,11 @@ public:
   // May return null if vslist would need to be expanded to hold the new root node but
   // the list cannot be expanded (in practice this means we reached CompressedClassSpaceSize).
   Metachunk* allocate_root_chunk();
+
+  // Allocate a series of adjacent root chunks from this list.
+  // Note: As with allocate_root_chunk(), no memory is committed; this works on reserved space only.
+  // Returns true and a list of root chunks in &out if it succeded, false if it failed.
+  bool allocate_multiple_root_chunks(int n, MetachunkList* out);
 
   //// Statistics ////
 

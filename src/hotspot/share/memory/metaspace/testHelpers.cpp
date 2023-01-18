@@ -111,6 +111,13 @@ void MetaspaceTestContext::verify() const {
   if (_context != nullptr) {
     _context->verify();
   }
+  // Since we have a 1:1 relationship with the commit limiter in this test context
+  // (whereas in normal hotspot two contexts - class and nonclass -
+  // share one limiter) the commit limiter counter should equal
+  // to what we count is really committed according to vslist
+  assert(_commit_limiter.committed_words() == _context->committed_words(),
+         "Should match: " SIZE_FORMAT ", " SIZE_FORMAT,
+         _commit_limiter.committed_words(), _context->committed_words());
 }
 #endif
 

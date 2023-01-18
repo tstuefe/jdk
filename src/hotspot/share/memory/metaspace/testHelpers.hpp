@@ -104,9 +104,10 @@ public:
   size_t reserve_limit() const    { return _reserve_limit == 0 ? max_uintx : 0; }
   size_t commit_limit() const     { return _commit_limit == 0 ? max_uintx : 0; }
 
-  // Convenience function to retrieve total committed/used words
+  // Convenience function to retrieve total reserved/committed/used words
   size_t used_words() const       { return _used_words_counter.get(); }
-  size_t committed_words() const  { return _commit_limiter.committed_words(); }
+  size_t committed_words() const  { return _context->committed_words(); }
+  size_t reserved_words() const   { return _context->reserved_words(); }
 
   DEBUG_ONLY(void verify() const;)
 

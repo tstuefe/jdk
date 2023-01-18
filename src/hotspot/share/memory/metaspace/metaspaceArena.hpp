@@ -98,8 +98,8 @@ class MetaspaceArena : public CHeapObj<mtClass> {
   // Owned by the Arena. Gets allocated on demand only.
   FreeBlocks* _fbl;
 
-  Metachunk* current_chunk()              { return _chunks.first(); }
-  const Metachunk* current_chunk() const  { return _chunks.first(); }
+  Metachunk* current_chunk()              { return _chunks.back(); }
+  const Metachunk* current_chunk() const  { return _chunks.back(); }
 
   // Reference to an outside counter to keep track of used space.
   SizeAtomicCounter* const _total_used_words_counter;
@@ -157,10 +157,13 @@ class MetaspaceArena : public CHeapObj<mtClass> {
 
   // Returns true if the area indicated by pointer and size have actually been allocated
   // from this arena.
-  DEBUG_ONLY(bool is_valid_area(MetaWord* p, size_t word_size) const;)
+  DEBUG_ONLY(bool is_valid_area(const MetaWord* p, size_t word_size) const;)
 
   // Allocate from the arena proper, once dictionary allocations and fencing are sorted out.
   MetaWord* allocate_inner(size_t word_size);
+
+  // Attempt a humongous allocation
+  MetaWord* allocate_humonguous_block(size_t word_size);
 
 public:
 

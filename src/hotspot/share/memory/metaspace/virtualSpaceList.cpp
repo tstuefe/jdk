@@ -91,11 +91,12 @@ VirtualSpaceList::~VirtualSpaceList() {
 // Create a new node and append it to the list. After
 // this function, _current_node shall point to a new empty node.
 // List must be expandable for this to work.
-void VirtualSpaceList::create_new_node() {
+void VirtualSpaceList::create_new_node(size_t word_size) {
   assert(_can_expand, "List is not expandable");
   assert_lock_strong(Metaspace_lock);
+  assert_is_aligned(word_size, chunklevel::MAX_CHUNK_WORD_SIZE);
 
-  VirtualSpaceNode* vsn = VirtualSpaceNode::create_node(Settings::virtual_space_node_default_word_size(),
+  VirtualSpaceNode* vsn = VirtualSpaceNode::create_node(word_size,
                                                         _commit_limiter,
                                                         &_reserved_words_counter, &_committed_words_counter);
   vsn->set_next(_first_node);
@@ -110,6 +111,11 @@ void VirtualSpaceList::create_new_node() {
 Metachunk*  VirtualSpaceList::allocate_root_chunk() {
   assert_lock_strong(Metaspace_lock);
 
+  Metachunk* c = _salvaged_root_chunks.pop_front();
+  if (c != nullptr) {
+    return c;
+  }
+
   if (_first_node == nullptr ||
       _first_node->free_words() < chunklevel::MAX_CHUNK_WORD_SIZE) {
 
@@ -123,7 +129,7 @@ Metachunk*  VirtualSpaceList::allocate_root_chunk() {
 #endif
 
     if (_can_expand) {
-      create_new_node();
+      create_new_node(Settings::virtual_space_node_default_word_size());
       UL2(debug, "added new node (now: %d).", num_nodes());
     } else {
       UL(debug, "list cannot expand.");
@@ -131,10 +137,63 @@ Metachunk*  VirtualSpaceList::allocate_root_chunk() {
     }
   }
 
-  Metachunk* c = _first_node->allocate_root_chunk();
+  c = _first_node->allocate_root_chunk();
   assert(c != nullptr, "This should have worked");
 
   return c;
+}
+
+// Helper function; salvage all remaining root chunks from the
+// first node.
+void VirtualSpaceList::salvage_first_node() {
+  Metachunk* c = nullptr;
+  do {
+    c = _first_node->allocate_root_chunk();
+    if (c != nullptr) {
+      _salvaged_root_chunks.push_back(c);
+    }
+  } while (c != nullptr);
+}
+
+// Allocate a series of adjacent root chunks from this list.
+// Note: As with allocate_root_chunk(), no memory is committed; this works on reserved space only.
+// Returns true and a list of root chunks in &out if it succeded, false if it failed.
+bool VirtualSpaceList::allocate_multiple_root_chunks(int num, MetachunkList* out) {
+  assert_lock_strong(Metaspace_lock);
+  assert(num > 1, "Sanity");
+
+  UL2(debug, "Allocating multiple adjacent root chunks (%d)...", num);
+
+  const size_t needed_words = num * chunklevel::MAX_CHUNK_WORD_SIZE;
+
+  // Try to allocate from current node. If current node remaining address space is too small,
+  // or it does not exist, create a new node. If old node was not fully used up, salvage it
+  // first.
+  if (_first_node == nullptr ||
+      _first_node->free_words() < needed_words) {
+    if (_can_expand) {
+      if (_first_node != nullptr) {
+        salvage_first_node();
+      }
+      const size_t node_size =
+          MAX2(needed_words, Settings::virtual_space_node_default_word_size());
+      create_new_node(node_size);
+      UL2(debug, "added new node (word size: " SIZE_FORMAT ") (now: %d).", node_size, num_nodes());
+    } else {
+      // Non-expandable list (e.g. ClassSpace).
+      UL2(debug, "list cannot expand (needed word size: " SIZE_FORMAT ").", needed_words);
+      return false; // We cannot expand this list.
+    }
+  }
+
+  for (int i = 0; i < num; i ++) {
+    Metachunk* c = _first_node->allocate_root_chunk();
+    // We made sure the current node is large enough, so allocation should work.
+    assert(c != nullptr, "Should have worked");
+    out->push_back(c);
+  }
+
+  return true;
 }
 
 // Print all nodes in this space list.

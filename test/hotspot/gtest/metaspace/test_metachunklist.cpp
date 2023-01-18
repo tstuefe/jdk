@@ -54,14 +54,14 @@ TEST_VM(metaspace, metachunklist) {
     chunks[i] = c;
     total_size += c->committed_words();
 
-    lst.add(c);
-    EXPECT_EQ(lst.first(), c);
+    lst.push_front(c);
+    EXPECT_EQ(lst.front(), c);
 
-    Metachunk* c2 = lst.remove_first();
+    Metachunk* c2 = lst.pop_front();
     EXPECT_EQ(c, c2);
 
     EXPECT_EQ(lst.count(), i);
-    lst.add(c);
+    lst.push_front(c);
     EXPECT_EQ(lst.count(), i + 1);
     EXPECT_EQ(lst.calc_committed_word_size(), total_size);
 
@@ -72,7 +72,7 @@ TEST_VM(metaspace, metachunklist) {
   }
 
   for (int i = 0; i < 10; i++) {
-    Metachunk* c = lst.remove_first();
+    Metachunk* c = lst.pop_front();
     DEBUG_ONLY(EXPECT_FALSE(lst.contains(c));)
     context.return_chunk(c);
   }

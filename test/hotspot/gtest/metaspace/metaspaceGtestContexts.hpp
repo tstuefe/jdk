@@ -38,9 +38,21 @@ using namespace metaspace::chunklevel;
 
 class MetaspaceGtestContext : public metaspace::MetaspaceTestContext {
 public:
+
   MetaspaceGtestContext(size_t commit_limit = 0, size_t reserve_limit = 0) :
     metaspace::MetaspaceTestContext("gtest-metaspace-context", commit_limit, reserve_limit)
   {}
+
+  // Returns the usage numbers for this whole test context.
+  void usage_numbers_with_test(size_t* p_used, size_t* p_committed, size_t* p_reserved) const {
+    (*p_used) = used_words();
+    (*p_committed) = committed_words();
+    (*p_reserved) = reserved_words();
+    ASSERT_GE(*p_committed, *p_used);
+    ASSERT_GE(*p_reserved, *p_committed);
+    ASSERT_EQ(commit_limiter().committed_words(), *p_committed);
+  }
+
 };
 
 class ChunkGtestContext : public MetaspaceGtestContext {

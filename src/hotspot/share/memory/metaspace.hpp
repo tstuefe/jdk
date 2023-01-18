@@ -106,9 +106,6 @@ public:
   static size_t commit_alignment()        { return commit_alignment_words() * BytesPerWord; }
   static size_t commit_alignment_words();
 
-  // The largest possible single allocation
-  static size_t max_allocation_word_size();
-
   static MetaWord* allocate(ClassLoaderData* loader_data, size_t word_size,
                             MetaspaceObj::Type type, TRAPS);
 

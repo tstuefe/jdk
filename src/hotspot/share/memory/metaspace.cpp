@@ -863,17 +863,11 @@ void Metaspace::post_initialize() {
   MetaspaceGC::post_initialize();
 }
 
-size_t Metaspace::max_allocation_word_size() {
-  return metaspace::chunklevel::MAX_CHUNK_WORD_SIZE;
-}
-
 // This version of Metaspace::allocate does not throw OOM but simply returns null, and
 // is suitable for calling from non-Java threads.
 // Callers are responsible for checking null.
 MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
                               MetaspaceObj::Type type) {
-  assert(word_size <= Metaspace::max_allocation_word_size(),
-         "allocation size too large (" SIZE_FORMAT ")", word_size);
 
   assert(loader_data != nullptr, "Should never pass around a nullptr loader_data. "
         "ClassLoaderData::the_null_class_loader_data() should have been used.");

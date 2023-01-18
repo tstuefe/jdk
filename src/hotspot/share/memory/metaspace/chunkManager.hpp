@@ -106,6 +106,11 @@ class ChunkManager : public CHeapObj<mtMetaspace> {
   // Calculates the total number of committed words over all chunks. Walks chunks.
   size_t calc_committed_word_size_locked() const;
 
+  // Humonguous allocations:
+  // Search free chunk pool for n adjacent root chunks. If found, remove chunks from
+  // pool and return them as chunk list.
+  bool get_multiple_adjacent_root_chunks_from_pool(int num, MetachunkList* out);
+
 public:
 
   // Creates a chunk manager with a given name (which is for debug purposes only)
@@ -126,6 +131,11 @@ public:
 
   // Convenience function - get a chunk of a given level, uncommitted.
   Metachunk* get_chunk(chunklevel_t lvl) { return get_chunk(lvl, lvl, 0); }
+
+  // Humonguous allocations:
+  // Returns a series of adjacent root chunks. The first min_committed_words should be committed.
+  // May fail and return false for the same reasons as get_chunk() would return NULL.
+  bool get_multiple_adjacent_root_chunks(int num, size_t min_committed_words, MetachunkList* out);
 
   // Return a single chunk to the ChunkManager and adjust accounting. May merge chunk
   //  with neighbors.

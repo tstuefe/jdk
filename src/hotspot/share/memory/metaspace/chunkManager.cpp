@@ -237,6 +237,128 @@ Metachunk* ChunkManager::get_chunk_locked(chunklevel_t preferred_level, chunklev
   return c;
 }
 
+// Humonguous allocations:
+// Search free chunk pool for n adjacent root chunks. If found, remove said chunks from
+// pool and return them as ordered chunk list.
+bool ChunkManager::get_multiple_adjacent_root_chunks_from_pool(int num, MetachunkList* out) {
+  assert_lock_strong(Metaspace_lock);
+  assert(num > 1, "Sanity");
+
+  Metachunk* c = _chunks.search_adjacent_root_chunks(num);
+
+  // If we found one, remove it - and its num-1 followers - from the pool and into the return list.
+  if (c != nullptr) {
+    int added = 0;
+    do {
+      _chunks.remove(c);
+      out->push_back(c);
+      c = c->next_in_vs();
+    } while (added++ < num);
+    return true;
+  }
+
+  return false;
+}
+
+// humongous allocations:
+// Returns a series of adjacent root chunks. The first min_committed_words should be committed.
+// May fail and return NULL for the same reasons as get_chunk().
+bool ChunkManager::get_multiple_adjacent_root_chunks(int num, size_t min_committed_words, MetachunkList* out) {
+
+  MutexLocker fcl(Metaspace_lock, Mutex::_no_safepoint_check_flag);
+
+  UL2(debug, "requested multiple adjacent root chunks (%d, min_committed_words " SIZE_FORMAT ")",
+      num, min_committed_words);
+
+  assert(num > 1, "not multiple");
+
+  // shorthand
+  const size_t root_chunk_size = chunklevel::MAX_CHUNK_WORD_SIZE;
+
+  // Calling this only makes sense for a large allocation which would span the requested
+  // number of root chunks.
+  assert(min_committed_words > (num - 1) * root_chunk_size &&
+         min_committed_words <= num * root_chunk_size,
+         "expected committed words to cover the first n-1 chunks "
+         "(root chunk size: " SIZE_FORMAT ", min_committed_words: " SIZE_FORMAT ")",
+         root_chunk_size, min_committed_words);
+
+  bool result = false;
+
+  // Does the free pool contain enough adjacent chunks?
+  const bool taken_from_pool =
+      result = get_multiple_adjacent_root_chunks_from_pool(num, out);
+
+  if (!result) {
+    // Failing that, allocate new ones from the underlying virtual space;
+    result = _vslist->allocate_multiple_root_chunks(num, out);
+    if (!result) {
+      return false;
+    }
+  }
+
+  // We should have num adjacent free root chunks
+#ifdef ASSERT
+  {
+    assert(out->count() == num, "count mismatch");
+    const Metachunk* last = nullptr;
+    auto checker = [&last](const Metachunk* c) {
+      assert(c->is_root_chunk(), "Not a root chunk.");
+      assert(c->is_free(), "Not free.");
+      if (last != nullptr) {
+        assert(c->prev_in_vs() == last && last->next_in_vs() == c &&
+               c->base() == last->base() + root_chunk_size, "Not adjacent");
+      }
+      last = c;
+    };
+    out->for_each(checker);
+  }
+#endif
+
+  // Now, commit chunks to cover min_committed_words.
+  size_t committed_so_far = 0;
+  auto committer = [&committed_so_far] (Metachunk* c) {
+    const size_t to_commit = MIN2(root_chunk_size, committed_so_far);
+    if (c->ensure_committed_locked(to_commit)) {
+      committed_so_far -= to_commit;
+      return false;
+    }
+    return true; // commit failure
+  };
+  const bool commit_error = out->for_each_until(committer);
+
+  // in case of a commit error, return all chunks to the pool; but uncommit them first
+  if (commit_error) {
+    assert(committed_so_far < min_committed_words, "sanity");
+    UL2(debug, "Commit failed after " SIZE_FORMAT " words.", committed_so_far);
+    for (Metachunk* c = out->pop_front(); c != nullptr; c = out->pop_front()) {
+      c->uncommit();
+      return_chunk_simple_locked(c);
+    }
+    return false;
+  }
+
+  // commit worked
+  assert(committed_so_far == min_committed_words, "sanity");
+
+  // As per ChunkManager protocol, all handed out chunks are "in-use"
+  auto set_in_use = [] (Metachunk* c) { c->set_in_use(); };
+  out->for_each(set_in_use);
+
+  // Final trace.
+  if (result) {
+    UL2(debug, "handing out %d multiple adjacent root chunks:", num);
+    auto printer = [this] (const Metachunk* c) {
+      UL2(debug, "- " METACHUNK_FULL_FORMAT, METACHUNK_FULL_FORMAT_ARGS(c));
+    };
+    out->for_each(printer);
+  }
+
+  DEBUG_ONLY(verify_locked();)
+
+  return result;
+}
+
 // Return a single chunk to the ChunkManager and adjust accounting. May merge chunk
 //  with neighbors.
 // As a side effect this removes the chunk from whatever list it has been in previously.
@@ -258,7 +380,6 @@ void ChunkManager::return_chunk_locked(Metachunk* c) {
   DEBUG_ONLY(c->verify();)
   assert(contains_chunk(c) == false, "A chunk to be added to the freelist must not be in the freelist already.");
   assert(c->is_in_use() || c->is_free(), "Unexpected chunk state");
-  assert(!c->in_list(), "Remove from list first");
 
   c->set_free();
   c->reset_used_words();

@@ -24,6 +24,7 @@
  */
 
 #include "precompiled.hpp"
+#include "memory/metaspace/chunklevel.hpp"
 #include "memory/metaspace/commitLimiter.hpp"
 #include "memory/metaspace/counters.hpp"
 #include "memory/metaspace/internalStats.hpp"
@@ -42,13 +43,14 @@
 #include "metaspaceGtestRangeHelpers.hpp"
 
 using metaspace::ArenaGrowthPolicy;
+using metaspace::ArenaStats;
 using metaspace::CommitLimiter;
 using metaspace::InternalStats;
 using metaspace::MemRangeCounter;
 using metaspace::MetaspaceArena;
 using metaspace::SizeAtomicCounter;
 using metaspace::Settings;
-using metaspace::ArenaStats;
+using namespace metaspace::chunklevel;
 
 // See metaspaceArena.cpp : needed for predicting commit sizes.
 namespace metaspace {
@@ -741,37 +743,50 @@ TEST_VM(metaspace, MetaspaceArena_growth_boot_nc_not_inplace) {
 // Test that repeated allocation-deallocation cycles with the same block size
 //  do not increase metaspace usage after the initial allocation (the deallocated
 //  block should be reused by the next allocation).
-static void test_repeatedly_allocate_and_deallocate(bool is_topmost) {
-  // Test various sizes, including (important) the max. possible block size = 1 root chunk
-  for (size_t blocksize = Metaspace::max_allocation_word_size(); blocksize >= 1; blocksize /= 2) {
-    size_t used1 = 0, used2 = 0, committed1 = 0, committed2 = 0;
-    MetaWord* p = NULL, *p2 = NULL;
-
+static void test_repeatedly_allocate_and_deallocate(bool test_topmost) {
+  // Test various sizes, including sizes that are larger than a root chunk (humongous allocations).
+  for (size_t blocksize = MAX_CHUNK_BYTE_SIZE * 8; blocksize >= 1; blocksize /= 2) {
+    size_t used_context_before = 0, committed_context_before = 0, reserved_context_before = 0;
     MetaspaceGtestContext context;
-    MetaspaceArenaTestHelper helper(context, Metaspace::StandardMetaspaceType, false);
+    context.usage_numbers_with_test(&used_context_before, &committed_context_before,
+                                    &reserved_context_before);
+    {
+      size_t used_arena_before = 0, committed_arena_before = 0;
+      MetaWord* p = NULL, *p2 = NULL;
+      MetaspaceArenaTestHelper helper(context, Metaspace::StandardMetaspaceType, false);
 
-    // First allocation
-    helper.allocate_from_arena_with_tests_expect_success(&p, blocksize);
-    if (!is_topmost) {
-      // another one on top, size does not matter.
-      helper.allocate_from_arena_with_tests_expect_success(0x10);
+      // First allocation
+      helper.allocate_from_arena_with_tests_expect_success(&p, blocksize);
+      if (!test_topmost) {
+        // another one on top, size does not matter.
+        helper.allocate_from_arena_with_tests_expect_success(0x10);
+      }
+
+      // Measure
+      helper.usage_numbers_with_test(&used_arena_before, &committed_arena_before, NULL);
+
+      // Dealloc, alloc several times with the same size.
+      for (int i = 0; i < 5; i ++) {
+        helper.deallocate_with_tests(p, blocksize);
+        helper.allocate_from_arena_with_tests_expect_success(&p2, blocksize);
+        // We should get the same pointer back.
+        EXPECT_EQ(p2, p);
+      }
+
+      // Measure again
+      size_t used_arena_after = 0, committed_arena_after = 0;
+      helper.usage_numbers_with_test(&used_arena_after, &committed_arena_after, NULL);
+      EXPECT_EQ(used_arena_before, used_arena_after);
+      EXPECT_EQ(committed_arena_before, committed_arena_after);
     }
 
-    // Measure
-    helper.usage_numbers_with_test(&used1, &committed1, NULL);
+    // The metaspace arena was deleted: all its chunks should have been given back to the
+    // context.
+    size_t used_context_before = 0, committed_context_before = 0, reserved_context_before = 0;
+    MetaspaceGtestContext context;
+    context.usage_numbers_with_test(&used_context_before, &committed_context_before,
+                                    &reserved_context_before);
 
-    // Dealloc, alloc several times with the same size.
-    for (int i = 0; i < 5; i ++) {
-      helper.deallocate_with_tests(p, blocksize);
-      helper.allocate_from_arena_with_tests_expect_success(&p2, blocksize);
-      // We should get the same pointer back.
-      EXPECT_EQ(p2, p);
-    }
-
-    // Measure again
-    helper.usage_numbers_with_test(&used2, &committed2, NULL);
-    EXPECT_EQ(used2, used1);
-    EXPECT_EQ(committed1, committed2);
   }
 }
 

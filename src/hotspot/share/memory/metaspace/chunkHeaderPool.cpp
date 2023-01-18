@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 #include "memory/metaspace/chunkHeaderPool.hpp"
+#include "memory/metaspace/dllist.inline.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"

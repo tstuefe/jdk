@@ -115,7 +115,7 @@ class VirtualSpaceNodeTest {
 
       EXPECT_TRUE(_node->contains(c->base()));
 
-      _root_chunks.add(c);
+      _root_chunks.push_front(c);
 
     }
 

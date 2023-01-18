@@ -24,6 +24,7 @@
  */
 
 #include "precompiled.hpp"
+#include "memory/metaspace/dllist.inline.hpp"
 #include "memory/metaspace/metachunkList.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "utilities/debug.hpp"
@@ -34,73 +35,61 @@ namespace metaspace {
 
 #ifdef ASSERT
 
-void MetachunkList::verify_does_not_contain(const Metachunk* c) const {
-  SOMETIMES(assert(contains(c) == false, "List contains this chunk.");)
-}
-
-bool MetachunkList::contains(const Metachunk* c) const {
-  for (Metachunk* c2 = _first; c2 != nullptr; c2 = c2->next()) {
-    if (c == c2) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void MetachunkList::verify() const {
-  int num = 0;
-  const Metachunk* last_c = nullptr;
-  for (const Metachunk* c = _first; c != nullptr; c = c->next()) {
-    num++;
-    assert(c->prev() != c && c->next() != c, "circularity");
-    assert(c->prev() == last_c,
-           "Broken link to predecessor. Chunk " METACHUNK_FULL_FORMAT ".",
-           METACHUNK_FULL_FORMAT_ARGS(c));
+  // verify list structure
+  MetachunkListType::verify();
+  // Verify each chunk
+  auto chunk_verifier = [] (const Metachunk* c) {
     c->verify();
-    last_c = c;
-  }
-  _num_chunks.check(num);
+  };
+  for_each(chunk_verifier);
 }
-
 #endif // ASSERT
 
 size_t MetachunkList::calc_committed_word_size() const {
-  if (_first != nullptr && _first->is_dead()) {
-    // list used for chunk header pool; dead chunks have no size.
-    return 0;
-  }
   size_t s = 0;
-  for (Metachunk* c = _first; c != nullptr; c = c->next()) {
-    assert(c->is_dead() == false, "Sanity");
+  auto counterich = [&s] (const Metachunk* c) {
     s += c->committed_words();
-  }
+  };
+  for_each(counterich);
   return s;
 }
 
 size_t MetachunkList::calc_word_size() const {
-  if (_first != nullptr && _first->is_dead()) {
-    // list used for chunk header pool; dead chunks have no size.
-    return 0;
-  }
   size_t s = 0;
-  for (Metachunk* c = _first; c != nullptr; c = c->next()) {
-    assert(c->is_dead() == false, "Sanity");
-    s += c->committed_words();
-  }
+  auto counterich = [&s] (const Metachunk* c) {
+    s += c->word_size();
+  };
+  for_each(counterich);
   return s;
 }
 
 void MetachunkList::print_on(outputStream* st) const {
-  if (_num_chunks.get() > 0) {
-    for (const Metachunk* c = _first; c != nullptr; c = c->next()) {
+  if (count() > 0) {
+    auto printerich = [st] (const Metachunk* c) {
       st->print(" - <");
       c->print_on(st);
       st->print(">");
-    }
-    st->print(" - total : %d chunks.", _num_chunks.get());
+    };
+    for_each(printerich);
+    st->print(" - total : %d chunks.", count());
   } else {
     st->print("empty");
   }
+}
+
+// Look for the chunk containing the given pointer
+const Metachunk* MetachunkList::find_chunk_containing(const MetaWord* p) const {
+  const Metachunk* result = nullptr;
+  auto finderich = [&result, p](const Metachunk* c) {
+    if (c->contains(p)) {
+      result = c;
+      return true;
+    }
+    return false;
+  };
+  for_each_until(finderich);
+  return result;
 }
 
 } // namespace metaspace
