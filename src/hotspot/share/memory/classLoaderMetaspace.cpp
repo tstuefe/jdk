@@ -161,29 +161,18 @@ void ClassLoaderMetaspace::verify() const {
 #endif // ASSERT
 
 // Convenience method to get the most important usage statistics.
-void ClassLoaderMetaspace::usage_numbers(Metaspace::MetadataType mdType, size_t* p_used_words,
-                                         size_t* p_committed_words, size_t* p_capacity_words) const {
+void ClassLoaderMetaspace::usage_numbers(Metaspace::MetadataType mdType, ResComUsed& sizes) const {
   const MetaspaceArena* arena = (mdType == Metaspace::MetadataType::ClassType) ?
       class_space_arena() : non_class_space_arena();
-  arena->usage_numbers(p_used_words, p_committed_words, p_capacity_words);
+  arena->usage_numbers(sizes);
 }
 
 // Convenience method to get total usage numbers
-void ClassLoaderMetaspace::usage_numbers(size_t* p_used_words, size_t* p_committed_words,
-                                         size_t* p_capacity_words) const {
-  size_t used_nc, comm_nc, cap_nc;
-  usage_numbers(Metaspace::MetadataType::NonClassType, &used_nc, &comm_nc, &cap_nc);
-  size_t used_c = 0, comm_c = 0, cap_c = 0;
+void ClassLoaderMetaspace::usage_numbers(ResComUsed& sizes) const {
+  usage_numbers(Metaspace::MetadataType::NonClassType, sizes); // non-class values (or, total values if CCS is off)
   if (Metaspace::using_class_space()) {
-    usage_numbers(Metaspace::MetadataType::ClassType, &used_c, &comm_c, &cap_c);
-  }
-  if (p_used_words != nullptr) {
-    (*p_used_words) = used_nc + used_c;
-  }
-  if (p_committed_words != nullptr) {
-    (*p_committed_words) = comm_nc + comm_c;
-  }
-  if (p_capacity_words != nullptr) {
-    (*p_capacity_words) = cap_nc + cap_c;
+    ResComUsed class_space_sizes;
+    usage_numbers(Metaspace::MetadataType::ClassType, class_space_sizes);
+    sizes += class_space_sizes;
   }
 }

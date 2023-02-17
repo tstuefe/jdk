@@ -406,22 +406,11 @@ void MetaspaceArena::add_to_statistics(ArenaStats* out) const {
 
 // Convenience method to get the most important usage statistics.
 // For deeper analysis use add_to_statistics().
-void MetaspaceArena::usage_numbers(size_t* p_used_words, size_t* p_committed_words, size_t* p_capacity_words) const {
+void MetaspaceArena::usage_numbers(ResComUsed& sizes) const {
   MutexLocker cl(lock(), Mutex::_no_safepoint_check_flag);
   size_t used = 0, comm = 0, cap = 0;
   for (const Metachunk* c = _chunks.first(); c != nullptr; c = c->next()) {
-    used += c->used_words();
-    comm += c->committed_words();
-    cap += c->word_size();
-  }
-  if (p_used_words != nullptr) {
-    *p_used_words = used;
-  }
-  if (p_committed_words != nullptr) {
-    *p_committed_words = comm;
-  }
-  if (p_capacity_words != nullptr) {
-    *p_capacity_words = cap;
+    sizes.add_words(c->word_size(), c->committed_words(), c->used_words());
   }
 }
 

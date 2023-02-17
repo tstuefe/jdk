@@ -26,6 +26,7 @@
 #define SHARE_MEMORY_METASPACESTATS_HPP
 
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/memsizes.hpp"
 
 // Data holder classes for metaspace statistics.
 //
@@ -38,39 +39,22 @@
 
 // (Note: just for NMT these objects need to be mutable)
 
-class MetaspaceStats {
-  size_t _reserved;
-  size_t _committed;
-  size_t _used;
-public:
-  MetaspaceStats() : _reserved(0), _committed(0), _used(0) {}
-  MetaspaceStats(size_t r, size_t c, size_t u) : _reserved(r), _committed(c), _used(u) {}
-  size_t used() const       { return _used; }
-  size_t committed() const  { return _committed; }
-  size_t reserved() const   { return _reserved; }
-};
+typedef ResComUsed MetaspaceStats;
 
 // Class holds combined statistics for both non-class and class space.
-class MetaspaceCombinedStats : public MetaspaceStats {
+class MetaspaceCombinedStats {
   MetaspaceStats _cstats;  // class space stats
-  MetaspaceStats _ncstats; // non-class space stats
+  MetaspaceStats _ncstats; // non-class space stats (total stats if CCS is off)
 public:
-  MetaspaceCombinedStats() {}
+  MetaspaceCombinedStats(const MetaspaceStats& stats) :
+    _cstats(), _ncstats(stats)
+  {}
   MetaspaceCombinedStats(const MetaspaceStats& cstats, const MetaspaceStats& ncstats) :
-    MetaspaceStats(cstats.reserved() + ncstats.reserved(),
-                   cstats.committed() + ncstats.committed(),
-                   cstats.used() + ncstats.used()),
     _cstats(cstats), _ncstats(ncstats)
   {}
-
   const MetaspaceStats& class_space_stats() const { return _cstats; }
   const MetaspaceStats& non_class_space_stats() const { return _ncstats; }
-  size_t class_used() const       { return _cstats.used(); }
-  size_t class_committed() const  { return _cstats.committed(); }
-  size_t class_reserved() const   { return _cstats.reserved(); }
-  size_t non_class_used() const       { return _ncstats.used(); }
-  size_t non_class_committed() const  { return _ncstats.committed(); }
-  size_t non_class_reserved() const   { return _ncstats.reserved(); }
+  MetaspaceStats totals() const { return _cstats + _ncstats; }
 };
 
 #endif // SHARE_MEMORY_METASPACESTATS_HPP

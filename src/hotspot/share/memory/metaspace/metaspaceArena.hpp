@@ -33,6 +33,7 @@
 #include "memory/metaspace/metachunk.hpp"
 #include "memory/metaspace/metachunkList.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
+#include "utilities/memsizes.hpp"
 
 class outputStream;
 class Mutex;
@@ -187,7 +188,7 @@ public:
 
   // Convenience method to get the most important usage statistics.
   // For deeper analysis use add_to_statistics().
-  void usage_numbers(size_t* p_used_words, size_t* p_committed_words, size_t* p_capacity_words) const;
+  void usage_numbers(ResComUsed& word_sizes) const;
 
   DEBUG_ONLY(void verify() const;)
   DEBUG_ONLY(void verify_locked() const;)
