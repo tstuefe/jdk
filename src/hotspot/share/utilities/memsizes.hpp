@@ -75,40 +75,95 @@ MemorySize operator+(const MemorySize& a, const MemorySize& b) {
   return MemorySize(a.as_bytes() + b.as_bytes());
 }
 
-class ResComUsed {
+
+// Reserved + committed tupel
+class ResCom {
   MemorySize _r; // reserved (bytes)
   MemorySize _c; // committed (bytes)
+
+public:
+
+  ResCom() :
+    _r(0), _c(0) {}
+  ResCom(size_t reserved_bytes, size_t committed_bytes) :
+    _r(reserved_bytes), _c(committed_bytes) {}
+
+  void set_bytes(size_t reserved_bytes, size_t committed_bytes) {
+    _r.set_bytes(reserved_bytes); _c.set_bytes(committed_bytes);
+  }
+
+  void add_bytes(size_t reserved_bytes, size_t committed_bytes) {
+    _r.add_bytes(reserved_bytes); _c.add_bytes(committed_bytes);
+  }
+
+  void set_words(size_t reserved_words, size_t committed_words) {
+    _r.set_words(reserved_words); _c.set_words(committed_words);
+  }
+
+  void add_words(size_t reserved_bytes, size_t committed_bytes) {
+    _r.add_words(reserved_bytes); _c.add_words(committed_bytes);
+  }
+
+  size_t reserved_bytes() const   { return _r.as_bytes(); }
+  size_t committed_bytes() const  { return _c.as_bytes(); }
+
+  size_t reserved_words() const   { return _r.as_words_exact(); }
+  size_t committed_words() const  { return _c.as_words_exact(); }
+
+  // For compatibility with existing stats classes; returns byte sizes
+  //size_t reserved() const         { return reserved_bytes(); }
+  // size_t committed() const        { return committed_bytes(); }
+  //  size_t used() const             { return used_bytes(); }
+
+  void reset() { _r.reset(); _c.reset(); }
+
+  const ResCom& operator+= (const ResCom& other)  {
+    add_bytes(other.reserved_bytes(), other.committed_bytes());
+    return *this;
+  }
+
+  DEBUG_ONLY(void verify() const;)
+
+};
+
+ResCom operator+ (const ResCom& a, const ResCom& b) {
+  return ResCom(a.reserved_bytes() + b.reserved_bytes(),
+                a.committed_bytes() + b.committed_bytes());
+}
+
+class ResComUsed {
+  ResCom _rescom; // reseved + committed
   MemorySize _u; // used (bytes)
 
 public:
 
   ResComUsed() :
-    _r(0), _c(0), _u(0) {}
+    _rescom(), _u(0) {}
   ResComUsed(size_t reserved_bytes, size_t committed_bytes, size_t used_bytes) :
-    _r(reserved_bytes), _c(committed_bytes), _u(used_bytes) {}
+    _rescom(reserved_bytes, committed_bytes), _u(used_bytes) {}
 
   void set_bytes(size_t reserved_bytes, size_t committed_bytes, size_t used_bytes) {
-    _r.set_bytes(reserved_bytes); _c.set_bytes(committed_bytes); _u.set_bytes(used_bytes);
+    _rescom.set_bytes(reserved_bytes, committed_bytes); _u.set_bytes(used_bytes);
   }
 
   void add_bytes(size_t reserved_bytes, size_t committed_bytes, size_t used_bytes) {
-    _r.add_bytes(reserved_bytes); _c.add_bytes(committed_bytes); _u.add_bytes(used_bytes);
+    _rescom.add_bytes(reserved_bytes, committed_bytes); _u.add_bytes(used_bytes);
   }
 
   void set_words(size_t reserved_words, size_t committed_words, size_t used_words) {
-    _r.set_words(reserved_words); _c.set_words(committed_words); _u.set_words(used_words);
+    _rescom.set_words(reserved_words, committed_words); _u.set_words(used_words);
   }
 
-  void add_words(size_t reserved_bytes, size_t committed_bytes, size_t used_bytes) {
-    _r.add_words(reserved_bytes); _c.add_words(committed_bytes); _u.add_words(used_bytes);
+  void add_words(size_t reserved_words, size_t committed_words, size_t used_words) {
+    _rescom.add_words(reserved_words, committed_words); _u.add_words(used_words);
   }
 
-  size_t reserved_bytes() const   { return _r.as_bytes(); }
-  size_t committed_bytes() const  { return _c.as_bytes(); }
-  size_t used_bytes() const       { return _c.as_bytes(); }
+  size_t reserved_bytes() const   { return _rescom.reserved_bytes(); }
+  size_t committed_bytes() const  { return _rescom.committed_bytes(); }
+  size_t used_bytes() const       { return _u.as_bytes(); }
 
-  size_t reserved_words() const   { return _r.as_words_exact(); }
-  size_t committed_words() const  { return _c.as_words_exact(); }
+  size_t reserved_words() const   { return _rescom.reserved_words(); }
+  size_t committed_words() const  { return _rescom.committed_words(); }
   size_t used_words() const       { return _u.as_words_exact(); }
 
   // For compatibility with existing stats classes; returns byte sizes
@@ -116,7 +171,7 @@ public:
   // size_t committed() const        { return committed_bytes(); }
   //  size_t used() const             { return used_bytes(); }
 
-  void reset() { _r.reset(); _c.reset(); _u.reset(); }
+  void reset() { _rescom.reset(); _u.reset(); }
 
   const ResComUsed& operator+= (const ResComUsed& other)  {
     add_bytes(other.reserved_bytes(), other.committed_bytes(), other.used_bytes());
