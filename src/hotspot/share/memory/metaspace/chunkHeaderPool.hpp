@@ -104,6 +104,8 @@ public:
 #ifdef ASSERT
     // In debug, fill dead header with pattern.
     c->zap_header(0xCC);
+    c->set_next(nullptr);
+    c->set_prev(nullptr);
 #endif
     c->set_dead();
     _freelist.push_front(c);

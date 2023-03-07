@@ -104,16 +104,14 @@ TEST_VM(metaspace, HumongousAllocateRelease) {
       assert_usage_numbers(arena, 0, 0, 0);
 
       MetaWord* p = arena->allocate(sizes[i]);
-      ASSERT_NOT_NULL(p);
-      assert_usage_numbers(arena, expected_reserved, expected_committed, expected_used);
-      arena->deallocate(p, s);
-      assert_usage_numbers(arena, expected_reserved, expected_committed, expected_used);
 
+      ASSERT_NOT_NULL(p);
       const size_t expected_reserved = align_up(s, MAX_CHUNK_WORD_SIZE);
       const size_t expected_committed = align_up(s, Settings::commit_granule_words());
-      const size_t expected_used = s;
-
-
+      const size_t expected_used = align_up(s, 16);
+      assert_usage_numbers(arena, expected_reserved, expected_committed, expected_used);
+      arena->deallocate(p, s);
+      assert_usage_numbers(arena, expected_reserved, expected_committed, 0);
     }
   }
 }

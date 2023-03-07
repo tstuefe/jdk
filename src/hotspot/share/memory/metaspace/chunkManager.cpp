@@ -307,7 +307,9 @@ bool ChunkManager::get_multiple_adjacent_root_chunks(int num, size_t min_committ
       assert(c->is_free(), "Not free.");
       if (last != nullptr) {
         assert(c->prev_in_vs() == last && last->next_in_vs() == c &&
-               c->base() == last->base() + root_chunk_size, "Not adjacent");
+               c->base() == last->base() + root_chunk_size,
+               "Not adjacent areas: me: " METACHUNK_COMPLETE_FORMAT ", him: " METACHUNK_COMPLETE_FORMAT,
+               METACHUNK_COMPLETE_FORMAT_ARGS(c), METACHUNK_COMPLETE_FORMAT_ARGS(last));
       }
       last = c;
     };

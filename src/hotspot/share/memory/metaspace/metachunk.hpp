@@ -358,11 +358,14 @@ public:
 };
 
 // Little print helpers: since we often print out chunks, here some convenience macros
-#define METACHUNK_FORMAT                "@" PTR_FORMAT ", %c, base " PTR_FORMAT ", level " CHKLVL_FORMAT
-#define METACHUNK_FORMAT_ARGS(chunk)    p2i(chunk), chunk->get_state_char(), p2i(chunk->base()), chunk->level()
+#define METACHUNK_FORMAT                         "@" PTR_FORMAT ", %c, base " PTR_FORMAT ", level " CHKLVL_FORMAT
+#define METACHUNK_FORMAT_ARGS(chunk)             p2i(chunk), chunk->get_state_char(), p2i(chunk->base()), chunk->level()
 
-#define METACHUNK_FULL_FORMAT                "@" PTR_FORMAT ", %c, base " PTR_FORMAT ", level " CHKLVL_FORMAT " (" SIZE_FORMAT "), used: " SIZE_FORMAT ", committed: " SIZE_FORMAT ", committed-free: " SIZE_FORMAT
-#define METACHUNK_FULL_FORMAT_ARGS(chunk)    p2i(chunk), chunk->get_state_char(), p2i(chunk->base()), chunk->level(), chunk->word_size(), chunk->used_words(), chunk->committed_words(), chunk->free_below_committed_words()
+#define METACHUNK_FULL_FORMAT                    METACHUNK_FORMAT " (" SIZE_FORMAT "), used: " SIZE_FORMAT ", committed: " SIZE_FORMAT ", committed-free: " SIZE_FORMAT
+#define METACHUNK_FULL_FORMAT_ARGS(chunk)        METACHUNK_FORMAT_ARGS(chunk), chunk->word_size(), chunk->used_words(), chunk->committed_words(), chunk->free_below_committed_words()
+
+#define METACHUNK_COMPLETE_FORMAT                METACHUNK_FULL_FORMAT ", next: " PTR_FORMAT ", prev: " PTR_FORMAT ", next_in_vs: " PTR_FORMAT ", prev_in_vs: " PTR_FORMAT
+#define METACHUNK_COMPLETE_FORMAT_ARGS(chunk)    METACHUNK_FULL_FORMAT_ARGS(chunk), p2i(chunk->next()), p2i(chunk->prev()), p2i(chunk->next_in_vs()), p2i(chunk->prev_in_vs())
 
 } // namespace metaspace
 

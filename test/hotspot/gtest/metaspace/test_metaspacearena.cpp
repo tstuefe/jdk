@@ -746,10 +746,12 @@ TEST_VM(metaspace, MetaspaceArena_growth_boot_nc_not_inplace) {
 static void test_repeatedly_allocate_and_deallocate(bool test_topmost) {
   // Test various sizes, including sizes that are larger than a root chunk (humongous allocations).
   for (size_t blocksize = MAX_CHUNK_BYTE_SIZE * 8; blocksize >= 1; blocksize /= 2) {
-    size_t used_context_before = 0, committed_context_before = 0, reserved_context_before = 0;
+    size_t used_context = SIZE_MAX, committed_context = SIZE_MAX, reserved_context = SIZE_MAX;
     MetaspaceGtestContext context;
-    context.usage_numbers_with_test(&used_context_before, &committed_context_before,
-                                    &reserved_context_before);
+    context.usage_numbers_with_test(&used_context, &committed_context, &reserved_context);
+    ASSERT_0(used_context);
+    ASSERT_0(committed_context);
+    ASSERT_0(reserved_context);
     {
       size_t used_arena_before = 0, committed_arena_before = 0;
       MetaWord* p = NULL, *p2 = NULL;
@@ -782,11 +784,8 @@ static void test_repeatedly_allocate_and_deallocate(bool test_topmost) {
 
     // The metaspace arena was deleted: all its chunks should have been given back to the
     // context.
-    size_t used_context_before = 0, committed_context_before = 0, reserved_context_before = 0;
-    MetaspaceGtestContext context;
-    context.usage_numbers_with_test(&used_context_before, &committed_context_before,
-                                    &reserved_context_before);
-
+    context.usage_numbers_with_test(&used_context, &committed_context, &reserved_context);
+    ASSERT_0(used_context);
   }
 }
 

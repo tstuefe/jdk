@@ -27,6 +27,7 @@
 #define SHARE_MEMORY_METASPACE_METASPACECONTEXT_HPP
 
 #include "memory/allocation.hpp"
+#include "memory/metaspace/virtualSpaceList.hpp"
 #include "memory/virtualspace.hpp"
 #include "utilities/debug.hpp"
 
