@@ -375,17 +375,27 @@ extern "C" JNIEXPORT void verify() {
   if (!safe) SafepointSynchronize::set_is_not_at_safepoint();
 }
 
-
 extern "C" JNIEXPORT void pp(void* p) {
+tty->print_cr("%d " PTR_FORMAT, __LINE__ ,p2i(p));
   Command c("pp");
+  tty->print_cr("What is \"" PTR_FORMAT "\"? ", p2i(p));
   FlagSetting fl(DisplayVMOutput, true);
   if (p == nullptr) {
     tty->print_cr("null");
     return;
-  }
-  if (Universe::heap()->is_in(p)) {
+  } else if (((size_t)p2i(p)) < os::vm_page_size()) {
+    tty->print_cr("likely invalid.");
+  } else if (Thread::current_or_null_safe() != nullptr &&
+             Thread::current()->is_in_full_stack((address)p)) {
+    tty->print_cr("In current thread stack.");
+  } else if (Universe::heap()->is_in(p)) {
+    tty->print_cr("in heap. Attempting to print oop:");
     oop obj = cast_to_oop(p);
     obj->print();
+  } else if (Metaspace::contains(p)) {
+    tty->print_cr("in metaspace.");
+  } else if (CodeCache::contains(p)) {
+    tty->print_cr("in code cache.");
   } else {
     // Ask NMT about this pointer.
     // GDB note: We will be using SafeFetch to access the supposed malloc header. If the address is
@@ -396,10 +406,9 @@ extern "C" JNIEXPORT void pp(void* p) {
     if (MemTracker::print_containing_region(p, tty)) {
       return;
     }
-    tty->print_cr(PTR_FORMAT, p2i(p));
   }
+  tty->print_cr("Unknown (Not in heap|metaspace|code cache|current thread stack, and NMT does not know it either");
 }
-
 
 extern "C" JNIEXPORT void findpc(intptr_t x);
 
@@ -594,8 +603,8 @@ extern "C" JNIEXPORT intptr_t u5p(intptr_t addr,
 
 // int versions of all methods to avoid having to type type casts in the debugger
 
-void pp(intptr_t p)          { pp((void*)p); }
-void pp(oop p)               { pp((void*)p); }
+void pp(intptr_t p)          { tty->print_cr("%d " PTR_FORMAT, __LINE__ , p); pp((void*)p); }
+void pp(oop p)               { tty->print_cr("%d " PTR_FORMAT, __LINE__ ,p2i(p)); pp((void*)p); }
 
 void help() {
   Command c("help");

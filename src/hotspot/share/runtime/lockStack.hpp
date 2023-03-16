@@ -31,6 +31,7 @@
 
 class Thread;
 class OopClosure;
+class outputStream;
 
 class LockStack {
   friend class VMStructs;
@@ -46,12 +47,15 @@ private:
 
   static inline int to_index(int offset);
 
+  inline void zap_trailing_slots(uint8_t marker = 0) PRODUCT_RETURN;
+
 public:
   static ByteSize offset_offset() { return byte_offset_of(LockStack, _offset); }
   static ByteSize base_offset()   { return byte_offset_of(LockStack, _base); }
 
   LockStack();
 
+  static int start_offset();
   static int end_offset();
   inline bool can_push() const;
   inline void push(oop o);
@@ -61,7 +65,9 @@ public:
   inline bool contains(oop o) const;
 
   // GC support
-  inline void oops_do(OopClosure* cl);
+   void oops_do(OopClosure* cl);
+
+  void print_on(outputStream* st) const;
 
 };
 

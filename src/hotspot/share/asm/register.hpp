@@ -28,6 +28,7 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/ostream.hpp"
 #include "utilities/population_count.hpp"
 
 // Use AbstractRegister as shortcut
@@ -241,11 +242,22 @@ template<typename R, typename... Rx>
 inline void assert_different_registers(R first_register, Rx... more_registers) {
 #ifdef ASSERT
   const R regs[] = { first_register, more_registers... };
+  int offender_idx = -1;
   // Verify there are no equal entries.
-  for (size_t i = 0; i < ARRAY_SIZE(regs) - 1; ++i) {
-    for (size_t j = i + 1; j < ARRAY_SIZE(regs); ++j) {
-      assert(regs[i] != regs[j], "Multiple uses of register: %s", regs[i]->name());
+  for (size_t i = 0; i < ARRAY_SIZE(regs) - 1 && offender_idx == -1; ++i) {
+    for (size_t j = i + 1; j < ARRAY_SIZE(regs) && offender_idx == -1; ++j) {
+      if (regs[i] == regs[j]) {
+        offender_idx = i;
+      }
     }
+  }
+  if (offender_idx != -1) {
+    char allregs[128];
+    stringStream ss(allregs, sizeof(allregs));
+    for (size_t i = 0; i < ARRAY_SIZE(regs) - 1; ++i) {
+      ss.print("%s, ", regs[i]->name());
+    }
+    fatal("Multiple uses of register: %s (%s)", regs[offender_idx]->name(), allregs);
   }
 #endif
 }

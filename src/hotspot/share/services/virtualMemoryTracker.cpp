@@ -679,10 +679,9 @@ public:
 
   bool do_allocation_site(const ReservedMemoryRegion* rgn) {
     if (rgn->contain_address(_p)) {
-      _st->print(PTR_FORMAT " in mmap'd memory region [" PTR_FORMAT " - " PTR_FORMAT "] by %s",
+      _st->print_cr(PTR_FORMAT " in mmap'd memory region [" PTR_FORMAT " - " PTR_FORMAT "] by %s",
         p2i(_p), p2i(rgn->base()), p2i(rgn->base() + rgn->size()), rgn->flag_name());
       if (MemTracker::tracking_level() == NMT_detail) {
-        _st->cr();
         rgn->call_stack()->print_on(_st);
         _st->cr();
       }

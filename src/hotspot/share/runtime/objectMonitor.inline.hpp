@@ -115,21 +115,6 @@ inline void ObjectMonitor::release_clear_owner(void* old_value) {
                                      p2i(this), p2i(old_value));
 }
 
-// Simply set _owner field to new_value; current value must match old_value.
-// (Simple means no memory sync needed.)
-inline void ObjectMonitor::set_owner_from(void* old_value, void* new_value) {
-#ifdef ASSERT
-  void* prev = Atomic::load(&_owner);
-  assert(prev == old_value, "unexpected prev owner=" INTPTR_FORMAT
-         ", expected=" INTPTR_FORMAT, p2i(prev), p2i(old_value));
-#endif
-  Atomic::store(&_owner, new_value);
-  log_trace(monitorinflation, owner)("set_owner_from(): mid="
-                                     INTPTR_FORMAT ", old_value=" INTPTR_FORMAT
-                                     ", new_value=" INTPTR_FORMAT, p2i(this),
-                                     p2i(old_value), p2i(new_value));
-}
-
 // Simply set _owner field to self; current value must match basic_lock_p.
 inline void ObjectMonitor::set_owner_from_BasicLock(void* basic_lock_p, JavaThread* current) {
 #ifdef ASSERT

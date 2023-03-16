@@ -195,10 +195,13 @@ int C1_MacroAssembler::lock_object(Register hdr, Register obj, Register disp_hdr
   const Register tmp2 = Rtemp; // Rtemp should be free at c1 LIR level
   assert_different_registers(hdr, obj, disp_hdr, tmp2);
 
+  verify_oop(obj);
+
   assert(BasicObjectLock::lock_offset_in_bytes() == 0, "adjust this code");
   const int obj_offset = BasicObjectLock::obj_offset_in_bytes();
   const int mark_offset = BasicLock::displaced_header_offset_in_bytes();
 
+  // save object being locked into the BasicObjectLock
   str(obj, Address(disp_hdr, obj_offset));
 
   null_check_offset = offset();
@@ -212,38 +215,61 @@ int C1_MacroAssembler::lock_object(Register hdr, Register obj, Register disp_hdr
 
   assert(oopDesc::mark_offset_in_bytes() == 0, "Required by atomic instructions");
 
-  // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
-  // That would be acceptable as ether CAS or slow case path is taken in that case.
+  if (UseFastLocking) {
+fprintf(stderr, "C1_MacroAssembler::lock_object\n"); fflush(stderr);
+//b(slow_case);
 
-  // Must be the first instruction here, because implicit null check relies on it
-  ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
+    Label FAIL;
+    save_all_registers();
 
-  tst(hdr, markWord::unlocked_value);
-  b(fast_lock, ne);
+    // Load object header
+    ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
 
-  // Check for recursive locking
-  // See comments in InterpreterMacroAssembler::lock_object for
-  // explanations on the fast recursive locking check.
-  // -1- test low 2 bits
-  movs(tmp2, AsmOperand(hdr, lsl, 30));
-  // -2- test (hdr - SP) if the low two bits are 0
-  sub(tmp2, hdr, SP, eq);
-  movs(tmp2, AsmOperand(tmp2, lsr, exact_log2(os::vm_page_size())), eq);
-  // If still 'eq' then recursive locking OK
-  // set to zero if recursive lock, set to non zero otherwise (see discussion in JDK-8267042)
-  str(tmp2, Address(disp_hdr, mark_offset));
-  b(fast_lock_done, eq);
-  // else need slow case
-  b(slow_case);
+    fast_lock_roman_style(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
+
+    restore_all_registers();
+    cmp(R0, R0);
+    b(done);
+
+    bind(FAIL);
+    restore_all_registers();
+    tst(R0, R0);
+    b(slow_case);
+
+  } else {
+    // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
+    // That would be acceptable as ether CAS or slow case path is taken in that case.
+
+    // Must be the first instruction here, because implicit null check relies on it
+    ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
+
+    tst(hdr, markWord::unlocked_value);
+    b(fast_lock, ne);
+
+    // Check for recursive locking
+    // See comments in InterpreterMacroAssembler::lock_object for
+    // explanations on the fast recursive locking check.
+    // -1- test low 2 bits
+    movs(tmp2, AsmOperand(hdr, lsl, 30));
+    // -2- test (hdr - SP) if the low two bits are 0
+    sub(tmp2, hdr, SP, eq);
+    movs(tmp2, AsmOperand(tmp2, lsr, exact_log2(os::vm_page_size())), eq);
+    // If still 'eq' then recursive locking OK
+    // set to zero if recursive lock, set to non zero otherwise (see discussion in JDK-8267042)
+    str(tmp2, Address(disp_hdr, mark_offset));
+    b(fast_lock_done, eq);
+    // else need slow case
+    b(slow_case);
 
 
-  bind(fast_lock);
-  // Save previous object header in BasicLock structure and update the header
-  str(hdr, Address(disp_hdr, mark_offset));
+    bind(fast_lock);
+    // Save previous object header in BasicLock structure and update the header
+    str(hdr, Address(disp_hdr, mark_offset));
 
-  cas_for_lock_acquire(hdr, disp_hdr, obj, tmp2, slow_case);
+    cas_for_lock_acquire(hdr, disp_hdr, obj, tmp2, slow_case);
 
-  bind(fast_lock_done);
+    bind(fast_lock_done);
+  }
   bind(done);
 
   return null_check_offset;
@@ -261,17 +287,43 @@ void C1_MacroAssembler::unlock_object(Register hdr, Register obj, Register disp_
 
   assert(oopDesc::mark_offset_in_bytes() == 0, "Required by atomic instructions");
 
-  // Load displaced header and object from the lock
-  ldr(hdr, Address(disp_hdr, mark_offset));
-  // If hdr is null, we've got recursive locking and there's nothing more to do
-  cbz(hdr, done);
+  if (UseFastLocking) {
 
-  // load object
-  ldr(obj, Address(disp_hdr, obj_offset));
+fprintf(stderr, "C1_MacroAssembler::unlock_object\n"); fflush(stderr);
+//b(slow_case);
 
-  // Restore the object header
-  cas_for_lock_release(disp_hdr, hdr, obj, tmp2, slow_case);
+    Label FAIL;
+    save_all_registers();
 
+    // load object
+    ldr(obj, Address(disp_hdr, BasicObjectLock::obj_offset_in_bytes()));
+    verify_oop(obj);
+
+    ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
+
+    fast_unlock_roman_style(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
+
+    restore_all_registers();
+    cmp(R0, R0);
+    b(done);
+
+    bind(FAIL);
+    restore_all_registers();
+    tst(R0, R0);
+    b(slow_case);
+
+  } else {
+    // Load displaced header and object from the lock
+    ldr(hdr, Address(disp_hdr, mark_offset));
+    // If hdr is null, we've got recursive locking and there's nothing more to do
+    cbz(hdr, done);
+
+    // load object
+    ldr(obj, Address(disp_hdr, obj_offset));
+
+    // Restore the object header
+    cas_for_lock_release(disp_hdr, hdr, obj, tmp2, slow_case);
+  }
   bind(done);
 }
 

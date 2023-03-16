@@ -53,11 +53,50 @@
 #include "runtime/sharedRuntime.hpp"
 #include "services/threadService.hpp"
 #include "utilities/dtrace.hpp"
+#include "utilities/ostream.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/preserveException.hpp"
 #if INCLUDE_JFR
 #include "jfr/support/jfrFlush.hpp"
 #endif
+
+#define LOGME(OM, ...) if (UseNewCode ) { \
+  stringStream ss;  \
+  ss.print("[tid=%u] ",(unsigned)os::current_thread_id()); \
+  ss.print("OM: " PTR_FORMAT " ", p2i(OM)); \
+  OM->print_on2(&ss); \
+  ss.print(__VA_ARGS__); \
+  fprintf(stderr, "%s\n", ss.base()); \
+  fflush(stderr); \
+}
+
+class LOGMERAII {
+  const ObjectMonitor* const _om;
+  const char* const _msg;
+public:
+  LOGMERAII(ObjectMonitor* om, const char* msg) : _om(om), _msg(msg) {
+    LOGME(_om, "--> %s", _msg);
+  }
+  ~LOGMERAII() {
+    LOGME(_om, "<-- %s", _msg);
+  }
+};
+
+// Simply set _owner field to new_value; current value must match old_value.
+// (Simple means no memory sync needed.)
+ void ObjectMonitor::set_owner_from(void* old_value, void* new_value) {
+  LOGMERAII lmi(this, "set_owner_from");
+#ifdef ASSERT
+  void* prev = Atomic::load(&_owner);
+  assert(prev == old_value, "unexpected prev owner=" INTPTR_FORMAT
+         ", expected=" INTPTR_FORMAT, p2i(prev), p2i(old_value));
+#endif
+  Atomic::store(&_owner, new_value);
+  log_trace(monitorinflation, owner)("set_owner_from(): mid="
+                                     INTPTR_FORMAT ", old_value=" INTPTR_FORMAT
+                                     ", new_value=" INTPTR_FORMAT, p2i(this),
+                                     p2i(old_value), p2i(new_value));
+}
 
 #ifdef DTRACE_ENABLED
 
@@ -322,6 +361,8 @@ bool ObjectMonitor::enter(JavaThread* current) {
   // The following code is ordered to check the most common cases first
   // and to reduce RTS->RTO cache line upgrades on SPARC and IA32 processors.
 
+  LOGMERAII lmi(this, "ObjectMonitor::enter");
+
   void* cur = try_set_owner_from(nullptr, current);
   if (cur == nullptr) {
     assert(_recursions == 0, "invariant");
@@ -351,6 +392,7 @@ bool ObjectMonitor::enter(JavaThread* current) {
   // Note that if we acquire the monitor from an initial spin
   // we forgo posting JVMTI events and firing DTRACE probes.
   if (TrySpin(current) > 0) {
+LOGMERAII lmi2(this, "TrySpin");
     assert(owner_raw() == current, "must be current: owner=" INTPTR_FORMAT, p2i(owner_raw()));
     assert(_recursions == 0, "must be 0: recursions=" INTX_FORMAT, _recursions);
     assert(object()->mark() == markWord::encode(this),
@@ -369,6 +411,7 @@ bool ObjectMonitor::enter(JavaThread* current) {
   // Keep track of contention for JVM/TI and M&M queries.
   add_to_contentions(1);
   if (is_being_async_deflated()) {
+LOGMERAII lmi3(this, "is_being_async_deflated");
     // Async deflation is in progress and our contentions increment
     // above lost the race to async deflation. Undo the work and
     // force the caller to retry.
@@ -395,6 +438,9 @@ bool ObjectMonitor::enter(JavaThread* current) {
 
   { // Change java thread status to indicate blocked on monitor enter.
     JavaThreadBlockedOnMonitorEnterState jtbmes(current, this);
+
+LOGMERAII lmi4(this, "Now we block for real");
+
 
     assert(current->current_pending_monitor() == nullptr, "invariant");
     current->set_current_pending_monitor(this);
@@ -527,9 +573,12 @@ bool ObjectMonitor::deflate_monitor() {
 
   const oop obj = object_peek();
 
+LOGMERAII(this, "ObjectMonitor::deflate_monitor()");
+
   if (obj == nullptr) {
     // If the object died, we can recycle the monitor without racing with
     // Java threads. The GC already broke the association with the object.
+LOGME(this, "Recycling OM");
     set_owner_from(nullptr, DEFLATER_MARKER);
     assert(contentions() >= 0, "must be non-negative: contentions=%d", contentions());
     _contentions = INT_MIN; // minimum negative int
@@ -679,6 +728,9 @@ const char* ObjectMonitor::is_busy_to_string(stringStream* ss) {
 
 void ObjectMonitor::EnterI(JavaThread* current) {
   assert(current->thread_state() == _thread_blocked, "invariant");
+
+LOGMERAII lmi2(this, "ObjectMonitor::EnterI");
+
 
   // Try the lock - TATAS
   if (TryLock (current) > 0) {
@@ -1133,6 +1185,9 @@ void ObjectMonitor::UnlinkAfterAcquire(JavaThread* current, ObjectWaiter* curren
 // of such futile wakups is low.
 
 void ObjectMonitor::exit(JavaThread* current, bool not_suspended) {
+
+  LOGMERAII lmi(this, "ObjectMonitor::exit");
+
   void* cur = owner_raw();
   if (current != cur) {
     if (!UseFastLocking && current->is_lock_owned((address)cur)) {
@@ -2193,6 +2248,26 @@ void ObjectMonitor::Initialize() {
   _oop_storage = OopStorageSet::create_weak("ObjectSynchronizer Weak", mtSynchronizer);
 
   DEBUG_ONLY(InitDone = true;)
+}
+
+void ObjectMonitor::print_on2(outputStream* st) const {
+  // The minimal things to print for markWord printing, more can be added for debugging and logging.
+  st->print("{contentions=0x%08x, waiters=0x%08x"
+            ", recursions=" INTX_FORMAT ", owner=" INTPTR_FORMAT,
+            contentions(), waiters(), recursions(),
+            p2i(owner_raw()));
+  if (_object.is_empty()) {
+    st->print(" ,object empty");
+  } else if (_object.is_null()) {
+    st->print(", object null");
+  } else {
+    oop* poop = _object.ptr_raw();
+    st->print(" _object @" PTR_FORMAT, p2i(poop));
+    volatile oop result = nullptr;
+    if (os::is_readable_pointer(poop)) {
+      st->print("=" PTR_FORMAT, p2i(*poop));
+    }
+  }
 }
 
 void ObjectMonitor::print_on(outputStream* st) const {

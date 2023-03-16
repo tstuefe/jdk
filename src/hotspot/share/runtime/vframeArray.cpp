@@ -95,7 +95,8 @@ void vframeArrayElement::fill_in(compiledVFrame* vf, bool realloc_failures) {
         if (monitor->owner_is_scalar_replaced()) {
           dest->set_obj(nullptr);
         } else {
-          assert(monitor->owner() == nullptr || !monitor->owner()->is_unlocked(), "object must be null or locked");
+          assert(monitor->owner() == nullptr || !monitor->owner()->is_unlocked(), "object must be null or locked (oop: @" PTR_FORMAT "=" PTR_FORMAT ")",
+                 p2i(monitor->owner()), monitor->owner()->mark().value());
           dest->set_obj(monitor->owner());
           monitor->lock()->move_to(monitor->owner(), dest->lock());
         }

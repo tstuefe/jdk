@@ -305,6 +305,8 @@ class ObjectMonitor : public CHeapObj<mtObjectMonitor> {
   oop       object() const;
   oop       object_peek() const;
 
+oop objraw() const  { return *(_object.ptr_raw()); }
+
   // Returns true if the specified thread owns the ObjectMonitor. Otherwise
   // returns false and throws IllegalMonitorStateException (IMSE).
   bool      check_owner(TRAPS);
@@ -338,6 +340,7 @@ class ObjectMonitor : public CHeapObj<mtObjectMonitor> {
   void      print_debug_style_on(outputStream* st) const;
 #endif
   void      print_on(outputStream* st) const;
+  void      print_on2(outputStream* st) const;
 
   // Use the following at your own risk
   intx      complete_exit(JavaThread* current);

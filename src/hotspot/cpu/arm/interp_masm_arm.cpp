@@ -889,74 +889,105 @@ void InterpreterMacroAssembler::lock_object(Register Rlock) {
       b(slow_case, ne);
     }
 
-    // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
-    // That would be acceptable as ether CAS or slow case path is taken in that case.
-    // Exception to that is if the object is locked by the calling thread, then the recursive test will pass (guaranteed as
-    // loads are satisfied from a store queue if performed on the same processor).
+    if (UseFastLocking) {
+fprintf(stderr, "InterpreterMacroAssembler::lock_object\n"); fflush(stderr);
+//b(slow_case);
 
-    assert(oopDesc::mark_offset_in_bytes() == 0, "must be");
-    ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
+      Label FAIL;
+      save_all_registers();
 
-    // Test if object is already locked
-    tst(Rmark, markWord::unlocked_value);
-    b(already_locked, eq);
+      // Load object header
+      Register hdr = Rmark;
+      ldr(hdr, Address(Robj, oopDesc::mark_offset_in_bytes()));
 
-    // Save old object->mark() into BasicLock's displaced header
-    str(Rmark, Address(Rlock, mark_offset));
+      fast_lock_roman_style(Robj, hdr, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
 
-    cas_for_lock_acquire(Rmark, Rlock, Robj, Rtemp, slow_case);
+      restore_all_registers();
+      cmp(R0, R0);
+      b(done);
 
-    b(done);
+      bind(FAIL);
+      restore_all_registers();
+      tst(R0, R0);
+      b(slow_case);
 
-    // If we got here that means the object is locked by ether calling thread or another thread.
-    bind(already_locked);
-    // Handling of locked objects: recursive locks and slow case.
+    } else {
+      // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
+      // That would be acceptable as ether CAS or slow case path is taken in that case.
+      // Exception to that is if the object is locked by the calling thread, then the recursive test will pass (guaranteed as
+      // loads are satisfied from a store queue if performed on the same processor).
 
-    // Fast check for recursive lock.
-    //
-    // Can apply the optimization only if this is a stack lock
-    // allocated in this thread. For efficiency, we can focus on
-    // recently allocated stack locks (instead of reading the stack
-    // base and checking whether 'mark' points inside the current
-    // thread stack):
-    //  1) (mark & 3) == 0
-    //  2) SP <= mark < SP + os::pagesize()
-    //
-    // Warning: SP + os::pagesize can overflow the stack base. We must
-    // neither apply the optimization for an inflated lock allocated
-    // just above the thread stack (this is why condition 1 matters)
-    // nor apply the optimization if the stack lock is inside the stack
-    // of another thread. The latter is avoided even in case of overflow
-    // because we have guard pages at the end of all stacks. Hence, if
-    // we go over the stack base and hit the stack of another thread,
-    // this should not be in a writeable area that could contain a
-    // stack lock allocated by that thread. As a consequence, a stack
-    // lock less than page size away from SP is guaranteed to be
-    // owned by the current thread.
-    //
-    // Note: assuming SP is aligned, we can check the low bits of
-    // (mark-SP) instead of the low bits of mark. In that case,
-    // assuming page size is a power of 2, we can merge the two
-    // conditions into a single test:
-    // => ((mark - SP) & (3 - os::pagesize())) == 0
+      assert(oopDesc::mark_offset_in_bytes() == 0, "must be");
+      ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
 
-    // (3 - os::pagesize()) cannot be encoded as an ARM immediate operand.
-    // Check independently the low bits and the distance to SP.
-    // -1- test low 2 bits
-    movs(R0, AsmOperand(Rmark, lsl, 30));
-    // -2- test (mark - SP) if the low two bits are 0
-    sub(R0, Rmark, SP, eq);
-    movs(R0, AsmOperand(R0, lsr, exact_log2(os::vm_page_size())), eq);
-    // If still 'eq' then recursive locking OK: store 0 into lock record
-    str(R0, Address(Rlock, mark_offset), eq);
+      // Test if object is already locked
+      tst(Rmark, markWord::unlocked_value);
+      b(already_locked, eq);
 
-    b(done, eq);
+      // Save old object->mark() into BasicLock's displaced header
+      str(Rmark, Address(Rlock, mark_offset));
+
+      cas_for_lock_acquire(Rmark, Rlock, Robj, Rtemp, slow_case);
+
+      b(done);
+
+      // If we got here that means the object is locked by ether calling thread or another thread.
+      bind(already_locked);
+      // Handling of locked objects: recursive locks and slow case.
+
+      // Fast check for recursive lock.
+      //
+      // Can apply the optimization only if this is a stack lock
+      // allocated in this thread. For efficiency, we can focus on
+      // recently allocated stack locks (instead of reading the stack
+      // base and checking whether 'mark' points inside the current
+      // thread stack):
+      //  1) (mark & 3) == 0
+      //  2) SP <= mark < SP + os::pagesize()
+      //
+      // Warning: SP + os::pagesize can overflow the stack base. We must
+      // neither apply the optimization for an inflated lock allocated
+      // just above the thread stack (this is why condition 1 matters)
+      // nor apply the optimization if the stack lock is inside the stack
+      // of another thread. The latter is avoided even in case of overflow
+      // because we have guard pages at the end of all stacks. Hence, if
+      // we go over the stack base and hit the stack of another thread,
+      // this should not be in a writeable area that could contain a
+      // stack lock allocated by that thread. As a consequence, a stack
+      // lock less than page size away from SP is guaranteed to be
+      // owned by the current thread.
+      //
+      // Note: assuming SP is aligned, we can check the low bits of
+      // (mark-SP) instead of the low bits of mark. In that case,
+      // assuming page size is a power of 2, we can merge the two
+      // conditions into a single test:
+      // => ((mark - SP) & (3 - os::pagesize())) == 0
+
+      // (3 - os::pagesize()) cannot be encoded as an ARM immediate operand.
+      // Check independently the low bits and the distance to SP.
+      // -1- test low 2 bits
+      movs(R0, AsmOperand(Rmark, lsl, 30));
+      // -2- test (mark - SP) if the low two bits are 0
+      sub(R0, Rmark, SP, eq);
+      movs(R0, AsmOperand(R0, lsr, exact_log2(os::vm_page_size())), eq);
+      // If still 'eq' then recursive locking OK: store 0 into lock record
+      str(R0, Address(Rlock, mark_offset), eq);
+
+      b(done, eq);
+    }
 
     bind(slow_case);
 
     // Call the runtime routine for slow case
+    if (UseFastLocking) {
+      // Pass oop, not lock, in fast lock case. call_VM wants R1 though (Rlock).
+      push(R1);
+      mov(R1, Robj);
+    }
     call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorenter), Rlock);
-
+    if (UseFastLocking) {
+      pop(R1);
+    }
     bind(done);
   }
 }
@@ -991,18 +1022,52 @@ void InterpreterMacroAssembler::unlock_object(Register Rlock) {
     // Free entry
     str(Rzero, Address(Rlock, obj_offset));
 
-    // Load the old header from BasicLock structure
-    ldr(Rmark, Address(Rlock, mark_offset));
+    if (UseFastLocking) {
+fprintf(stderr, "InterpreterMacroAssembler::unlock_object\n"); fflush(stderr);
+//b(slow_case);
 
-    // Test for recursion (zero mark in BasicLock)
-    cbz(Rmark, done);
+      Label FAIL;
+      save_all_registers();
 
-    bool allow_fallthrough_on_failure = true;
+      // Check for non-symmetric locking. This is allowed by the spec and the interpreter
+      // must handle it.
+      Register tmp = Rmark;
+      ldr(tmp, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+      sub(tmp, tmp, oopSize);
+      ldr(tmp, Address(Rthread, tmp));
+      cmpoop(tmp, Robj);
+      b(FAIL, ne);
 
-    cas_for_lock_release(Rlock, Rmark, Robj, Rtemp, slow_case, allow_fallthrough_on_failure);
+      // Load object header
+      Register hdr = Rmark;
+      ldr(hdr, Address(Robj, oopDesc::mark_offset_in_bytes()));
 
-    b(done, eq);
+      fast_unlock_roman_style(Robj, hdr, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
 
+      restore_all_registers();
+      cmp(R0, R0);
+      b(done);
+
+      bind(FAIL);
+      restore_all_registers();
+      tst(R0, R0);
+      b(slow_case);
+
+    } else {
+
+      // Load the old header from BasicLock structure
+      ldr(Rmark, Address(Rlock, mark_offset));
+
+      // Test for recursion (zero mark in BasicLock)
+      cbz(Rmark, done);
+
+      bool allow_fallthrough_on_failure = true;
+
+      cas_for_lock_release(Rlock, Rmark, Robj, Rtemp, slow_case, allow_fallthrough_on_failure);
+
+      b(done, eq);
+
+    }
     bind(slow_case);
 
     // Call the runtime routine for slow case.

@@ -79,6 +79,26 @@
 #include "opto/runtime.hpp"
 #endif
 
+#define LOGME(oop, ...) if (UseNewCode ){ \
+  fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
+  fprintf(stderr, "obj: " PTR_FORMAT " MW: " PTR_FORMAT " ", p2i(oop), (oop->mark().value())); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+  fflush(stderr); \
+}
+
+class LOGMERAII {
+  const oop _oop;
+  const char* const _msg;
+public:
+  LOGMERAII(oop o, const char* msg) : _oop(o), _msg(msg) {
+    LOGME(_oop, "--> %s", _msg);
+  }
+  ~LOGMERAII() {
+    LOGME(_oop, "<-- %s", _msg);
+  }
+};
+
 // Helper class to access current interpreter state
 class LastFrameAccessor : public StackObj {
   frame _last_frame;
@@ -735,7 +755,19 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
 
 //%note monitor_1
 JRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* current, BasicObjectLock* elem))
+  LOGMERAII lmi((oopDesc*)elem, "InterpreterRuntime::monitorenter");
+
   if (!UseHeavyMonitors && UseFastLocking) {
+    if (UseNewCode) {
+      ResourceMark rm;
+      stringStream ss;
+      oopDesc* obj = (oopDesc*)(elem);
+      obj->print_on(&ss);
+      ss.cr();
+      fprintf(stderr, "%s\n", ss.base()); fflush(stderr);
+      oopDesc::verify(obj);
+    }
+
     // This is a hack to get around the limitation of registers in x86_32. We really
     // send an oopDesc* instead of a BasicObjectLock*.
     Handle h_obj(current, oop((reinterpret_cast<oopDesc*>(elem))));
@@ -761,6 +793,9 @@ JRT_END
 
 JRT_LEAF(void, InterpreterRuntime::monitorexit(BasicObjectLock* elem))
   oop obj = elem->obj();
+
+LOGMERAII lmi(obj, "InterpreterRuntime::monitorexit");
+
   assert(Universe::heap()->is_in(obj), "must be an object");
   // The object could become unlocked through a JNI call, which we have no other checks for.
   // Give a fatal message if CheckJNICalls. Otherwise we ignore it.

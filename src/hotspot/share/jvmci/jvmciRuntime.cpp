@@ -59,6 +59,26 @@
 #include "gc/g1/g1BarrierSetRuntime.hpp"
 #endif // INCLUDE_G1GC
 
+#define LOGME(oop, ...) if (UseNewCode ){ \
+  fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
+  fprintf(stderr, "obj: " PTR_FORMAT " MW: " PTR_FORMAT " ", p2i(oop), (oop->mark().value())); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+  fflush(stderr); \
+}
+
+class LOGMERAII {
+  const oop _oop;
+  const char* const _msg;
+public:
+  LOGMERAII(oop o, const char* msg) : _oop(o), _msg(msg) {
+    LOGME(_oop, "--> %s", _msg);
+  }
+  ~LOGMERAII() {
+    LOGME(_oop, "<-- %s", _msg);
+  }
+};
+
 // Simple helper to see if the caller of a runtime stub which
 // entered the VM has been deoptimized
 
@@ -406,10 +426,12 @@ address JVMCIRuntime::exception_handler_for_pc(JavaThread* current) {
 }
 
 JRT_BLOCK_ENTRY(void, JVMCIRuntime::monitorenter(JavaThread* current, oopDesc* obj, BasicLock* lock))
+LOGMERAII(obj, "JVMCIRuntime::monitorenter");
   SharedRuntime::monitor_enter_helper(obj, lock, current);
 JRT_END
 
 JRT_LEAF(void, JVMCIRuntime::monitorexit(JavaThread* current, oopDesc* obj, BasicLock* lock))
+LOGMERAII(obj, "JVMCIRuntime::monitorexit") ;
   assert(current == JavaThread::current(), "pre-condition");
   assert(current->last_Java_sp(), "last_Java_sp must be set");
   assert(oopDesc::is_oop(obj), "invalid lock object pointer dected");

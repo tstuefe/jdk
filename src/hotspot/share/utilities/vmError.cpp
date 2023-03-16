@@ -698,6 +698,7 @@ void VMError::report(outputStream* st, bool _verbose) {
     // process id, thread id
     st->print(", pid=%d", os::current_process_id());
     st->print(", tid=" UINTX_FORMAT, os::current_thread_id());
+st->print(", T=" PTR_FORMAT, p2i(Thread::current_or_null_safe()));
     st->cr();
 
   STEP_IF("printing error message", should_report_bug(_id)) // already printed the message.

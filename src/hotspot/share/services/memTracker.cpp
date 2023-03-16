@@ -136,8 +136,8 @@ void MemTracker::final_report(outputStream* output) {
 // and return true; false if not found.
 bool MemTracker::print_containing_region(const void* p, outputStream* out) {
   return enabled() &&
-      (VirtualMemoryTracker::print_containing_region(p, out) ||
-       MallocTracker::print_pointer_information(p, out));
+      (MallocTracker::print_pointer_information(p, out) ||
+       VirtualMemoryTracker::print_containing_region(p, out));
 }
 
 void MemTracker::report(bool summary_only, outputStream* output, size_t scale) {

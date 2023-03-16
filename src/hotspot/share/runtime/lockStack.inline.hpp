@@ -37,6 +37,16 @@ inline bool LockStack::can_push() const {
   return to_index(_offset) < CAPACITY;
 }
 
+#ifdef ASSERT
+inline void LockStack::zap_trailing_slots(uint8_t marker) {
+  int i = to_index(_offset);
+  while (i < to_index(end_offset())) {
+    *((intptr_t*)(_base + i)) = marker;
+    i++;
+  }
+}
+#endif
+
 inline void LockStack::push(oop o) {
   validate("pre-push");
   assert(oopDesc::is_oop(o), "must be");
@@ -49,10 +59,10 @@ inline void LockStack::push(oop o) {
 
 inline oop LockStack::pop() {
   validate("pre-pop");
-  assert(to_index(_offset) > 0, "underflow, probably unbalanced push/pop");
   _offset -= oopSize;
   oop o = _base[to_index(_offset)];
   assert(!contains(o), "entries must be unique");
+  zap_trailing_slots(2);
   validate("post-pop");
   return o;
 }
@@ -71,6 +81,7 @@ inline void LockStack::remove(oop o) {
       break;
     }
   }
+  zap_trailing_slots(3);
   assert(!contains(o), "entries must be unique: " PTR_FORMAT, p2i(o));
   validate("post-remove");
 }
@@ -86,15 +97,6 @@ inline bool LockStack::contains(oop o) const {
   }
   validate("post-contains");
   return false;
-}
-
-inline void LockStack::oops_do(OopClosure* cl) {
-  validate("pre-oops-do");
-  int end = to_index(_offset);
-  for (int i = 0; i < end; i++) {
-    cl->do_oop(&_base[i]);
-  }
-  validate("post-oops-do");
 }
 
 #endif // SHARE_RUNTIME_LOCKSTACK_INLINE_HPP

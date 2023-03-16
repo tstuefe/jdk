@@ -6262,4 +6262,9 @@ void MacroAssembler::fast_unlock(Register obj, Register hdr, Register t1, Regist
   ldrw(t1, Address(rthread, JavaThread::lock_stack_offset_offset()));
   subw(t1, t1, oopSize);
   strw(t1, Address(rthread, JavaThread::lock_stack_offset_offset()));
+#ifndef PRODUCT
+  // wipe popped slot
+  mov(t2, 1);
+  str(t2, Address(rthread, t1));
+#endif
 }

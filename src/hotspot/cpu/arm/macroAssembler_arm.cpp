@@ -41,6 +41,7 @@
 #include "oops/klass.inline.hpp"
 #include "prims/methodHandles.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/objectMonitor.hpp"
 #include "runtime/os.hpp"
@@ -1197,11 +1198,15 @@ void MacroAssembler::cas_for_lock_acquire(Register oldval, Register newval,
     atomic_cas_bool(oldval, newval, base, oopDesc::mark_offset_in_bytes(), tmp);
   }
 
+  // Here, on success, EQ is set, NE otherwise
+
   // MemBarAcquireLock barrier
   // According to JSR-133 Cookbook, this should be LoadLoad | LoadStore,
   // but that doesn't prevent a load or store from floating up between
   // the load and store in the CAS sequence, so play it safe and
   // do a full fence.
+  // Note: we preserve flags here.
+  // Todo: Do we really need this also for the CAS fail case?
   membar(Membar_mask_bits(LoadLoad | LoadStore | StoreStore | StoreLoad), noreg);
   if (!fallthrough_is_success && !allow_fallthrough_on_failure) {
     b(slow_case, ne);
@@ -1212,7 +1217,6 @@ void MacroAssembler::cas_for_lock_release(Register oldval, Register newval,
   Register base, Register tmp, Label &slow_case,
   bool allow_fallthrough_on_failure, bool one_shot)
 {
-
   bool fallthrough_is_success = false;
 
   assert_different_registers(oldval,newval,base,tmp);
@@ -1719,5 +1723,115 @@ void MacroAssembler::read_polling_page(Register dest, relocInfo::relocType rtype
   get_polling_page(dest);
   relocate(rtype);
   ldr(dest, Address(dest));
+}
+
+// Attempt to fast-lock an object, Roman-style.
+// Registers:
+//  - obj: the object to be locked
+//  - hdr: the header, already loaded from obj, will be destroyed
+//  - t1, t2: temporary registers, will be destroyed
+void MacroAssembler::fast_lock_roman_style(Register obj, Register hdr, Register t1, Register t2, Label& slow) {
+  assert(UseFastLocking, "only used with fast-locking");
+  assert_different_registers(obj, hdr, t1, t2);
+
+  if (FastLockingBreakInLock) {
+fprintf(stderr, "Break in Lock\n");
+    breakpoint();
+  }
+
+  if (FastLockingForceSlowPathForLock) {
+fprintf(stderr, "Force Slow Lock\n");
+    tst(R0, R0);
+    b(slow);
+  }
+
+#ifdef ASSERT
+  // blow scratch registers
+  mov(t1, 0x10000001);
+  mov(t2, 0x20000002);
+#endif
+
+  // Check if we would have space on lock-stack for the object.
+  ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+  // cmp(t1, (unsigned)LockStack::end_offset()); //  too complicated constant: 1132 (46c)
+  movw(t2, LockStack::end_offset());
+  cmp(t1, t2);
+  b(slow, ge);
+
+  // Load (object->mark() | 1) into hdr
+  Register new_hdr = t1;
+  bic(new_hdr, hdr, markWord::lock_mask_in_place); // new header (00)
+  orr(hdr, new_hdr, markWord::unlocked_value);     // old header (01)
+
+  cas_for_lock_acquire(hdr /* old */, new_hdr /* new */,
+          obj /* location */, t2 /* scratch */, slow
+          );
+
+  // After successful lock, push object on lock-stack
+  ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+  str(obj, Address(Rthread, t1));
+  add(t1, t1, oopSize);
+  str(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+
+#ifdef ASSERT
+  // blow scratch registers
+  mov(t1, 0x30000003);
+  mov(t2, 0x40000004);
+#endif
+}
+
+// Attempt to fast-unlock an object, Roman-style.
+// Registers:
+//  - obj: the object to be locked
+//  - hdr: the header, already loaded from obj, will be destroyed
+//  - t1, t2: temporary registers, will be destroyed
+void MacroAssembler::fast_unlock_roman_style(Register obj, Register hdr, Register t1, Register t2, Label& slow) {
+  assert(UseFastLocking, "only used with fast-locking");
+  assert_different_registers(obj, hdr, t1, t2);
+
+  if (FastLockingBreakInUnlock) {
+fprintf(stderr, "Break in Unlock\n");
+    breakpoint();
+  }
+
+  if (FastLockingForceSlowPathForUnlock) {
+fprintf(stderr, "Force Slow Unlock\n");
+    tst(R0, R0);
+    b(slow);
+  }
+
+#ifdef ASSERT
+  // blow scratch registers
+  mov(t1, 0x50000005);
+  mov(t2, 0x60000006);
+#endif
+
+  // Load the expected old header (lock-bits cleared to indicate 'locked') into hdr
+  bic(hdr, hdr, markWord::lock_mask_in_place);
+
+  // Load the new header (unlocked) into t1
+  Register new_hdr = t1;
+  orr(new_hdr, hdr, markWord::unlocked_value);
+
+  // Try to swing header from locked to unlocked
+  // Note: will clear Z on error and branch to slow
+  cas_for_lock_release(hdr /* old */, new_hdr /* new */,
+      obj /* location */, t2 /* scratch */, slow
+      );
+
+  // After successful unlock, pop object from lock-stack
+  ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+  sub(t1, t1, oopSize);
+  str(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+
+#ifdef ASSERT
+  // poison popped slot
+  mov(t2, 1);
+  str(t2, Address(Rthread, t1));
+
+  // blow scratch registers
+  mov(t1, 0x70000007);
+  mov(t2, 0x80000008);
+#endif
 }
 

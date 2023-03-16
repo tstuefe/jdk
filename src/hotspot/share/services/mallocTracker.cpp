@@ -228,7 +228,7 @@ bool MallocTracker::print_pointer_information(const void* p, outputStream* st) {
         } else {
           where = "just outside of";
         }
-        st->print(PTR_FORMAT " %s %s malloced block starting at " PTR_FORMAT ", size " SIZE_FORMAT ", tag %s",
+        st->print_cr(PTR_FORMAT " %s %s malloced block starting at " PTR_FORMAT ", size " SIZE_FORMAT ", tag %s",
                   p2i(p), where,
                   (candidate->is_dead() ? "dead" : "life"),
                   p2i(candidate + 1), // lets print the payload start, not the header
@@ -236,7 +236,6 @@ bool MallocTracker::print_pointer_information(const void* p, outputStream* st) {
         if (MemTracker::tracking_level() == NMT_detail) {
           NativeCallStack ncs;
           if (candidate->get_stack(ncs)) {
-            st->cr();
             ncs.print_on(st);
             st->cr();
           }

@@ -1981,6 +1981,15 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   product(bool, UseFastLocking, false, EXPERIMENTAL,                        \
                 "Use fast-locking instead of stack-locking")                \
+                                                                            \
+  develop(bool, FastLockingForceSlowPathForLock, false,                     \
+          "Debugging aid: force slow path on fast locking")                 \
+  develop(bool, FastLockingForceSlowPathForUnlock, false,                   \
+          "Debugging aid: force slow path on fast unlocking")               \
+	develop(bool, FastLockingBreakInLock, false,                              \
+	        "Debugging aid: break in lock")                                   \
+  develop(bool, FastLockingBreakInUnlock, false,                            \
+          "Debugging aid: break in unlock")                                 \
 
 // end of RUNTIME_FLAGS
 

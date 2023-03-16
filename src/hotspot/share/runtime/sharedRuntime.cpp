@@ -178,6 +178,26 @@ int     SharedRuntime::_ICmiss_count[SharedRuntime::maxICmiss_count];
 address SharedRuntime::_ICmiss_at[SharedRuntime::maxICmiss_count];
 
 
+#define LOGME(oop, ...) if (UseNewCode ){ \
+  fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
+  fprintf(stderr, "obj: " PTR_FORMAT " MW: " PTR_FORMAT " ", p2i(oop), (oop->mark().value())); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+  fflush(stderr); \
+}
+
+class LOGMERAII {
+  const oop _oop;
+  const char* const _msg;
+public:
+  LOGMERAII(oop o, const char* msg) : _oop(o), _msg(msg) {
+    LOGME(_oop, "--> %s", _msg);
+  }
+  ~LOGMERAII() {
+    LOGME(_oop, "<-- %s", _msg);
+  }
+};
+
 void SharedRuntime::trace_ic_miss(address at) {
   for (int i = 0; i < _ICmiss_index; i++) {
     if (_ICmiss_at[i] == at) {
@@ -2207,7 +2227,12 @@ void SharedRuntime::monitor_enter_helper(oopDesc* obj, BasicLock* lock, JavaThre
 
 // Handles the uncommon case in locking, i.e., contention or an inflated lock.
 JRT_BLOCK_ENTRY(void, SharedRuntime::complete_monitor_locking_C(oopDesc* obj, BasicLock* lock, JavaThread* current))
+
+LOGMERAII(obj, "SharedRuntime::complete_monitor_locking_C");
+
   SharedRuntime::monitor_enter_helper(obj, lock, current);
+
+
 JRT_END
 
 void SharedRuntime::monitor_exit_helper(oopDesc* obj, BasicLock* lock, JavaThread* current) {
@@ -2228,6 +2253,9 @@ void SharedRuntime::monitor_exit_helper(oopDesc* obj, BasicLock* lock, JavaThrea
 // Handles the uncommon cases of monitor unlocking in compiled code
 JRT_LEAF(void, SharedRuntime::complete_monitor_unlocking_C(oopDesc* obj, BasicLock* lock, JavaThread* current))
   assert(current == JavaThread::current(), "pre-condition");
+
+LOGMERAII(obj, "SharedRuntime::complete_monitor_unlocking_C");
+
   SharedRuntime::monitor_exit_helper(obj, lock, current);
 JRT_END
 

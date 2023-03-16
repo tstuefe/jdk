@@ -61,6 +61,28 @@
 #include "utilities/linkedlist.hpp"
 #include "utilities/preserveException.hpp"
 
+
+
+#define LOGME(oop, ...) if (UseNewCode ){ \
+  fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
+  fprintf(stderr, "obj: " PTR_FORMAT " MW: " PTR_FORMAT " ", p2i(oop), (oop->mark().value())); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+  fflush(stderr); \
+}
+
+class LOGMERAII {
+  const oop _oop;
+  const char* const _msg;
+public:
+  LOGMERAII(oop o, const char* msg) : _oop(o), _msg(msg) {
+    LOGME(_oop, "--> %s", _msg);
+  }
+  ~LOGMERAII() {
+    LOGME(_oop, "<-- %s", _msg);
+  }
+};
+
 class ObjectMonitorsHashtable::PtrList :
   public LinkedListImpl<ObjectMonitor*,
                         AnyObj::C_HEAP, mtThread,
@@ -356,6 +378,9 @@ bool ObjectSynchronizer::quick_notify(oopDesc* obj, JavaThread* current, bool al
 
 bool ObjectSynchronizer::quick_enter(oop obj, JavaThread* current,
                                      BasicLock * lock) {
+
+LOGMERAII(obj, "ObjectSynchronizer::quick_enter");
+
   assert(current->thread_state() == _thread_in_Java, "invariant");
   NoSafepointVerifier nsv;
   if (obj == nullptr) return false;       // Need to throw NPE
@@ -473,6 +498,18 @@ static bool useHeavyMonitors() {
 #endif
 }
 
+ volatile unsigned xxx_num_slow_enter_calls = 0;
+ volatile unsigned xxx_num_slow_exit_calls = 0;
+
+struct Printerich {
+  ~Printerich() {
+    if (UseNewCode2) {
+    printf("Num enter %u Num exit %u \n", xxx_num_slow_enter_calls,  xxx_num_slow_exit_calls);
+    fflush(stdout); }
+  }
+};
+static Printerich ppppp;
+
 // -----------------------------------------------------------------------------
 // Monitor Enter/Exit
 // The interpreter and compiler assembly code tries to lock using the fast path
@@ -480,6 +517,20 @@ static bool useHeavyMonitors() {
 // changed. The implementation is extremely sensitive to race condition. Be careful.
 
 void ObjectSynchronizer::enter(Handle obj, BasicLock* lock, JavaThread* current) {
+
+//  current->lock_stack().validate("ObjectSynchronizer::enter 1");
+{
+  Atomic::inc(&xxx_num_slow_enter_calls);
+  if (UseNewCode2) {
+    if ((xxx_num_slow_enter_calls % 1000000) == 0) {
+      printf("ENTER %u\n", xxx_num_slow_enter_calls);
+      fflush(stdout);
+    }
+  }
+}
+
+LOGMERAII lme(obj(), "ObjectSynchronizer::enter");
+
   if (obj->klass()->is_value_based()) {
     handle_sync_on_value_based_class(obj, current);
   }
@@ -488,17 +539,24 @@ void ObjectSynchronizer::enter(Handle obj, BasicLock* lock, JavaThread* current)
 
   if (!useHeavyMonitors()) {
     if (UseFastLocking) {
+      oopDesc* oop = obj();
       // fast-locking does not use the 'lock' parameter.
       LockStack& lock_stack = current->lock_stack();
       if (lock_stack.can_push()) {
-        markWord header = obj()->mark_acquire();
+
+        markWord header = oop->mark_acquire();
+
         while (true) {
           if (header.is_neutral()) {
+LOGME(oop, "ObjectSynchronizer::enter: neutral");
+
             assert(!lock_stack.contains(obj()), "thread must not already hold the lock");
             // Try to swing into 'fast-locked' state without inflating.
             markWord locked_header = header.set_fast_locked();
             markWord witness = obj()->cas_set_mark(locked_header, header);
             if (witness == header) {
+LOGME(oop, "ObjectSynchronizer::enter: cas neutral->thin locked success");
+
               // Successfully fast-locked, push object to lock-stack and return.
               lock_stack.push(obj());
               return;
@@ -506,11 +564,16 @@ void ObjectSynchronizer::enter(Handle obj, BasicLock* lock, JavaThread* current)
             // Otherwise retry.
             header = witness;
           } else {
+LOGME(oop, "ObjectSynchronizer::enter: not neutral.");
+
             // Fall-through to inflate-enter.
             break;
           }
         }
+      } else {
+        LOGME(oop, "ObjectSynchronizer::enter: lockstack full");
       }
+      LOGME(oop, "ObjectSynchronizer::enter: fall thru to slow path");
       // No room on the lock_stack so fall-through to inflate-enter.
     } else {
       markWord mark = obj->mark();
@@ -552,6 +615,21 @@ void ObjectSynchronizer::enter(Handle obj, BasicLock* lock, JavaThread* current)
 }
 
 void ObjectSynchronizer::exit(oop object, BasicLock* lock, JavaThread* current) {
+
+  //current->lock_stack().validate("ObjectSynchronizer::exit 1");
+  {
+    Atomic::inc(&xxx_num_slow_exit_calls);
+    if (UseNewCode2) {
+      if ((xxx_num_slow_exit_calls % 1000000) == 0) {
+        printf("EXIT %u\n", xxx_num_slow_exit_calls);
+        fflush(stdout);
+      }
+    }
+  }
+
+LOGMERAII lme(object, "ObjectSynchronizer::exit");
+
+
   current->dec_held_monitor_count();
 
   if (!useHeavyMonitors()) {
@@ -569,6 +647,7 @@ void ObjectSynchronizer::exit(oop object, BasicLock* lock, JavaThread* current) 
           assert(witness.has_monitor(), "must have monitor");
           ObjectMonitor* monitor = witness.monitor();
           assert(monitor->is_owner_anonymous(), "must be anonymous owner");
+LOGME(object, "ObjectSynchronizer::exit already inflated, OM: " PTR_FORMAT ", fixing anonymous to me.",p2i(monitor));
           monitor->set_owner_from_anonymous(current);
           monitor->exit(current);
         }
@@ -1280,6 +1359,8 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread* current, oop object,
                                            const InflateCause cause) {
   EventJavaMonitorInflate event;
 
+LOGMERAII lme(object, "ObjectSynchronizer::inflate");
+
   for (;;) {
     const markWord mark = object->mark_acquire();
 
@@ -1298,13 +1379,30 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread* current, oop object,
 
     // CASE: inflated
     if (mark.has_monitor()) {
+
       ObjectMonitor* inf = mark.monitor();
       markWord dmw = inf->header();
-      assert(dmw.is_neutral(), "invariant: header=" INTPTR_FORMAT, dmw.value());
+
+LOGME(object, "ObjectSynchronizer::inflate already inflated, OM: " PTR_FORMAT , p2i(inf));
+if (UseFastLocking) {
+  if (inf->is_owner_anonymous()) {
+    LOGME(object, "ObjectSynchronizer::inflate OM: " PTR_FORMAT " belongs to anon", p2i(inf));
+  } else if (inf->owner_raw() == current) {
+    LOGME(object, "ObjectSynchronizer::inflate OM: " PTR_FORMAT " belongs to me", p2i(inf));
+  } else {
+    LOGME(object, "ObjectSynchronizer::inflate OM: " PTR_FORMAT " belongs to someone else", p2i(inf));
+  }
+}
+
+assert(dmw.is_neutral(), "invariant: header=" INTPTR_FORMAT, dmw.value());
       if (UseFastLocking && inf->is_owner_anonymous() && is_lock_owned(current, object)) {
+
+LOGME(object, "ObjectSynchronizer::inflate already inflated, OM: " PTR_FORMAT ", fixing anonymous to me.", p2i(inf));
+
         inf->set_owner_from_anonymous(current);
         assert(current->is_Java_thread(), "must be Java thread");
         reinterpret_cast<JavaThread*>(current)->lock_stack().remove(object);
+
       }
       return inf;
     }
@@ -1337,6 +1435,10 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread* current, oop object,
     if (mark.is_fast_locked()) {
       assert(UseFastLocking, "can only happen with fast-locking");
       ObjectMonitor* monitor = new ObjectMonitor(object);
+
+LOGME(object, "ObjectSynchronizer::inflate: we inflate, new OM: " PTR_FORMAT,
+      p2i(monitor));
+
       monitor->set_header(mark.set_unlocked());
       bool own = is_lock_owned(current, object);
       if (own) {
@@ -1346,9 +1448,16 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread* current, oop object,
         // Owned by somebody else.
         monitor->set_owner_anonymous();
       }
+
+LOGME(object, "ObjectSynchronizer::inflate: new OM: " PTR_FORMAT ", new OM.object() " PTR_FORMAT,
+       p2i(monitor), p2i(monitor->object()));
+
       markWord monitor_mark = markWord::encode(monitor);
       markWord witness = object->cas_set_mark(monitor_mark, mark);
       if (witness == mark) {
+LOGME(object, "ObjectSynchronizer::inflate: Installed OM: " PTR_FORMAT,
+         p2i(monitor));
+
         // Success! Return inflated monitor.
         if (own) {
           assert(current->is_Java_thread(), "must be: checked in is_lock_owned()");
@@ -1372,6 +1481,8 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread* current, oop object,
         }
         return monitor;
       } else {
+LOGME(object, "ObjectSynchronizer::inflate obj - failed to install OM " PTR_FORMAT,
+         p2i(monitor));
         delete monitor;
         continue;  // Interference -- just retry
       }
@@ -1484,11 +1595,21 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread* current, oop object,
     // Catch if the object's header is not neutral (not locked and
     // not marked is what we care about here).
     assert(mark.is_neutral(), "invariant: header=" INTPTR_FORMAT, mark.value());
+
+LOGME(object, "ObjectSynchronizer::inflate: neutral->fat locked");
+
     ObjectMonitor* m = new ObjectMonitor(object);
+
+LOGME(object, "ObjectSynchronizer::inflate: new OM: " PTR_FORMAT ", new OM.object() " PTR_FORMAT,
+      p2i(m), p2i(m->object()));
+
     // prepare m for installation - set monitor to initial state
     m->set_header(mark);
 
     if (object->cas_set_mark(markWord::encode(m), mark) != mark) {
+
+LOGME(object, "ObjectSynchronizer::inflate: failed to install OM: " PTR_FORMAT, p2i(m));
+
       delete m;
       m = nullptr;
       continue;
