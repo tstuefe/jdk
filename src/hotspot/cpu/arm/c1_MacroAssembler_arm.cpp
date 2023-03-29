@@ -30,6 +30,7 @@
 #include "gc/shared/collectedHeap.hpp"
 #include "gc/shared/tlab_globals.hpp"
 #include "interpreter/interpreter.hpp"
+#include "logging/log.hpp"
 #include "oops/arrayOop.hpp"
 #include "oops/markWord.hpp"
 #include "runtime/basicLock.hpp"
@@ -37,16 +38,6 @@
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "utilities/powerOfTwo.hpp"
-
-#define PRINT_ONCE(...) { \
-  static int justonce = 0; \
-  if (!justonce) { \
-    justonce = 1; \
-    fprintf(stderr, __VA_ARGS__); \
-    fprintf(stderr, "\n"); \
-    fflush(stderr); \
-  } \
-}
 
 // Note: Rtemp usage is this file should not impact C2 and should be
 // correct as long as it is not implicitly used in lower layers (the
@@ -205,8 +196,6 @@ int C1_MacroAssembler::lock_object(Register hdr, Register obj, Register disp_hdr
   const Register tmp2 = Rtemp; // Rtemp should be free at c1 LIR level
   assert_different_registers(hdr, obj, disp_hdr, tmp2);
 
-  verify_oop(obj);
-
   assert(BasicObjectLock::lock_offset_in_bytes() == 0, "adjust this code");
   const int obj_offset = BasicObjectLock::obj_offset_in_bytes();
   const int mark_offset = BasicLock::displaced_header_offset_in_bytes();
@@ -226,27 +215,25 @@ int C1_MacroAssembler::lock_object(Register hdr, Register obj, Register disp_hdr
   assert(oopDesc::mark_offset_in_bytes() == 0, "Required by atomic instructions");
 
   if (UseFastLocking) {
-PRINT_ONCE("C1_MacroAssembler::lock fast");
+    log_trace(fastlock2)("C1_MacroAssembler::lock fast");
 
+    Register tmp2 = disp_hdr;
     Label FAIL;
-    save_all_registers();
+    push(tmp2);
 
     // Load object header
     ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
+    fast_lock_2(obj, hdr, Rtemp /* t1 */, tmp2 /* t2 */, FAIL);
 
-    fast_lock_roman_style(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
-
-    cmp(obj, obj);
-    restore_all_registers();
+    pop(tmp2);
     b(done);
 
     bind(FAIL);
-    tst(obj, obj);
-    restore_all_registers();
+    pop(tmp2);
     b(slow_case);
 
   } else {
-PRINT_ONCE("C1_MacroAssembler::lock standard");
+
     // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
     // That would be acceptable as ether CAS or slow case path is taken in that case.
 
@@ -298,31 +285,25 @@ void C1_MacroAssembler::unlock_object(Register hdr, Register obj, Register disp_
   assert(oopDesc::mark_offset_in_bytes() == 0, "Required by atomic instructions");
 
   if (UseFastLocking) {
-PRINT_ONCE("C1_MacroAssembler::unlock fast");
+    log_trace(fastlock2)("C1_MacroAssembler::unlock fast");
 
+    Register tmp2 = disp_hdr;
     Label FAIL;
-    save_all_registers();
+    push(tmp2);
 
-    // load object
+    // load object + mark
     ldr(obj, Address(disp_hdr, BasicObjectLock::obj_offset_in_bytes()));
-    verify_oop(obj);
-
     ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
+    fast_unlock_2(obj, hdr, Rtemp /* t1 */, tmp2 /* t2 */, FAIL);
 
-    fast_unlock_2(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
-
-    cmp(obj, obj);
-    restore_all_registers();
+    pop(tmp2);
     b(done);
 
     bind(FAIL);
-    tst(obj, obj);
-    restore_all_registers();
+    pop(tmp2);
     b(slow_case);
 
   } else {
-
-PRINT_ONCE("C1_MacroAssembler::unlock standard");
 
     // Load displaced header and object from the lock
     ldr(hdr, Address(disp_hdr, mark_offset));

@@ -1730,7 +1730,7 @@ void MacroAssembler::read_polling_page(Register dest, relocInfo::relocType rtype
 //  - obj: the object to be locked
 //  - hdr: the header, already loaded from obj, will be destroyed
 //  - t1, t2: temporary registers, will be destroyed
-void MacroAssembler::fast_lock_roman_style(Register obj, Register hdr, Register t1, Register t2, Label& slow) {
+void MacroAssembler::fast_lock_2(Register obj, Register hdr, Register t1, Register t2, Label& slow) {
   assert(UseFastLocking, "only used with fast-locking");
   assert_different_registers(obj, hdr, t1, t2);
 

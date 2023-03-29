@@ -1010,7 +1010,7 @@ public:
   void cas_for_lock_acquire(Register oldval, Register newval, Register base, Register tmp, Label &slow_case, bool allow_fallthrough_on_failure = false, bool one_shot = false);
   void cas_for_lock_release(Register oldval, Register newval, Register base, Register tmp, Label &slow_case, bool allow_fallthrough_on_failure = false, bool one_shot = false);
 
-  void fast_lock_roman_style(Register obj, Register hdr, Register t1, Register t2, Label& slow);
+  void fast_lock_2(Register obj, Register hdr, Register t1, Register t2, Label& slow);
   void fast_unlock_2(Register obj, Register hdr, Register t1, Register t2, Label& slow);
 
 #ifndef PRODUCT

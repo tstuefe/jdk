@@ -119,7 +119,7 @@ PRINT_ONCE("C2_MacroAssembler::fast_lock fast");
     Register hdr = Rbox; // Re-use Rbox
     // Load markWord from object
     ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
-    fast_lock_roman_style(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
+    fast_lock_2(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
 
     cmp(Roop, Roop);
     restore_all_registers();

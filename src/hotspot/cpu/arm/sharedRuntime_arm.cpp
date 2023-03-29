@@ -1175,7 +1175,7 @@ PRINT_ONCE("SharedRuntime lock fast");
       // Load object header
       Register hdr = disp_hdr;
       __ ldr(hdr, Address(sync_obj, oopDesc::mark_offset_in_bytes()));
-      __ fast_lock_roman_style(sync_obj, hdr, tmp /* t1 */, Rtemp /* t2 */, FAIL);
+      __ fast_lock_2(sync_obj, hdr, tmp /* t1 */, Rtemp /* t2 */, FAIL);
 
       __ cmp(sync_obj, sync_obj);
       __ restore_all_registers();

@@ -898,7 +898,7 @@ void InterpreterMacroAssembler::lock_object(Register Rlock) {
       push(Rlock);
 
       ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
-      fast_lock_roman_style(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
+      fast_lock_2(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
 
       pop(Rlock);
       b(done);
