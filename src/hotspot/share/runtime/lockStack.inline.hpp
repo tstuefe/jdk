@@ -38,14 +38,20 @@ inline bool LockStack::can_push() const {
 }
 
 #ifdef ASSERT
-inline void LockStack::zap_trailing_slots(uint8_t marker) {
+inline void LockStack::zap_trailing_slots(Poison poison) {
   int i = to_index(_offset);
   while (i < to_index(end_offset())) {
-    *((intptr_t*)(_base + i)) = marker;
+    *((intptr_t*)(_base + i)) = (intptr_t)poison;
     i++;
   }
 }
-#endif
+inline bool LockStack::is_poisened_slot(int slot) const {
+  return p2i(_base[slot]) == (intptr_t)Poison::poison_init ||
+         p2i(_base[slot]) == (intptr_t)Poison::poison_compiled_pop ||
+         p2i(_base[slot]) == (intptr_t)Poison::poison_pop ||
+         p2i(_base[slot]) == (intptr_t)Poison::poison_remove;
+}
+#endif // ASSERT
 
 inline void LockStack::push(oop o) {
   validate("pre-push");
@@ -62,7 +68,7 @@ inline oop LockStack::pop() {
   _offset -= oopSize;
   oop o = _base[to_index(_offset)];
   assert(!contains(o), "entries must be unique");
-  zap_trailing_slots(2);
+  DEBUG_ONLY(zap_trailing_slots(Poison::poison_pop);)
   validate("post-pop");
   return o;
 }
@@ -81,7 +87,7 @@ inline void LockStack::remove(oop o) {
       break;
     }
   }
-  zap_trailing_slots(3);
+  DEBUG_ONLY(zap_trailing_slots(Poison::poison_remove);)
   assert(!contains(o), "entries must be unique: " PTR_FORMAT, p2i(o));
   validate("post-remove");
 }

@@ -25,18 +25,9 @@
 #include "precompiled.hpp"
 #include "asm/assembler.hpp"
 #include "asm/assembler.inline.hpp"
+#include "logging/log.hpp"
 #include "opto/c2_MacroAssembler.hpp"
 #include "runtime/basicLock.hpp"
-
-#define PRINT_ONCE(...) { \
-  static int justonce = 0; \
-  if (!justonce) { \
-    justonce = 1; \
-    fprintf(stderr, __VA_ARGS__); \
-    fprintf(stderr, "\n"); \
-    fflush(stderr); \
-  } \
-}
 
 // TODO: 8 bytes at a time? pre-fetch?
 // Compare char[] arrays aligned to 4 bytes.
@@ -102,37 +93,25 @@ void C2_MacroAssembler::fast_lock(Register Roop, Register Rbox, Register Rscratc
   }
 
   if (UseFastLocking) {
-
-    // Poison old BasicLock
-    mov(Rscratch, 0x1000000F);
-    str(Rscratch, Address(Rbox, BasicLock::displaced_header_offset_in_bytes()));
-
-//PRINT_ONCE("C2_MacroAssembler::fast_lock slow");
-////cmpoop(Roop, 0);
-//tst(Roop, Roop);
-//b(done);
-PRINT_ONCE("C2_MacroAssembler::fast_lock fast");
+    log_trace(fastlock2)("C2_MacroAssembler::lock fast");
 
     Label FAIL;
-    save_all_registers();
+    push(Rbox);
 
-    Register hdr = Rbox; // Re-use Rbox
-    // Load markWord from object
+    Register hdr = Rbox;
     ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
     fast_lock_2(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
 
-    cmp(Roop, Roop);
-    restore_all_registers();
+    cmp(Roop, Roop);          // signal success: Z
+    pop(Rbox);
     b(done);
 
     bind(FAIL);
-    tst(Roop, Roop);
-    restore_all_registers();
+    tst(Roop, Roop);          // signal failure: !Z
+    pop(Rbox);
     b(done);
 
   } else {
-
-PRINT_ONCE("C2_MacroAssembler standard lock");
 
     Register Rmark      = Rscratch2;
 
@@ -175,15 +154,10 @@ void C2_MacroAssembler::fast_unlock(Register Roop, Register Rbox, Register Rscra
   Label done;
 
   if (UseFastLocking) {
-
-//PRINT_ONCE("C2_MacroAssembler::fast_unlock slow");
-//tst(Roop, Roop);
-//b(done);
-
-PRINT_ONCE("C2_MacroAssembler::fast_unlock fast");
+    log_trace(fastlock2)("C2_MacroAssembler::unlock fast");
 
     Label FAIL;
-    save_all_registers();
+    push(Rbox);
 
     // Load mark from obj
     Register hdr = Rbox;
@@ -192,17 +166,15 @@ PRINT_ONCE("C2_MacroAssembler::fast_unlock fast");
     fast_unlock_2(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
 
     cmp(Roop, Roop);
-    restore_all_registers();
+    pop(Rbox);
     b(done);
 
     bind(FAIL);
     tst(Roop, Roop);
-    restore_all_registers();
+    pop(Rbox);
     b(done);
 
   } else {
-
-PRINT_ONCE("C2_MacroAssembler standard unlock");
 
     Register Rmark      = Rscratch2;
 

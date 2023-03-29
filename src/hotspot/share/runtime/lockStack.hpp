@@ -35,6 +35,8 @@ class outputStream;
 
 class LockStack {
   friend class VMStructs;
+public:
+  enum class Poison { poison_init = 1, poison_compiled_pop = 2, poison_pop = 3, poison_remove = 4 };
 private:
   static const int CAPACITY = 8;
   // The offset of the next element, in bytes, relative to the JavaThread structure.
@@ -47,9 +49,11 @@ private:
 
   static inline int to_index(int offset);
 
-  inline void zap_trailing_slots(uint8_t marker = 0) PRODUCT_RETURN;
+  DEBUG_ONLY(inline void zap_trailing_slots(Poison poison);)
+  DEBUG_ONLY(inline bool is_poisened_slot(int slot) const;)
 
 public:
+
   static ByteSize offset_offset() { return byte_offset_of(LockStack, _offset); }
   static ByteSize base_offset()   { return byte_offset_of(LockStack, _base); }
 

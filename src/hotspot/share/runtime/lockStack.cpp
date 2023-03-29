@@ -49,8 +49,8 @@
 }
 
 LockStack::LockStack() :
-  _offset(start_offset()) {
-  zap_trailing_slots(0);
+ _offset(start_offset()) {
+  DEBUG_ONLY(zap_trailing_slots(Poison::poison_init);)
 }
 
 int LockStack::start_offset() {

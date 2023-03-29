@@ -9723,7 +9723,7 @@ void MacroAssembler::fast_unlock_impl(Register obj, Register hdr, Register tmp, 
 #ifndef PRODUCT
   // wipe popped slot
   movl(tmp, Address(thread, JavaThread::lock_stack_offset_offset()));
-  movl(Address(thread, tmp, Address::times_1), (int32_t)1);
+  movl(Address(thread, tmp, Address::times_1), (int32_t)LockStack::Poison::poison_compiled_pop);
 #ifdef _LP64
   addl(tmp, 4);
   movl(Address(thread, tmp, Address::times_1), 0);

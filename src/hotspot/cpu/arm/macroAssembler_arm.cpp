@@ -1734,19 +1734,8 @@ void MacroAssembler::fast_lock_2(Register obj, Register hdr, Register t1, Regist
   assert(UseFastLocking, "only used with fast-locking");
   assert_different_registers(obj, hdr, t1, t2);
 
-  if (FastLockingBreakInLock) {
-fprintf(stderr, "Break in Lock\n");
-    breakpoint();
-  }
-
-  if (FastLockingForceSlowPathForLock) {
-fprintf(stderr, "Force Slow Lock\n");
-    tst(R0, R0);
-    b(slow);
-  }
-
 #ifdef ASSERT
-  // blow scratch registers
+  // poison scratch registers
   mov(t1, 0x10000001);
   mov(t2, 0x20000002);
 #endif
@@ -1774,7 +1763,7 @@ fprintf(stderr, "Force Slow Lock\n");
   str(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
 
 #ifdef ASSERT
-  // blow scratch registers
+  // poison scratch registers
   mov(t1, 0x30000003);
   mov(t2, 0x40000004);
 #endif
@@ -1789,19 +1778,8 @@ void MacroAssembler::fast_unlock_2(Register obj, Register hdr, Register t1, Regi
   assert(UseFastLocking, "only used with fast-locking");
   assert_different_registers(obj, hdr, t1, t2);
 
-  if (FastLockingBreakInUnlock) {
-fprintf(stderr, "Break in Unlock\n");
-    breakpoint();
-  }
-
-  if (FastLockingForceSlowPathForUnlock) {
-fprintf(stderr, "Force Slow Unlock\n");
-    tst(R0, R0);
-    b(slow);
-  }
-
 #ifdef ASSERT
-  // blow scratch registers
+  // poison scratch registers
   mov(t1, 0x50000005);
   mov(t2, 0x60000006);
 #endif
@@ -1826,10 +1804,9 @@ fprintf(stderr, "Force Slow Unlock\n");
 
 #ifdef ASSERT
   // poison popped slot
-  mov(t2, 1);
+  mov(t2, (intptr_t)LockStack::Poison::poison_compiled_pop);
   str(t2, Address(Rthread, t1));
-
-  // blow scratch registers
+  // poison scratch registers
   mov(t1, 0x70000007);
   mov(t2, 0x80000008);
 #endif
