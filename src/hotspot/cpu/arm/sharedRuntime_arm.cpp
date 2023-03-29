@@ -52,6 +52,17 @@
 
 #define __ masm->
 
+
+#define PRINT_ONCE(...) { \
+  static int justonce = 0; \
+  if (!justonce) { \
+    justonce = 1; \
+    fprintf(stderr, __VA_ARGS__); \
+    fprintf(stderr, "\n"); \
+    fflush(stderr); \
+  } \
+}
+
 class RegisterSaver {
 public:
 
@@ -1155,8 +1166,9 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     __ mov(sync_handle, R1);
 
     if (UseFastLocking) {
-fprintf(stderr, "SharedRuntime lock\n"); fflush(stderr);
-//__ b(slow_lock);
+
+PRINT_ONCE("SharedRuntime lock fast");
+
       Label FAIL;
       __ save_all_registers();
 
@@ -1165,16 +1177,20 @@ fprintf(stderr, "SharedRuntime lock\n"); fflush(stderr);
       __ ldr(hdr, Address(sync_obj, oopDesc::mark_offset_in_bytes()));
       __ fast_lock_roman_style(sync_obj, hdr, tmp /* t1 */, Rtemp /* t2 */, FAIL);
 
+      __ cmp(sync_obj, sync_obj);
       __ restore_all_registers();
-      __ cmp(R0, R0);
       __ b(lock_done);
 
       __ bind(FAIL);
+      __ tst(sync_obj, sync_obj);
       __ restore_all_registers();
-      __ tst(R0, R0);
       __ b(slow_lock);
 
     } else {
+
+PRINT_ONCE("SharedRuntime lock standard");
+
+
       const Register mark = tmp;
       // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
       // That would be acceptable as either CAS or slow case path is taken in that case
@@ -1255,8 +1271,8 @@ fprintf(stderr, "SharedRuntime lock\n"); fflush(stderr);
   Label slow_unlock, unlock_done;
   if (method->is_synchronized()) {
     if (UseFastLocking) {
-fprintf(stderr, "SharedRuntime unlock\n"); fflush(stderr);
-//__ b(slow_unlock);
+PRINT_ONCE("SharedRuntime unlock fast");
+
       Label FAIL;
       __ save_all_registers();
       __ ldr(sync_obj, Address(sync_handle));
@@ -1266,15 +1282,17 @@ fprintf(stderr, "SharedRuntime unlock\n"); fflush(stderr);
 
       __ fast_unlock_roman_style(sync_obj, hdr, tmp /* t1 */, Rtemp /* t2 */, FAIL);
 
+      __ cmp(sync_obj, sync_obj);
       __ restore_all_registers();
-      __ cmp(R0, R0);
       __ b(unlock_done);
 
       __ bind(FAIL);
+      __ tst(sync_obj, sync_obj);
       __ restore_all_registers();
-      __ tst(R0, R0);
       __ b(slow_unlock);
     } else {
+PRINT_ONCE("SharedRuntime unlock standard");
+
       // See C1_MacroAssembler::unlock_object() for more comments
       __ ldr(sync_obj, Address(sync_handle));
       __ ldr(R2, Address(disp_hdr, BasicLock::displaced_header_offset_in_bytes()));

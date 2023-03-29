@@ -38,6 +38,16 @@
 #include "runtime/stubRoutines.hpp"
 #include "utilities/powerOfTwo.hpp"
 
+#define PRINT_ONCE(...) { \
+  static int justonce = 0; \
+  if (!justonce) { \
+    justonce = 1; \
+    fprintf(stderr, __VA_ARGS__); \
+    fprintf(stderr, "\n"); \
+    fflush(stderr); \
+  } \
+}
+
 // Note: Rtemp usage is this file should not impact C2 and should be
 // correct as long as it is not implicitly used in lower layers (the
 // arm [macro]assembler) and used with care in the other C1 specific
@@ -216,8 +226,7 @@ int C1_MacroAssembler::lock_object(Register hdr, Register obj, Register disp_hdr
   assert(oopDesc::mark_offset_in_bytes() == 0, "Required by atomic instructions");
 
   if (UseFastLocking) {
-fprintf(stderr, "C1_MacroAssembler::lock_object\n"); fflush(stderr);
-//b(slow_case);
+PRINT_ONCE("C1_MacroAssembler::lock fast");
 
     Label FAIL;
     save_all_registers();
@@ -227,16 +236,17 @@ fprintf(stderr, "C1_MacroAssembler::lock_object\n"); fflush(stderr);
 
     fast_lock_roman_style(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
 
+    cmp(obj, obj);
     restore_all_registers();
-    cmp(R0, R0);
     b(done);
 
     bind(FAIL);
+    tst(obj, obj);
     restore_all_registers();
-    tst(R0, R0);
     b(slow_case);
 
   } else {
+PRINT_ONCE("C1_MacroAssembler::lock standard");
     // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
     // That would be acceptable as ether CAS or slow case path is taken in that case.
 
@@ -288,9 +298,7 @@ void C1_MacroAssembler::unlock_object(Register hdr, Register obj, Register disp_
   assert(oopDesc::mark_offset_in_bytes() == 0, "Required by atomic instructions");
 
   if (UseFastLocking) {
-
-fprintf(stderr, "C1_MacroAssembler::unlock_object\n"); fflush(stderr);
-//b(slow_case);
+PRINT_ONCE("C1_MacroAssembler::unlock fast");
 
     Label FAIL;
     save_all_registers();
@@ -303,16 +311,19 @@ fprintf(stderr, "C1_MacroAssembler::unlock_object\n"); fflush(stderr);
 
     fast_unlock_roman_style(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
 
+    cmp(obj, obj);
     restore_all_registers();
-    cmp(R0, R0);
     b(done);
 
     bind(FAIL);
+    tst(obj, obj);
     restore_all_registers();
-    tst(R0, R0);
     b(slow_case);
 
   } else {
+
+PRINT_ONCE("C1_MacroAssembler::unlock standard");
+
     // Load displaced header and object from the lock
     ldr(hdr, Address(disp_hdr, mark_offset));
     // If hdr is null, we've got recursive locking and there's nothing more to do

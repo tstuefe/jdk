@@ -28,6 +28,16 @@
 #include "opto/c2_MacroAssembler.hpp"
 #include "runtime/basicLock.hpp"
 
+#define PRINT_ONCE(...) { \
+  static int justonce = 0; \
+  if (!justonce) { \
+    justonce = 1; \
+    fprintf(stderr, __VA_ARGS__); \
+    fprintf(stderr, "\n"); \
+    fflush(stderr); \
+  } \
+}
+
 // TODO: 8 bytes at a time? pre-fetch?
 // Compare char[] arrays aligned to 4 bytes.
 void C2_MacroAssembler::char_arrays_equals(Register ary1, Register ary2,
@@ -97,33 +107,32 @@ void C2_MacroAssembler::fast_lock(Register Roop, Register Rbox, Register Rscratc
     mov(Rscratch, 0x1000000F);
     str(Rscratch, Address(Rbox, BasicLock::displaced_header_offset_in_bytes()));
 
-fprintf(stderr, "C2_MacroAssembler::fast_lock slow\n"); fflush(stderr);
-//cmpoop(Roop, 0);
-tst(Roop, Roop);
-b(done);
+//PRINT_ONCE("C2_MacroAssembler::fast_lock slow");
+////cmpoop(Roop, 0);
+//tst(Roop, Roop);
+//b(done);
+PRINT_ONCE("C2_MacroAssembler::fast_lock fast");
 
-//fprintf(stderr, "C2_MacroAssembler::fast_lock fast\n"); fflush(stderr);
-//
-//    Label FAIL;
-//    save_all_registers();
-//
-//    Register hdr = Rbox; // Re-use Rbox
-//    // Load markWord from object
-//    ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
-//    fast_lock_roman_style(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
-//
-//    restore_all_registers();
-//    cmp(R0, R0);
-//    b(done);
-//
-//    bind(FAIL);
-//    restore_all_registers();
-//    tst(R0, R0);
-//    b(done);
+    Label FAIL;
+    save_all_registers();
+
+    Register hdr = Rbox; // Re-use Rbox
+    // Load markWord from object
+    ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
+    fast_lock_roman_style(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
+
+    cmp(Roop, Roop);
+    restore_all_registers();
+    b(done);
+
+    bind(FAIL);
+    tst(Roop, Roop);
+    restore_all_registers();
+    b(done);
 
   } else {
 
-fprintf(stderr, "C2_MacroAssembler::standard lock\n"); fflush(stderr);
+PRINT_ONCE("C2_MacroAssembler standard lock");
 
     Register Rmark      = Rscratch2;
 
@@ -167,33 +176,33 @@ void C2_MacroAssembler::fast_unlock(Register Roop, Register Rbox, Register Rscra
 
   if (UseFastLocking) {
 
-fprintf(stderr, "C2_MacroAssembler::fast_unlock slow \n"); fflush(stderr);
-tst(Roop, Roop);
-b(done);
+//PRINT_ONCE("C2_MacroAssembler::fast_unlock slow");
+//tst(Roop, Roop);
+//b(done);
 
-//    fprintf(stderr, "C2_MacroAssembler::fast_unlock fast \n"); fflush(stderr);
-//
-//    Label FAIL;
-//    save_all_registers();
-//
-//    // Load mark from obj
-//    Register hdr = Rbox;
-//    ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
-//
-//    fast_unlock_roman_style(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
-//
-//    restore_all_registers();
-//    cmp(R0, R0);
-//    b(done);
-//
-//    bind(FAIL);
-//    restore_all_registers();
-//    tst(R0, R0);
-//    b(done);
+PRINT_ONCE("C2_MacroAssembler::fast_unlock fast");
+
+    Label FAIL;
+    save_all_registers();
+
+    // Load mark from obj
+    Register hdr = Rbox;
+    ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
+
+    fast_unlock_roman_style(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
+
+    cmp(Roop, Roop);
+    restore_all_registers();
+    b(done);
+
+    bind(FAIL);
+    tst(Roop, Roop);
+    restore_all_registers();
+    b(done);
 
   } else {
 
-fprintf(stderr, "C2_MacroAssembler::standard unlock\n"); fflush(stderr);
+PRINT_ONCE("C2_MacroAssembler standard unlock");
 
     Register Rmark      = Rscratch2;
 

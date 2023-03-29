@@ -45,6 +45,17 @@
 #include "runtime/sharedRuntime.hpp"
 #include "utilities/powerOfTwo.hpp"
 
+
+#define PRINT_ONCE(...) { \
+  static int justonce = 0; \
+  if (!justonce) { \
+    justonce = 1; \
+    fprintf(stderr, __VA_ARGS__); \
+    fprintf(stderr, "\n"); \
+    fflush(stderr); \
+  } \
+}
+
 //--------------------------------------------------------------------
 // Implementation of InterpreterMacroAssembler
 
@@ -890,8 +901,7 @@ void InterpreterMacroAssembler::lock_object(Register Rlock) {
     }
 
     if (UseFastLocking) {
-fprintf(stderr, "InterpreterMacroAssembler::lock_object\n"); fflush(stderr);
-//b(slow_case);
+PRINT_ONCE("InterpreterMacroAssembler::lock fast");
 
       Label FAIL;
       save_all_registers();
@@ -902,16 +912,18 @@ fprintf(stderr, "InterpreterMacroAssembler::lock_object\n"); fflush(stderr);
 
       fast_lock_roman_style(Robj, hdr, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
 
+      cmp(Robj, Robj);
       restore_all_registers();
-      cmp(R0, R0);
       b(done);
 
       bind(FAIL);
+      tst(Robj, Robj);
       restore_all_registers();
-      tst(R0, R0);
       b(slow_case);
 
     } else {
+
+PRINT_ONCE("InterpreterMacroAssembler::lock standard");
       // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
       // That would be acceptable as ether CAS or slow case path is taken in that case.
       // Exception to that is if the object is locked by the calling thread, then the recursive test will pass (guaranteed as
@@ -1023,8 +1035,7 @@ void InterpreterMacroAssembler::unlock_object(Register Rlock) {
     str(Rzero, Address(Rlock, obj_offset));
 
     if (UseFastLocking) {
-fprintf(stderr, "InterpreterMacroAssembler::unlock_object\n"); fflush(stderr);
-//b(slow_case);
+PRINT_ONCE("InterpreterMacroAssembler::unlock fast");
 
       Label FAIL;
       save_all_registers();
@@ -1054,6 +1065,8 @@ fprintf(stderr, "InterpreterMacroAssembler::unlock_object\n"); fflush(stderr);
       b(slow_case);
 
     } else {
+
+PRINT_ONCE("InterpreterMacroAssembler::unlock standard");
 
       // Load the old header from BasicLock structure
       ldr(Rmark, Address(Rlock, mark_offset));
