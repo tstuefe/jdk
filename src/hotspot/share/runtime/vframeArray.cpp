@@ -61,7 +61,6 @@ void vframeArrayElement::fill_in(compiledVFrame* vf, bool realloc_failures) {
 
 // Copy the information from the compiled vframe to the
 // interpreter frame we will be creating to replace vf
-
   _method = vf->method();
   _bci    = vf->raw_bci();
   _reexecute = vf->should_reexecute();

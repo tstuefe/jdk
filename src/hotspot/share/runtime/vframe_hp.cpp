@@ -50,6 +50,24 @@
 #endif
 
 
+#define LOGME(...) if (UseNewCode ){ \
+  fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+  fflush(stderr); \
+}
+
+class LOGMERAII {
+  const char* const _msg;
+public:
+  LOGMERAII( const char* msg) :_msg(msg) {
+    LOGME("--> %s", _msg);
+  }
+  ~LOGMERAII() {
+    LOGME("<-- %s", _msg);
+  }
+};
+
 // ------------- compiledVFrame --------------
 
 StackValueCollection* compiledVFrame::locals() const {
@@ -238,8 +256,10 @@ BasicLock* compiledVFrame::resolve_monitor_lock(Location location) const {
   return StackValue::resolve_monitor_lock(&_fr, location);
 }
 
-
 GrowableArray<MonitorInfo*>* compiledVFrame::monitors() const {
+
+  LOGMERAII lmi("vframeArrayElement::fill_in");
+
   // Natives has no scope
   if (scope() == nullptr) {
     CompiledMethod* nm = code();
@@ -256,12 +276,14 @@ GrowableArray<MonitorInfo*>* compiledVFrame::monitors() const {
     MonitorInfo* info = new MonitorInfo(
         fr.get_native_receiver(), fr.get_native_monitor(), false, false);
     monitors->push(info);
+LOGME("native");
     return monitors;
   }
   GrowableArray<MonitorValue*>* monitors = scope()->monitors();
   if (monitors == nullptr) {
     return new GrowableArray<MonitorInfo*>(0);
   }
+LOGME("other (%d)", monitors->length());
   GrowableArray<MonitorInfo*>* result = new GrowableArray<MonitorInfo*>(monitors->length());
   for (int index = 0; index < monitors->length(); index++) {
     MonitorValue* mv = monitors->at(index);

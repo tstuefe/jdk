@@ -92,10 +92,17 @@ void C2_MacroAssembler::fast_lock(Register Roop, Register Rbox, Register Rscratc
   }
 
   if (UseFastLocking) {
-fprintf(stderr, "C2_MacroAssembler::fast_lock\n"); fflush(stderr);
-cmpoop(Roop, 0);
-//tst(R1, R1);
+
+    // Poison old BasicLock
+    mov(Rscratch, 0x1000000F);
+    str(Rscratch, Address(Rbox, BasicLock::displaced_header_offset_in_bytes()));
+
+fprintf(stderr, "C2_MacroAssembler::fast_lock slow\n"); fflush(stderr);
+//cmpoop(Roop, 0);
+tst(Roop, Roop);
 b(done);
+
+//fprintf(stderr, "C2_MacroAssembler::fast_lock fast\n"); fflush(stderr);
 //
 //    Label FAIL;
 //    save_all_registers();
@@ -115,6 +122,8 @@ b(done);
 //    b(done);
 
   } else {
+
+fprintf(stderr, "C2_MacroAssembler::standard lock\n"); fflush(stderr);
 
     Register Rmark      = Rscratch2;
 
@@ -157,10 +166,13 @@ void C2_MacroAssembler::fast_unlock(Register Roop, Register Rbox, Register Rscra
   Label done;
 
   if (UseFastLocking) {
-fprintf(stderr, "C2_MacroAssembler::fast_unlock\n"); fflush(stderr);
-//tst(R1, R1);
-cmpoop(Roop, 0);
+
+fprintf(stderr, "C2_MacroAssembler::fast_unlock slow \n"); fflush(stderr);
+tst(Roop, Roop);
 b(done);
+
+//    fprintf(stderr, "C2_MacroAssembler::fast_unlock fast \n"); fflush(stderr);
+//
 //    Label FAIL;
 //    save_all_registers();
 //
@@ -180,6 +192,8 @@ b(done);
 //    b(done);
 
   } else {
+
+fprintf(stderr, "C2_MacroAssembler::standard unlock\n"); fflush(stderr);
 
     Register Rmark      = Rscratch2;
 

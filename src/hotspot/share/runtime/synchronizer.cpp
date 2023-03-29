@@ -498,18 +498,6 @@ static bool useHeavyMonitors() {
 #endif
 }
 
- volatile unsigned xxx_num_slow_enter_calls = 0;
- volatile unsigned xxx_num_slow_exit_calls = 0;
-
-struct Printerich {
-  ~Printerich() {
-    if (UseNewCode2) {
-    printf("Num enter %u Num exit %u \n", xxx_num_slow_enter_calls,  xxx_num_slow_exit_calls);
-    fflush(stdout); }
-  }
-};
-static Printerich ppppp;
-
 // -----------------------------------------------------------------------------
 // Monitor Enter/Exit
 // The interpreter and compiler assembly code tries to lock using the fast path
@@ -517,17 +505,6 @@ static Printerich ppppp;
 // changed. The implementation is extremely sensitive to race condition. Be careful.
 
 void ObjectSynchronizer::enter(Handle obj, BasicLock* lock, JavaThread* current) {
-
-//  current->lock_stack().validate("ObjectSynchronizer::enter 1");
-{
-  Atomic::inc(&xxx_num_slow_enter_calls);
-  if (UseNewCode2) {
-    if ((xxx_num_slow_enter_calls % 1000000) == 0) {
-      printf("ENTER %u\n", xxx_num_slow_enter_calls);
-      fflush(stdout);
-    }
-  }
-}
 
 LOGMERAII lme(obj(), "ObjectSynchronizer::enter");
 
@@ -616,19 +593,7 @@ LOGME(oop, "ObjectSynchronizer::enter: not neutral.");
 
 void ObjectSynchronizer::exit(oop object, BasicLock* lock, JavaThread* current) {
 
-  //current->lock_stack().validate("ObjectSynchronizer::exit 1");
-  {
-    Atomic::inc(&xxx_num_slow_exit_calls);
-    if (UseNewCode2) {
-      if ((xxx_num_slow_exit_calls % 1000000) == 0) {
-        printf("EXIT %u\n", xxx_num_slow_exit_calls);
-        fflush(stdout);
-      }
-    }
-  }
-
 LOGMERAII lme(object, "ObjectSynchronizer::exit");
-
 
   current->dec_held_monitor_count();
 
