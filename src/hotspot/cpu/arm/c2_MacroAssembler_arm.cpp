@@ -189,7 +189,7 @@ PRINT_ONCE("C2_MacroAssembler::fast_unlock fast");
     Register hdr = Rbox;
     ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
 
-    fast_unlock_roman_style(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
+    fast_unlock_2(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
 
     cmp(Roop, Roop);
     restore_all_registers();

@@ -309,7 +309,7 @@ PRINT_ONCE("C1_MacroAssembler::unlock fast");
 
     ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
 
-    fast_unlock_roman_style(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
+    fast_unlock_2(obj, hdr, disp_hdr /* t1 */, Rtemp /* t2 */, FAIL);
 
     cmp(obj, obj);
     restore_all_registers();

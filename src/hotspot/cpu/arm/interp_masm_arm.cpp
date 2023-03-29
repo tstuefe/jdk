@@ -45,17 +45,6 @@
 #include "runtime/sharedRuntime.hpp"
 #include "utilities/powerOfTwo.hpp"
 
-
-#define PRINT_ONCE(...) { \
-  static int justonce = 0; \
-  if (!justonce) { \
-    justonce = 1; \
-    fprintf(stderr, __VA_ARGS__); \
-    fprintf(stderr, "\n"); \
-    fflush(stderr); \
-  } \
-}
-
 //--------------------------------------------------------------------
 // Implementation of InterpreterMacroAssembler
 
@@ -901,7 +890,8 @@ void InterpreterMacroAssembler::lock_object(Register Rlock) {
     }
 
     if (UseFastLocking) {
-PRINT_ONCE("InterpreterMacroAssembler::lock fast");
+
+      log_trace(fastlock2)("InterpreterMacroAssembler lock fast");
 
       Label FAIL;
 
@@ -919,7 +909,6 @@ PRINT_ONCE("InterpreterMacroAssembler::lock fast");
 
     } else {
 
-PRINT_ONCE("InterpreterMacroAssembler::lock standard");
       // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
       // That would be acceptable as ether CAS or slow case path is taken in that case.
       // Exception to that is if the object is locked by the calling thread, then the recursive test will pass (guaranteed as
@@ -1031,7 +1020,8 @@ void InterpreterMacroAssembler::unlock_object(Register Rlock) {
     str(Rzero, Address(Rlock, obj_offset));
 
     if (UseFastLocking) {
-PRINT_ONCE("InterpreterMacroAssembler::unlock fast");
+
+      log_trace(fastlock2)("InterpreterMacroAssembler unlock fast");
 
       Label FAIL;
       push(Rlock);
@@ -1044,7 +1034,7 @@ PRINT_ONCE("InterpreterMacroAssembler::unlock fast");
       b(FAIL, ne);
 
       ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
-      fast_unlock_roman_style(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
+      fast_unlock_2(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
 
       pop(Rlock);
       b(done);
@@ -1054,8 +1044,6 @@ PRINT_ONCE("InterpreterMacroAssembler::unlock fast");
       b(slow_case);
 
     } else {
-
-PRINT_ONCE("InterpreterMacroAssembler::unlock standard");
 
       // Load the old header from BasicLock structure
       ldr(Rmark, Address(Rlock, mark_offset));
