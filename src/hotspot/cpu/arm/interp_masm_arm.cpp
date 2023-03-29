@@ -904,21 +904,17 @@ void InterpreterMacroAssembler::lock_object(Register Rlock) {
 PRINT_ONCE("InterpreterMacroAssembler::lock fast");
 
       Label FAIL;
-      save_all_registers();
 
-      // Load object header
-      Register hdr = Rmark;
-      ldr(hdr, Address(Robj, oopDesc::mark_offset_in_bytes()));
+      push(Rlock);
 
-      fast_lock_roman_style(Robj, hdr, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
+      ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
+      fast_lock_roman_style(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
 
-      cmp(Robj, Robj);
-      restore_all_registers();
+      pop(Rlock);
       b(done);
 
       bind(FAIL);
-      tst(Robj, Robj);
-      restore_all_registers();
+      pop(Rlock);
       b(slow_case);
 
     } else {
@@ -1038,30 +1034,23 @@ void InterpreterMacroAssembler::unlock_object(Register Rlock) {
 PRINT_ONCE("InterpreterMacroAssembler::unlock fast");
 
       Label FAIL;
-      save_all_registers();
+      push(Rlock);
 
       // Check for non-symmetric locking. This is allowed by the spec and the interpreter
       // must handle it.
-      Register tmp = Rmark;
-      ldr(tmp, Address(Rthread, JavaThread::lock_stack_offset_offset()));
-      sub(tmp, tmp, oopSize);
-      ldr(tmp, Address(Rthread, tmp));
-      cmpoop(tmp, Robj);
+      ldr(Rmark, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+      sub(Rmark, Rmark, oopSize);
+      ldr(Rmark, Address(Rthread, Rmark));
       b(FAIL, ne);
 
-      // Load object header
-      Register hdr = Rmark;
-      ldr(hdr, Address(Robj, oopDesc::mark_offset_in_bytes()));
+      ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
+      fast_unlock_roman_style(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
 
-      fast_unlock_roman_style(Robj, hdr, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
-
-      restore_all_registers();
-      cmp(R0, R0);
+      pop(Rlock);
       b(done);
 
       bind(FAIL);
-      restore_all_registers();
-      tst(R0, R0);
+      pop(Rlock);
       b(slow_case);
 
     } else {
