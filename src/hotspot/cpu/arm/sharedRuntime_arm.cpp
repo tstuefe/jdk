@@ -52,17 +52,6 @@
 
 #define __ masm->
 
-
-#define PRINT_ONCE(...) { \
-  static int justonce = 0; \
-  if (!justonce) { \
-    justonce = 1; \
-    fprintf(stderr, __VA_ARGS__); \
-    fprintf(stderr, "\n"); \
-    fflush(stderr); \
-  } \
-}
-
 class RegisterSaver {
 public:
 
@@ -1166,30 +1155,11 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     __ mov(sync_handle, R1);
 
     if (UseFastLocking) {
-
-PRINT_ONCE("SharedRuntime lock fast");
-
-      Label FAIL;
-      __ save_all_registers();
-
-      // Load object header
-      Register hdr = disp_hdr;
-      __ ldr(hdr, Address(sync_obj, oopDesc::mark_offset_in_bytes()));
-      __ fast_lock_2(sync_obj, hdr, tmp /* t1 */, Rtemp /* t2 */, FAIL);
-
-      __ cmp(sync_obj, sync_obj);
-      __ restore_all_registers();
-      __ b(lock_done);
-
-      __ bind(FAIL);
-      __ tst(sync_obj, sync_obj);
-      __ restore_all_registers();
-      __ b(slow_lock);
-
+      log_trace(fastlock2)("SharedRuntime lock fast");
+      __ fast_lock_2_1(sync_obj /* object */, disp_hdr /* t1 */, tmp /* t2 */, Rtemp /* t3 */,
+                       0x7 /* savemask */, slow_lock);
+      // Fall through to lock_done
     } else {
-
-PRINT_ONCE("SharedRuntime lock standard");
-
 
       const Register mark = tmp;
       // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
@@ -1271,7 +1241,7 @@ PRINT_ONCE("SharedRuntime lock standard");
   Label slow_unlock, unlock_done;
   if (method->is_synchronized()) {
     if (UseFastLocking) {
-PRINT_ONCE("SharedRuntime unlock fast");
+      log_trace(fastlock2)("SharedRuntime unlock fast");
 
       Label FAIL;
       __ save_all_registers();
@@ -1291,7 +1261,6 @@ PRINT_ONCE("SharedRuntime unlock fast");
       __ restore_all_registers();
       __ b(slow_unlock);
     } else {
-PRINT_ONCE("SharedRuntime unlock standard");
 
       // See C1_MacroAssembler::unlock_object() for more comments
       __ ldr(sync_obj, Address(sync_handle));
