@@ -217,19 +217,19 @@ int C1_MacroAssembler::lock_object(Register hdr, Register obj, Register disp_hdr
   if (UseFastLocking) {
     log_trace(fastlock2)("C1_MacroAssembler::lock fast");
 
-    Register tmp2 = disp_hdr;
     Label FAIL;
-    push(tmp2);
+    push(disp_hdr);
+    Register tmp1 = disp_hdr;
 
     // Load object header
     ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
-    fast_lock_2(obj, hdr, Rtemp /* t1 */, tmp2 /* t2 */, FAIL);
+    fast_lock_2(obj, hdr, tmp1 /* t1 */, tmp2 /* t2 */, FAIL);
 
-    pop(tmp2);
+    pop(disp_hdr);
     b(done);
 
     bind(FAIL);
-    pop(tmp2);
+    pop(disp_hdr);
     b(slow_case);
 
   } else {
@@ -287,20 +287,20 @@ void C1_MacroAssembler::unlock_object(Register hdr, Register obj, Register disp_
   if (UseFastLocking) {
     log_trace(fastlock2)("C1_MacroAssembler::unlock fast");
 
-    Register tmp2 = disp_hdr;
     Label FAIL;
-    push(tmp2);
+    push(disp_hdr);
+    Register tmp1 = disp_hdr;
 
     // load object + mark
     ldr(obj, Address(disp_hdr, BasicObjectLock::obj_offset_in_bytes()));
     ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
-    fast_unlock_2(obj, hdr, Rtemp /* t1 */, tmp2 /* t2 */, FAIL);
+    fast_unlock_2(obj, hdr, tmp1 /* t1 */, tmp2 /* t2 */, FAIL);
 
-    pop(tmp2);
+    pop(disp_hdr);
     b(done);
 
     bind(FAIL);
-    pop(tmp2);
+    pop(disp_hdr);
     b(slow_case);
 
   } else {
