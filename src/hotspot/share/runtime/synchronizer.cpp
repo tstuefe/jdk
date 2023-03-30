@@ -61,7 +61,20 @@
 #include "utilities/linkedlist.hpp"
 #include "utilities/preserveException.hpp"
 
+#include "memory/metaspace/counters.hpp"
+static metaspace::SizeAtomicCounter _entries;
+static metaspace::SizeAtomicCounter _quick_entries;
+static metaspace::SizeAtomicCounter _exits;
 
+ struct CounterReporter {
+  ~CounterReporter() {
+    if (UseNewCode3) {
+      printf("Count: entries " SIZE_FORMAT " quick_entries " SIZE_FORMAT " exits " SIZE_FORMAT, _entries.get(), _quick_entries.get(), _exits.get());
+    }
+  }
+};
+
+static CounterReporter thereporter;
 
 #define LOGME(oop, ...) if (UseNewCode ){ \
   fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
@@ -379,6 +392,8 @@ bool ObjectSynchronizer::quick_notify(oopDesc* obj, JavaThread* current, bool al
 bool ObjectSynchronizer::quick_enter(oop obj, JavaThread* current,
                                      BasicLock * lock) {
 
+  _quick_entries.increment();
+
 LOGMERAII(obj, "ObjectSynchronizer::quick_enter");
 
   assert(current->thread_state() == _thread_in_Java, "invariant");
@@ -506,6 +521,8 @@ static bool useHeavyMonitors() {
 
 void ObjectSynchronizer::enter(Handle obj, BasicLock* lock, JavaThread* current) {
 
+  _entries.increment();
+
 LOGMERAII lme(obj(), "ObjectSynchronizer::enter");
 
   if (obj->klass()->is_value_based()) {
@@ -592,6 +609,8 @@ LOGME(oop, "ObjectSynchronizer::enter: not neutral.");
 }
 
 void ObjectSynchronizer::exit(oop object, BasicLock* lock, JavaThread* current) {
+
+  _exits.increment();
 
 LOGMERAII lme(object, "ObjectSynchronizer::exit");
 
