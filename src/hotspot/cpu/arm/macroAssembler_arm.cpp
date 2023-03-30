@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2008, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, Red Hat, Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -1725,38 +1726,35 @@ void MacroAssembler::read_polling_page(Register dest, relocInfo::relocType rtype
   ldr(dest, Address(dest));
 }
 
-#define SAVE_REGS(mask, R1, R2, R3) \
-  if (mask & 1) {                   \
-    push(R1);                       \
-  }                                 \
-  if ((mask >> 1) & 1) {            \
-    push(R2);                       \
-  }                                 \
-  if ((mask >> 2) & 1) {            \
-    push(R3);                       \
+#define PUSH_REG(mask, bit, Reg)      \
+  if (mask & ((unsigned)1 << bit)) {  \
+    push(Reg);                        \
   }
 
-#define RESTORE_REGS(mask, R1, R2, R3) \
-  if ((mask >> 2) & 1) {               \
-    pop(R3);                           \
-  }                                    \
-  if ((mask >> 1) & 1) {               \
-    pop(R2);                           \
-  }                                    \
-  if (mask & 1) {                      \
-    pop(R1);                           \
-  }                                    \
-
-#define POISON_REGS(mask, poison, R1, R2, R3) \
-	if (mask & 1) {                       \
-	  mov(R1, poison);                    \
-	}                                     \
-	if ((mask >> 1) & 1) {                \
-		mov(R2, poison);                    \
-	}                                     \
-	if ((mask >> 2) & 1) {                \
-		mov(R3, poison);                    \
+#define POP_REG(mask, bit, Reg, condition)   \
+  if (mask & ((unsigned)1 << bit)) {         \
+    pop(Reg, condition);                     \
   }
+
+#define PUSH_REGS(mask, R1, R2, R3) \
+  PUSH_REG(mask, 0, R1)             \
+  PUSH_REG(mask, 1, R2)             \
+  PUSH_REG(mask, 2, R3)
+
+#define POP_REGS(mask, R1, R2, R3, condition)   \
+  POP_REG(mask, 0, R1, condition)               \
+  POP_REG(mask, 1, R2, condition)               \
+  POP_REG(mask, 2, R3, condition)
+
+#define POISON_REG(mask, bit, Reg, poison)      \
+  if (mask & ((unsigned)1 << bit)) {            \
+    mov(Reg, poison);                           \
+  }
+
+#define POISON_REGS(mask, R1, R2, R3, poison)   \
+  POISON_REG(mask, 0, R1, poison)               \
+  POISON_REG(mask, 1, R2, poison)               \
+  POISON_REG(mask, 2, R3, poison)
 
 // Attempt to fast-lock an object
 // Registers:
@@ -1771,19 +1769,22 @@ void MacroAssembler::fast_lock_2_1(Register obj, Register t1, Register t2, Regis
 
 #ifdef ASSERT
   // Poison scratch regs
-  POISON_REGS(~savemask, 0x10000001, t1, t2, t3);
+  POISON_REGS((~savemask), t1, t2, t3, 0x10000001);
 #endif
 
+  PUSH_REGS(savemask, t1, t2, t3);
+
   // Check if we would have space on lock-stack for the object.
-  ldr(t2, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+  ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
   // cmp(t1, (unsigned)LockStack::end_offset()); //  too complicated constant: 1132 (46c)
-  movw(t3, LockStack::end_offset() - 1);
-  cmp(t2, t3);
+  movw(t2, LockStack::end_offset() - 1);
+  cmp(t1, t2);
+  POP_REGS(savemask, t1, t2, t3, gt);
   b(slow, gt); // Z is cleared
 
   // Load (object->mark() | 1) into hdr
-  Register old_hdr = t2;
-  Register new_hdr = t3;
+  Register old_hdr = t1;
+  Register new_hdr = t2;
   ldr(old_hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
   bic(old_hdr, old_hdr, markWord::lock_mask_in_place);
   orr(old_hdr, old_hdr, markWord::unlocked_value);      // old header (01)
@@ -1791,60 +1792,12 @@ void MacroAssembler::fast_lock_2_1(Register obj, Register t1, Register t2, Regis
 
   Label dummy;
 
-  SAVE_REGS(savemask, t1, t2, t3);
-
   cas_for_lock_acquire(old_hdr /* old */, new_hdr /* new */,
-      obj /* location */, t1 /* scratch */, dummy,
+      obj /* location */, t3 /* scratch */, dummy,
       true /* allow_fallthrough_on_failure */, true /* one_shot */);
 
-  RESTORE_REGS(savemask, t1, t2, t3);
-
-  b(slow, ne); // Z cleared
-
-  // After successful lock, push object on lock-stack
-  ldr(t2, Address(Rthread, JavaThread::lock_stack_offset_offset()));
-  str(obj, Address(Rthread, t2));
-  add(t2, t2, oopSize);
-  str(t2, Address(Rthread, JavaThread::lock_stack_offset_offset()));
-
-#ifdef ASSERT
-  // Poison scratch regs
-  POISON_REGS(~savemask, 0x20000002, t1, t2, t3);
-#endif
-
-  // Success: fall through
-}
-
-// Attempt to fast-lock an object, Roman-style.
-// Registers:
-//  - obj: the object to be locked
-//  - hdr: the header, already loaded from obj, will be destroyed
-//  - t1, t2: temporary registers, will be destroyed
-void MacroAssembler::fast_lock_2(Register obj, Register hdr, Register t1, Register t2, Label& slow) {
-  assert(UseFastLocking, "only used with fast-locking");
-  assert_different_registers(obj, hdr, t1, t2);
-
-#ifdef ASSERT
-  // poison scratch registers
-  mov(t1, 0x10000001);
-  mov(t2, 0x20000002);
-#endif
-
-  // Check if we would have space on lock-stack for the object.
-  ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
-  // cmp(t1, (unsigned)LockStack::end_offset()); //  too complicated constant: 1132 (46c)
-  movw(t2, LockStack::end_offset() - 1);
-  cmp(t1, t2);
-  b(slow, gt);
-
-  // Load (object->mark() | 1) into hdr
-  Register new_hdr = t1;
-  bic(new_hdr, hdr, markWord::lock_mask_in_place); // new header (00)
-  orr(hdr, new_hdr, markWord::unlocked_value);     // old header (01)
-
-  cas_for_lock_acquire(hdr /* old */, new_hdr /* new */,
-          obj /* location */, t2 /* scratch */, slow
-          );
+  POP_REGS(savemask, t1, t2, t3, ne); // Cas failed -> slow
+  b(slow, ne);                        // Cas failed -> slow
 
   // After successful lock, push object on lock-stack
   ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
@@ -1852,40 +1805,52 @@ void MacroAssembler::fast_lock_2(Register obj, Register hdr, Register t1, Regist
   add(t1, t1, oopSize);
   str(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
 
+  POP_REGS(savemask, t1, t2, t3, al);
+
 #ifdef ASSERT
-  // poison scratch registers
-  mov(t1, 0x30000003);
-  mov(t2, 0x40000004);
+  // Poison scratch regs
+  POISON_REGS((~savemask), t1, t2, t3, 0x10000001);
 #endif
+
+  // Success: fall through
 }
 
-// Attempt to fast-unlock an object, Roman-style.
+// Attempt to fast-unlock an object
 // Registers:
 //  - obj: the object to be locked
-//  - hdr: the header, already loaded from obj, will be destroyed
-//  - t1, t2: temporary registers, will be destroyed
-void MacroAssembler::fast_unlock_2(Register obj, Register hdr, Register t1, Register t2, Label& slow) {
+//  - t1, t2, t3: temp registers. If corresponding bit in savemask is set, they get saved, otherwise blown.
+// Result:
+//  - Success: fallthrough
+//  - Error:   break to slow, Z cleared.
+void MacroAssembler::fast_unlock_2_1(Register obj, Register t1, Register t2, Register t3, unsigned savemask, Label& slow) {
   assert(UseFastLocking, "only used with fast-locking");
-  assert_different_registers(obj, hdr, t1, t2);
+  assert_different_registers(obj, t1, t2, t3);
 
 #ifdef ASSERT
-  // poison scratch registers
-  mov(t1, 0x50000005);
-  mov(t2, 0x60000006);
+  // Poison scratch regs
+  POISON_REGS((~savemask), t1, t2, t3, 0x30000003);
 #endif
 
+  PUSH_REGS(savemask, t1, t2, t3);
+
+  Register old_hdr = t1;
+  Register new_hdr = t2;
+
   // Load the expected old header (lock-bits cleared to indicate 'locked') into hdr
-  bic(hdr, hdr, markWord::lock_mask_in_place);
+  ldr(old_hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
+  bic(old_hdr, old_hdr, markWord::lock_mask_in_place);
 
   // Load the new header (unlocked) into t1
-  Register new_hdr = t1;
-  orr(new_hdr, hdr, markWord::unlocked_value);
+  orr(new_hdr, old_hdr, markWord::unlocked_value);
 
   // Try to swing header from locked to unlocked
-  // Note: will clear Z on error and branch to slow
-  cas_for_lock_release(hdr /* old */, new_hdr /* new */,
-      obj /* location */, t2 /* scratch */, slow
-      );
+  Label dummy;
+  cas_for_lock_release(old_hdr /* old */, new_hdr /* new */,
+      obj /* location */, t3 /* scratch */, dummy,
+      true /* allow_fallthrough_on_failure */, true /* one_shot */);
+
+  POP_REGS(savemask, t1, t2, t3, ne); // Cas failed -> slow
+  b(slow, ne);                        // Cas failed -> slow
 
   // After successful unlock, pop object from lock-stack
   ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
@@ -1896,9 +1861,14 @@ void MacroAssembler::fast_unlock_2(Register obj, Register hdr, Register t1, Regi
   // poison popped slot
   mov(t2, (intptr_t)LockStack::Poison::poison_compiled_pop);
   str(t2, Address(Rthread, t1));
-  // poison scratch registers
-  mov(t1, 0x70000007);
-  mov(t2, 0x80000008);
 #endif
-}
 
+  POP_REGS(savemask, t1, t2, t3, al);
+
+#ifdef ASSERT
+  // Poison scratch regs
+  POISON_REGS((~savemask), t1, t2, t3, 0x40000004);
+#endif
+
+  // Fallthrough: success
+}

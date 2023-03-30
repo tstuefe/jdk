@@ -221,8 +221,7 @@ int C1_MacroAssembler::lock_object(Register hdr, Register obj, Register disp_hdr
     Register t2 = hdr;      // blow
     Register t3 = Rtemp;    // blow
 
-    fast_lock_2_1(obj /* obj */, t1, t2, t3,
-        1 /* savemask - save t1 */, slow_case);
+    fast_lock_2_1(obj /* obj */, t1, t2, t3, 1 /* savemask - save t1 */, slow_case);
     // Success: fall through
 
   } else {
@@ -280,21 +279,15 @@ void C1_MacroAssembler::unlock_object(Register hdr, Register obj, Register disp_
   if (UseFastLocking) {
     log_trace(fastlock2)("C1_MacroAssembler::unlock fast");
 
-    Label FAIL;
-    push(disp_hdr);
-    Register tmp1 = disp_hdr;
+    ldr(obj, Address(disp_hdr, obj_offset));
 
-    // load object + mark
-    ldr(obj, Address(disp_hdr, BasicObjectLock::obj_offset_in_bytes()));
-    ldr(hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
-    fast_unlock_2(obj, hdr, tmp1 /* t1 */, tmp2 /* t2 */, FAIL);
+    Register t1 = disp_hdr; // Needs saving, probably
+    Register t2 = hdr;      // blow
+    Register t3 = Rtemp;    // blow
 
-    pop(disp_hdr);
-    b(done);
-
-    bind(FAIL);
-    pop(disp_hdr);
-    b(slow_case);
+    fast_unlock_2_1(obj /* object */, t1, t2, t3, 1 /* savemask (save t1) */,
+                    slow_case);
+    // Success: Fall through
 
   } else {
 

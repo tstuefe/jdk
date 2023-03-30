@@ -147,23 +147,13 @@ void C2_MacroAssembler::fast_unlock(Register Roop, Register Rbox, Register Rscra
   if (UseFastLocking) {
     log_trace(fastlock2)("C2_MacroAssembler::unlock fast");
 
-    Label FAIL;
-    push(Rbox);
 
-    // Load mark from obj
-    Register hdr = Rbox;
-    ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
+    fast_unlock_2_1(Roop /* obj */, Rbox /* t1 */, Rscratch /* t2 */, Rscratch2 /* t3 */,
+                    1 /* savemask (save t1) */,
+                    done);
 
-    fast_unlock_2(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
-
-    cmp(Roop, Roop);
-    pop(Rbox);
-    b(done);
-
-    bind(FAIL);
-    tst(Roop, Roop);
-    pop(Rbox);
-    b(done);
+    cmp(Roop, Roop); // Success: Set Z
+    // Fall through
 
   } else {
 

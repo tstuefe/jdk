@@ -1013,25 +1013,18 @@ void InterpreterMacroAssembler::unlock_object(Register Rlock) {
 
       log_trace(fastlock2)("InterpreterMacroAssembler unlock fast");
 
-      Label FAIL;
-      push(Rlock);
-
       // Check for non-symmetric locking. This is allowed by the spec and the interpreter
       // must handle it.
-      ldr(Rmark, Address(Rthread, JavaThread::lock_stack_offset_offset()));
-      sub(Rmark, Rmark, oopSize);
-      ldr(Rmark, Address(Rthread, Rmark));
-      b(FAIL, ne);
+      ldr(Rtemp, Address(Rthread, JavaThread::lock_stack_offset_offset()));
+      sub(Rtemp, Rtemp, oopSize);
+      ldr(Rtemp, Address(Rthread, Rtemp));
+      b(slow_case, ne);
 
-      ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
-      fast_unlock_2(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
+      fast_unlock_2_1(Robj /* obj */, Rlock /* t1 */, Rmark /* t2 */, Rtemp /* t3 */,
+                      1 /* savemask (save t1) */,
+                      slow_case);
 
-      pop(Rlock);
       b(done);
-
-      bind(FAIL);
-      pop(Rlock);
-      b(slow_case);
 
     } else {
 

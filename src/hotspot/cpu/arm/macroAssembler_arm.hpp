@@ -1018,8 +1018,15 @@ public:
   //  - Success: fallthrough
   //  - Error:   break to slow, Z cleared.
   void fast_lock_2_1(Register obj, Register t1, Register t2, Register t3, unsigned savemask, Label& slow);
-  void fast_lock_2(Register obj, Register hdr, Register t1, Register t2, Label& slow);
-  void fast_unlock_2(Register obj, Register hdr, Register t1, Register t2, Label& slow);
+
+  // Attempt to fast-unlock an object
+  // Registers:
+  //  - obj: the object to be locked
+  //  - t1, t2, t3: temp registers. If corresponding bit in savemask is set, they get saved, otherwise blown.
+  // Result:
+  //  - Success: fallthrough
+  //  - Error:   break to slow, Z cleared.
+  void fast_unlock_2_1(Register obj, Register t1, Register t2, Register t3, unsigned savemask, Label& slow);
 
 #ifndef PRODUCT
   // Preserves flags and all registers.

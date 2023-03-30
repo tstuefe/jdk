@@ -1242,24 +1242,9 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   if (method->is_synchronized()) {
     if (UseFastLocking) {
       log_trace(fastlock2)("SharedRuntime unlock fast");
+      __ fast_unlock_2_1(sync_obj, R2, tmp, Rtemp, 7, slow_unlock);
+      // Fall through
 
-      Label FAIL;
-      __ save_all_registers();
-      __ ldr(sync_obj, Address(sync_handle));
-
-      Register hdr = disp_hdr;
-      __ ldr(hdr, Address(sync_obj, oopDesc::mark_offset_in_bytes()));
-
-      __ fast_unlock_2(sync_obj, hdr, tmp /* t1 */, Rtemp /* t2 */, FAIL);
-
-      __ cmp(sync_obj, sync_obj);
-      __ restore_all_registers();
-      __ b(unlock_done);
-
-      __ bind(FAIL);
-      __ tst(sync_obj, sync_obj);
-      __ restore_all_registers();
-      __ b(slow_unlock);
     } else {
 
       // See C1_MacroAssembler::unlock_object() for more comments
