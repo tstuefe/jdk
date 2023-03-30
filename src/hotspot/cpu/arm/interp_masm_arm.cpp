@@ -879,9 +879,6 @@ void InterpreterMacroAssembler::lock_object(Register Rlock) {
 
     Label already_locked, slow_case;
 
-    // Load object pointer
-    ldr(Robj, Address(Rlock, obj_offset));
-
     if (DiagnoseSyncOnValueBasedClasses != 0) {
       load_klass(R0, Robj);
       ldr_u32(R0, Address(R0, Klass::access_flags_offset()));
@@ -889,23 +886,16 @@ void InterpreterMacroAssembler::lock_object(Register Rlock) {
       b(slow_case, ne);
     }
 
+    // Load object pointer
+    ldr(Robj, Address(Rlock, obj_offset));
+
     if (UseFastLocking) {
 
       log_trace(fastlock2)("InterpreterMacroAssembler lock fast");
 
-      Label FAIL;
+      fast_lock_2_1(Robj, R0 /* t1 */, Rmark /* t2 */, Rtemp /* t3 */, 0 /* savemask */, slow_case);
 
-      push(Rlock);
-
-      ldr(Rmark, Address(Robj, oopDesc::mark_offset_in_bytes()));
-      fast_lock_2(Robj, Rmark, Rlock /* t1 */, Rtemp /* t2 */, FAIL);
-
-      pop(Rlock);
       b(done);
-
-      bind(FAIL);
-      pop(Rlock);
-      b(slow_case);
 
     } else {
 

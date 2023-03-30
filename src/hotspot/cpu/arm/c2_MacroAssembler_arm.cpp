@@ -95,21 +95,12 @@ void C2_MacroAssembler::fast_lock(Register Roop, Register Rbox, Register Rscratc
   if (UseFastLocking) {
     log_trace(fastlock2)("C2_MacroAssembler::lock fast");
 
-    Label FAIL;
-    push(Rbox);
+    fast_lock_2_1(Roop /* obj */, Rbox /* t1 */, Rscratch /* t2 */, Rscratch2 /* t3 */,
+                  1 /* savemask (save t1) */,
+                  done);
 
-    Register hdr = Rbox;
-    ldr(hdr, Address(Roop, oopDesc::mark_offset_in_bytes()));
-    fast_lock_2(Roop, hdr, Rscratch /* t1 */, Rscratch2 /* t2 */, FAIL);
-
-    cmp(Roop, Roop);          // signal success: Z
-    pop(Rbox);
-    b(done);
-
-    bind(FAIL);
-    tst(Roop, Roop);          // signal failure: !Z
-    pop(Rbox);
-    b(done);
+    // Success: set Z
+    cmp(Roop, Roop);
 
   } else {
 
