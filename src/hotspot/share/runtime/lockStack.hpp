@@ -38,7 +38,7 @@ class LockStack {
 public:
   enum class Poison { poison_init = 1, poison_compiled_pop = 2, poison_pop = 3, poison_remove = 4 };
 private:
-  static const int CAPACITY = 8;
+  static const int CAPACITY = 1;
   // The offset of the next element, in bytes, relative to the JavaThread structure.
   // We do this instead of a simple index into the array because this allows for
   // efficient addressing in generated code.

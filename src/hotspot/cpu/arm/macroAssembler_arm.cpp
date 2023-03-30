@@ -1743,9 +1743,9 @@ void MacroAssembler::fast_lock_2(Register obj, Register hdr, Register t1, Regist
   // Check if we would have space on lock-stack for the object.
   ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
   // cmp(t1, (unsigned)LockStack::end_offset()); //  too complicated constant: 1132 (46c)
-  movw(t2, LockStack::end_offset());
+  movw(t2, LockStack::end_offset() - 1);
   cmp(t1, t2);
-  b(slow, ge);
+  b(slow, gt);
 
   // Load (object->mark() | 1) into hdr
   Register new_hdr = t1;
