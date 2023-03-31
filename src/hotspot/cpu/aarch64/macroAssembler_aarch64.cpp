@@ -6227,10 +6227,10 @@ void MacroAssembler::fast_lock(Register obj, Register hdr, Register t1, Register
   cmpw(t1, (unsigned)LockStack::end_offset());
   br(Assembler::GE, slow);
 
-  // Load (object->mark() | 1) into hdr
-  orr(hdr, hdr, markWord::unlocked_value);
-  // Clear lock-bits, into t2
-  eor(t2, hdr, markWord::unlocked_value);
+  // Prepare new and old header
+  bic(t2, hdr, markWord::lock_mask_in_place);
+  orr(hdr, t2, markWord::unlocked_value);
+
   // Try to swing header from unlocked to locked
   cmpxchg(/*addr*/ obj, /*expected*/ hdr, /*new*/ t2, Assembler::xword,
           /*acquire*/ true, /*release*/ true, /*weak*/ false, t1);

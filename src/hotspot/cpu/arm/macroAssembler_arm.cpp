@@ -1782,13 +1782,12 @@ void MacroAssembler::fast_lock_2_1(Register obj, Register t1, Register t2, Regis
   POP_REGS(savemask, t1, t2, t3, gt);
   b(slow, gt); // Z is cleared
 
-  // Load (object->mark() | 1) into hdr
+  // Prepare old, new header
   Register old_hdr = t1;
   Register new_hdr = t2;
-  ldr(old_hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
-  bic(old_hdr, old_hdr, markWord::lock_mask_in_place);
-  orr(old_hdr, old_hdr, markWord::unlocked_value);      // old header (01)
-  bic(new_hdr, old_hdr, markWord::lock_mask_in_place);  // new header (00)
+  ldr(new_hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
+  bic(new_hdr, new_hdr, markWord::lock_mask_in_place);  // new header (00)
+  orr(old_hdr, new_hdr, markWord::unlocked_value);      // old header (01)
 
   Label dummy;
 
@@ -1799,7 +1798,7 @@ void MacroAssembler::fast_lock_2_1(Register obj, Register t1, Register t2, Regis
   POP_REGS(savemask, t1, t2, t3, ne); // Cas failed -> slow
   b(slow, ne);                        // Cas failed -> slow
 
-  // After successful lock, push object on lock-stack
+  // After successful lock, push object onto lock-stack
   ldr(t1, Address(Rthread, JavaThread::lock_stack_offset_offset()));
   str(obj, Address(Rthread, t1));
   add(t1, t1, oopSize);
@@ -1831,17 +1830,16 @@ void MacroAssembler::fast_unlock_2_1(Register obj, Register t1, Register t2, Reg
   POISON_REGS((~savemask), t1, t2, t3, 0x30000003);
 #endif
 
+  if (FastLockingBreakInLock)  breakpoint();
+
   PUSH_REGS(savemask, t1, t2, t3);
 
+  // Prepare old, new header
   Register old_hdr = t1;
   Register new_hdr = t2;
-
-  // Load the expected old header (lock-bits cleared to indicate 'locked') into hdr
   ldr(old_hdr, Address(obj, oopDesc::mark_offset_in_bytes()));
-  bic(old_hdr, old_hdr, markWord::lock_mask_in_place);
-
-  // Load the new header (unlocked) into t1
-  orr(new_hdr, old_hdr, markWord::unlocked_value);
+  bic(old_hdr, old_hdr, markWord::lock_mask_in_place);    // old header (00)
+  orr(new_hdr, old_hdr, markWord::unlocked_value);        // new header (01)
 
   // Try to swing header from locked to unlocked
   Label dummy;
