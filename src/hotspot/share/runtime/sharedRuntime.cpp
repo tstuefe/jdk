@@ -79,6 +79,28 @@
 #include "c1/c1_Runtime1.hpp"
 #endif
 
+
+
+#define LOGME(oop, ...) if (UseNewCode ){ \
+  fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
+  fprintf(stderr, "obj: " PTR_FORMAT " MW: " PTR_FORMAT " ", p2i(oop), (oop->mark().value())); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+  fflush(stderr); \
+}
+
+class LOGMERAII {
+  const oop _oop;
+  const char* const _msg;
+public:
+  LOGMERAII(oop o, const char* msg) : _oop(o), _msg(msg) {
+    LOGME(_oop, "--> %s", _msg);
+  }
+  ~LOGMERAII() {
+    LOGME(_oop, "<-- %s", _msg);
+  }
+};
+
 // Shared stub locations
 RuntimeStub*        SharedRuntime::_wrong_method_blob;
 RuntimeStub*        SharedRuntime::_wrong_method_abstract_blob;
@@ -176,27 +198,6 @@ int SharedRuntime::_rethrow_ctr=0;
 int     SharedRuntime::_ICmiss_index                    = 0;
 int     SharedRuntime::_ICmiss_count[SharedRuntime::maxICmiss_count];
 address SharedRuntime::_ICmiss_at[SharedRuntime::maxICmiss_count];
-
-
-#define LOGME(oop, ...) if (UseNewCode ){ \
-  fprintf(stderr, "[tid=%u] ",(unsigned)os::current_thread_id()); \
-  fprintf(stderr, "obj: " PTR_FORMAT " MW: " PTR_FORMAT " ", p2i(oop), (oop->mark().value())); \
-  fprintf(stderr, __VA_ARGS__); \
-  fprintf(stderr, "\n"); \
-  fflush(stderr); \
-}
-
-class LOGMERAII {
-  const oop _oop;
-  const char* const _msg;
-public:
-  LOGMERAII(oop o, const char* msg) : _oop(o), _msg(msg) {
-    LOGME(_oop, "--> %s", _msg);
-  }
-  ~LOGMERAII() {
-    LOGME(_oop, "<-- %s", _msg);
-  }
-};
 
 void SharedRuntime::trace_ic_miss(address at) {
   for (int i = 0; i < _ICmiss_index; i++) {
