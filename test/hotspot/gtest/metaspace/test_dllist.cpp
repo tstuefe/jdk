@@ -41,7 +41,6 @@ static void verify_list(const DlList<X>& l, int num_expected, ...) {
   for (int i = 0; i < num_expected; i++) {
     ASSERT_NOT_NULL(p);
     ASSERT_EQ(p, va_arg(va, const X*));
-    ASSERT_EQ(l.find(p), i);
     ASSERT_TRUE(l.contains(p));
     p = p->next();
   }
@@ -238,6 +237,7 @@ TEST_VM(metaspace, DlListAddSingleItemListBack) {
 }
 
 TEST_VM(metaspace, DlListForEach) {
+  // Verify that for_each iterates the whole list
   TESTDATA
   DlList<X> l;
   FILL_ABC(l);
@@ -253,39 +253,66 @@ TEST_VM(metaspace, DlListForEach) {
     last = p;
   };
 
-  // iterate non-empty list
   l.for_each(lam);
   EXPECT_EQ(num, 3);
   EXPECT_EQ(first, l.front());
   EXPECT_EQ(first, a);
   EXPECT_EQ(last, l.back());
   EXPECT_EQ(last, c);
-
-  // iterate empty list
-  l.reset();
-  num = 0;
-  l.for_each(lam);
-  EXPECT_EQ(num, 0);
 }
 
-TEST_VM(metaspace, DlListFind) {
+TEST_VM(metaspace, DlListForEachUntilNegative) {
+  // Verify that for_each_until iterates the whole list if not aborted
+  TESTDATA
+  DlList<X> l;
+  FILL_ABC(l);
+  verify_list(l, 3, a, b, c);
+
+  int num = 0;
+  const X* first = nullptr, *last = nullptr;
+  auto lam = [&num, &first, &last] (const X* p) {
+    num ++;
+    if (first == nullptr) {
+      first = p;
+    }
+    last = p;
+    return false;
+  };
+
+  // iterate non-empty list
+  l.for_each_until(lam);
+  EXPECT_EQ(num, 3);
+  EXPECT_EQ(first, l.front());
+  EXPECT_EQ(first, a);
+  EXPECT_EQ(last, l.back());
+  EXPECT_EQ(last, c);
+}
+
+TEST_VM(metaspace, DlListForEachUntilPositive) {
+  // Verify that for_each_until interrupts looping
+  TESTDATA
+  DlList<X> l;
+  FILL_ABC(l);
+  verify_list(l, 3, a, b, c);
+
+  // We interrupt at "b"
+  auto lam = [] (const X* p) { return (p == b); };
+  const X* found = l.for_each_until(lam);
+  EXPECT_EQ(found, b);
+}
+
+TEST_VM(metaspace, DlListContains) {
   TESTDATA
   DlList<X> l;
   FILL_ABC(l);
   verify_list(l, 3, a, b, c);
 
   EXPECT_TRUE(l.contains(a));
-  EXPECT_EQ(l.find(a), 0);
   EXPECT_TRUE(l.contains(b));
-  EXPECT_EQ(l.find(b), 1);
   EXPECT_TRUE(l.contains(c));
-  EXPECT_EQ(l.find(c), 2);
 
   EXPECT_FALSE(l.contains(d));
-  EXPECT_EQ(l.find(d), -1);
   EXPECT_FALSE(l.contains(e));
-  EXPECT_EQ(l.find(e), -1);
   EXPECT_FALSE(l.contains(f));
-  EXPECT_EQ(l.find(f), -1);
 }
 

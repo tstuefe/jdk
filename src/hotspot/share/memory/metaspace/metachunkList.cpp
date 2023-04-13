@@ -34,44 +34,35 @@
 namespace metaspace {
 
 #ifdef ASSERT
-
 void MetachunkList::verify() const {
-  // verify list structure
   MetachunkListType::verify();
-  // Verify each chunk
-  auto chunk_verifier = [] (const Metachunk* c) {
-    c->verify();
-  };
+  auto chunk_verifier = [] (const Metachunk* c) { c->verify(); };
   for_each(chunk_verifier);
 }
 #endif // ASSERT
 
 size_t MetachunkList::calc_committed_word_size() const {
   size_t s = 0;
-  auto counterich = [&s] (const Metachunk* c) {
-    s += c->committed_words();
-  };
-  for_each(counterich);
+  auto count = [&s] (const Metachunk* c) { s += c->committed_words(); };
+  for_each(count);
   return s;
 }
 
 size_t MetachunkList::calc_word_size() const {
   size_t s = 0;
-  auto counterich = [&s] (const Metachunk* c) {
-    s += c->word_size();
-  };
-  for_each(counterich);
+  auto counter = [&s] (const Metachunk* c) { s += c->word_size(); };
+  for_each(counter);
   return s;
 }
 
 void MetachunkList::print_on(outputStream* st) const {
   if (count() > 0) {
-    auto printerich = [st] (const Metachunk* c) {
+    auto printer = [st] (const Metachunk* c) {
       st->print(" - <");
       c->print_on(st);
       st->print(">");
     };
-    for_each(printerich);
+    for_each(printer);
     st->print(" - total : %d chunks.", count());
   } else {
     st->print("empty");
@@ -80,15 +71,8 @@ void MetachunkList::print_on(outputStream* st) const {
 
 // Look for the chunk containing the given pointer
 const Metachunk* MetachunkList::find_chunk_containing(const MetaWord* p) const {
-  const Metachunk* result = nullptr;
-  auto finderich = [&result, p](const Metachunk* c) {
-    if (c->contains(p)) {
-      result = c;
-      return true;
-    }
-    return false;
-  };
-  for_each_until(finderich);
+  auto finder = [p](const Metachunk* c) { return c->contains(p); };
+  const Metachunk* result = for_each_until(finder);
   return result;
 }
 

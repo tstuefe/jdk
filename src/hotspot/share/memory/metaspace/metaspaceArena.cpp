@@ -382,38 +382,37 @@ MetaWord* MetaspaceArena::allocate_humonguous_block(size_t word_size) {
     DEBUG_ONLY(InternalStats::inc_num_chunks_retired();)
   }
 
-  // We need the new chunks to show the correct usage numbers. So we call "allocate" on each
-  //  of them in turn, expecting to get a contiguous address range.
-  // Note that all chunks have been committed already by the chunkmanager. This is checked
-  //  in Metachunk::allocate().
+  // We now have n unused and already committed chunks. We need them to show the correct usage numbers
+  // (e.g. if we allocate a block of 40 MB, the first two chunks should be fully used up for their 16MB
+  // size, the last chunk should only be used for 8MB). We do this by just allocating from each block
+  // accordingly.
   size_t allocated = 0;
-  MetaWord* result = nullptr;
-  auto allocate_from_chunks = [&result, &allocated, word_size] (Metachunk* c) {
-    const size_t len = MIN2(word_size - allocated, chunklevel::MAX_CHUNK_WORD_SIZE);
+  MetaWord* start_of_block = nullptr;
+  constexpr size_t portion_size = chunklevel::MAX_CHUNK_WORD_SIZE;
+  constexpr size_t last_portion_size = word_size % chunklevel::MAX_CHUNK_WORD_SIZE;
+  auto allocate_from_chunks = [&start_of_block, &allocated, word_size] (Metachunk* c) {
+    const size_t len = c->next() ? portion_size : last_portion_size;
     MetaWord* p = c->allocate(len);
     assert(p != nullptr, "Should have worked");
-    if (result == nullptr) {
-      // First chunk
-      result = p;
+    if (start_of_block == nullptr) {
+      start_of_block = p; // First chunk
     }
-    assert(result + allocated == p, "Expected continguous address space");
+    assert(start_of_block + allocated == p, "Expected contiguous address space");
     allocated += len;
   };
   list.for_each(allocate_from_chunks);
   assert(allocated == word_size, "Sanity");
-  assert(result == list.front()->base(), "Sanity");
+  assert(start_of_block == list.front()->base(), "Sanity");
 
-  // Finally, add all new chunks to the arena chunk list. By splicing this list to the end
-  // of the arena chunk list, we automatically "retire" all new root chunks but the last, and
-  // the last becomes the current chunk. That is fine and allows us to use the last root chunk
-  // for further allocations.
+  // Add all new chunks to the arena chunk list. We just splice them to then end of the
+  // arena chunk list, thereby making sure that the last - typically not fully used up - root chunk
+  // becomes the new current chunk and gets reused by the arena for further allocations.
   _chunks.add_list_at_back(list);
-  assert(current_chunk()->used_words() == word_size % chunklevel::MAX_CHUNK_WORD_SIZE,
-         "Sanity");
+  assert(current_chunk()->used_words() == last_portion_size, "Sanity");
 
   verify();
 
-  return result;
+  return start_of_block;
 }
 
 // Prematurely returns a metaspace allocation to the _block_freelists

@@ -68,12 +68,14 @@ protected:
     a->set_next(b);
   }
 
+  // Set chain to one element
   void set(T* p) {
     _front = _back = p;
     cap(p);
     _num.set(1);
   }
 
+  // Set chain to a given chain (given both ends)
   void set_chain(T* p1, T* p2, int num) {
     _front = p1;
     _back = p2;
@@ -223,53 +225,29 @@ public:
     }
   }
 
-  // Functor in this form: bool f(const T* p).
-  // Return true to abort iterations (for_each_until will return true then, false otherwise).
-  // Don't modify list while iterating.
+  // Functor in this form: bool f(const T* p). Functor should return true to abort the loop,
+  // false otherwise.
+  // Return the pointer to the element at which the loop was aborted, or nullptr if the full list
+  // was iterated.
   template <class Functor>
-  bool for_each_until(Functor f) const {
+  const T* for_each_until(Functor f) const {
     for (const T* p = front(); p != nullptr; p = p->next()) {
       if (f(p)) {
-        return true;
+        return p;
       }
     }
-    return false;
-  }
-
-  // Functor in this form: bool f(T* p).
-  // Return true to abort iterations (for_each_until will return true then, false otherwise).
-  // Don't modify list while iterating.
-  template <class Functor>
-  bool for_each_until(Functor f) {
-    for (T* p = front(); p != nullptr; p = p->next()) {
-      if (f(p)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Returns position of x, or -1
-  int find(const T* x) const {
-    if (is_prev_capped(x)) {
-      return x == front() ? 0 : -1;
-    } else if (is_next_capped(x)) {
-      return x == back() ? (count() - 1) : -1;
-    }
-    int i = 0;
-    auto find_x = [x, &i] (const T* p) mutable {
-      if (p == x) {
-        return true;
-      }
-      i++;
-      return false;
-    };
-    bool found = for_each_until(find_x);
-    return found ? i : -1;
+    return nullptr;
   }
 
   bool contains(const T* x) const {
-    return find(x) != -1;
+    // Shortcut for front/back
+    if ((is_next_capped(x) && x == back()) ||
+        (is_prev_capped(x) && x == front())) {
+      return true;
+    }
+    // search list.
+    auto finder = [x](const T* p) { return p == x; };
+    return for_each_until(finder) != nullptr;
   }
 
   // For convenience,

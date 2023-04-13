@@ -169,14 +169,12 @@ bool VirtualSpaceList::allocate_multiple_root_chunks(int num, MetachunkList* out
   // Try to allocate from current node. If current node remaining address space is too small,
   // or it does not exist, create a new node. If old node was not fully used up, salvage it
   // first.
-  if (_first_node == nullptr ||
-      _first_node->free_words() < needed_words) {
+  if (_first_node == nullptr || _first_node->free_words() < needed_words) {
     if (_can_expand) {
       if (_first_node != nullptr) {
         salvage_first_node();
       }
-      const size_t node_size =
-          MAX2(needed_words, Settings::virtual_space_node_default_word_size());
+      const size_t node_size = MAX2(needed_words, Settings::virtual_space_node_default_word_size());
       create_new_node(node_size);
       UL2(debug, "added new node (word size: " SIZE_FORMAT ") (now: %d).", node_size, num_nodes());
     } else {
