@@ -1,6 +1,8 @@
 /*
- * Copyright (c) 2018, 2021, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2018, SAP and/or its affiliates.
+ * Copyright (c) 2021 SAP SE. All rights reserved.
+ * Copyright (c) 2021, Red Hat Inc. All rights reserved.
+ * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ *
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,31 +24,26 @@
  * questions.
  *
  */
+
 #include "precompiled.hpp"
-#include "memory/metaspace/printMetaspaceInfoKlassClosure.hpp"
-#include "memory/resourceArea.hpp"
-#include "oops/klass.hpp"
-#include "utilities/globalDefinitions.hpp"
+
+#include "oops/compressedKlass.hpp"
 #include "utilities/ostream.hpp"
+#include "runtime/globals.hpp"
 
-namespace metaspace {
+#ifdef _LP64
 
-PrintMetaspaceInfoKlassClosure::PrintMetaspaceInfoKlassClosure(outputStream* out, bool do_print)
-: _out(out), _cnt(0)
-{}
-
-void PrintMetaspaceInfoKlassClosure::do_klass(Klass* k) {
-  _cnt++;
-  _out->cr_indent();
-  _out->print(UINTX_FORMAT_W(4) ": ", _cnt);
-
-  // Print a 's' for shared classes
-  _out->put(k->is_shared() ? 's': ' ');
-
-  _out->print("@" PTR_FORMAT, p2i(k));
-
-  ResourceMark rm;
-  _out->print("  %s", k->external_name());
+// Given an address p, return true if p can be used as an encoding base.
+//  (Some platforms have restrictions of what constitutes a valid base address).
+bool CompressedKlassPointers::is_valid_base(address p) {
+  return true;
 }
 
-} // namespace metaspace
+void CompressedKlassPointers::print_mode_pd(outputStream* st) {
+  st->print_cr("Narrow klass base: " PTR_FORMAT ", Narrow klass shift: %d, "
+               "Narrow klass range: " UINT64_FORMAT, p2i(base()), shift(),
+               KlassEncodingMetaspaceMax);
+}
+
+#endif // _LP64
+

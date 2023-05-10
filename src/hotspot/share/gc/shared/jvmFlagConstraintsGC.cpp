@@ -170,6 +170,26 @@ JVMFlag::Error MarkStackSizeConstraintFunc(size_t value, bool verbose) {
   }
 }
 
+JVMFlag::Error CompressedClassSpaceSizeConstraintFunc(size_t value, bool verbose) {
+#ifdef _LP64
+  // The class space cannot be smaller than:
+  // a) in legacy mode, the total cap of 3 GB
+  // b) the total range of the narrow Klass encoding
+  // c) if CDS is active, the narrow Klass encoding range has to be shared with the CDS archives
+  //
+  // We can test (a) and (b) here, but not (c), since CDS is not yet initialized. Therefore we just test (a)
+  // and (b) and leave testing (c) to later (see CompressedKlassPointers::initialize())
+  const size_t artificial_legacy_cap = UseCompactObjectHeaders ? SIZE_MAX : 3 * G;
+  const size_t max_class_space_size = MIN2(KlassEncodingMetaspaceMax, artificial_legacy_cap);
+  if (value > max_class_space_size) {
+    JVMFlag::printError(verbose, "CompressedClassSpaceSize " SIZE_FORMAT " too large (max: " SIZE_FORMAT ")\n",
+                        value, max_class_space_size);
+    return JVMFlag::VIOLATES_CONSTRAINT;
+  }
+#endif
+  return JVMFlag::SUCCESS;
+}
+
 JVMFlag::Error MinMetaspaceFreeRatioConstraintFunc(uintx value, bool verbose) {
   if (value > MaxMetaspaceFreeRatio) {
     JVMFlag::printError(verbose,

@@ -38,10 +38,12 @@
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "oops/accessDecorators.hpp"
+#include "oops/compressedKlass.inline.hpp"
 #include "oops/compressedOops.inline.hpp"
 #include "oops/klass.inline.hpp"
 #include "prims/methodHandles.hpp"
 #include "runtime/continuation.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/jniHandles.hpp"
@@ -5349,6 +5351,7 @@ void  MacroAssembler::decode_heap_oop_not_null(Register dst, Register src) {
 
 void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
   assert_different_registers(r, tmp);
+
   if (CompressedKlassPointers::base() != nullptr) {
     mov64(tmp, (int64_t)CompressedKlassPointers::base());
     subq(r, tmp);
@@ -5361,6 +5364,7 @@ void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
 
 void MacroAssembler::encode_and_move_klass_not_null(Register dst, Register src) {
   assert_different_registers(src, dst);
+
   if (CompressedKlassPointers::base() != nullptr) {
     mov64(dst, -(int64_t)CompressedKlassPointers::base());
     addq(dst, src);
@@ -5377,6 +5381,7 @@ void  MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
   assert_different_registers(r, tmp);
   // Note: it will change flags
   assert(UseCompressedClassPointers, "should only be used for compressed headers");
+
   // Cannot assert, unverified entry point counts instructions (see .ad file)
   // vtableStubs also counts instructions in pd_code_size_limit.
   // Also do not verify_oop as this is called by verify_oop.
@@ -5398,23 +5403,41 @@ void  MacroAssembler::decode_and_move_klass_not_null(Register dst, Register src)
   // vtableStubs also counts instructions in pd_code_size_limit.
   // Also do not verify_oop as this is called by verify_oop.
 
-  if (CompressedKlassPointers::base() == nullptr &&
-      CompressedKlassPointers::shift() == 0) {
-    // The best case scenario is that there is no base or shift. Then it is already
-    // a pointer that needs nothing but a register rename.
-    movl(dst, src);
-  } else {
-    if (CompressedKlassPointers::base() != nullptr) {
-      mov64(dst, (int64_t)CompressedKlassPointers::base());
+if (UseNewCode) emit_int8((unsigned char)0xCC);
+
+  if (CompressedKlassPointers::base() == nullptr) {
+    if (CompressedKlassPointers::shift() == 0) {
+      // Zero base, zero shift
+      // The best case scenario is that there is no base or shift. Then it is already
+      // a pointer that needs nothing but a register rename. A 32-bit mov is sufficient.
+      movl(dst, src);
     } else {
-      xorq(dst, dst);
+      // Zero base, non-zero shift
+      movq(dst, src);
+      shlq(dst, CompressedKlassPointers::shift());
     }
-    if (CompressedKlassPointers::shift() != 0) {
-      assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift(), "decode alg wrong");
-      assert(LogKlassAlignmentInBytes == Address::times_8, "klass not aligned on 64bits?");
-      leaq(dst, Address(dst, src, Address::times_8, 0));
-    } else {
-      addq(dst, src);
+  } else {
+    const uint64_t base_u64 = (uint64_t)CompressedKlassPointers::base();
+    switch (CompressedKlassPointers::shift()) {
+      case 0:
+        // Non-zero, base zero shift
+        mov64(dst, base_u64);
+        addq(dst, src);
+        break;
+      case Address::times_8:
+        // Non-zero base, non-zero word-size shift
+        mov64(dst, base_u64);
+        leaq(dst, Address(dst, src, Address::times_8, 0));
+        break;
+      default:
+        // Non-zero base, non-zero non-word-size shift
+        assert((base_u64 & ~right_n_bits(CompressedKlassPointers::shift())) == 0,
+               "base " UINT64_FORMAT_X " invalid for add mode", base_u64); // should have been handled at VM init.
+        const uint64_t base_right_shifted = base_u64 >> CompressedKlassPointers::shift();
+        mov64(dst, base_right_shifted);
+        addq(dst, src);
+        shlq(dst, CompressedKlassPointers::shift());
+        break;
     }
   }
 }

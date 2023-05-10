@@ -57,5 +57,16 @@
  *          java.xml
  * @requires vm.bits == 64
  * @requires vm.flagless
- * @run main/native GTestWrapper --gtest_filter=metaspace* -XX:+UnlockDiagnosticVMOptions -XX:-UseCompressedClassPointers
+ * @run main/native GTestWrapper --gtest_filter=metaspace* -XX:+UnlockDiagnosticVMOptions -XX:-UseCompressedClassPointers -XX:VerifyMetaspaceInterval=3
+ */
+
+/* @test id=compact-headers
+ * @summary Run metaspace-related gtests with compressed class pointers off
+ * @library /test/lib
+ * @modules java.base/jdk.internal.misc
+ *          java.xml
+ * @requires vm.bits == 64
+ * @requires vm.flagless
+ * @requires vm.debug
+ * @run main/native GTestWrapper --gtest_filter=metaspace* -XX:+UnlockDiagnosticVMOptions -XX:+UseCompactObjectHeaders -XX:VerifyMetaspaceInterval=3
  */

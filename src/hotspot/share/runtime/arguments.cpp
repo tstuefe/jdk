@@ -1484,8 +1484,31 @@ void Arguments::set_use_compressed_oops() {
 
 void Arguments::set_use_compressed_klass_ptrs() {
 #ifdef _LP64
-  assert(!UseCompressedClassPointers || CompressedClassSpaceSize <= KlassEncodingMetaspaceMax,
-         "CompressedClassSpaceSize is too large for UseCompressedClassPointers");
+  if (UseCompactObjectHeaders) {
+    // 512 byte alignment, 22-bit values (Lilliput)
+    LogKlassAlignmentInBytes = 9;
+    MaxNarrowKlassPointerBits = 22;
+    if (!UseCompressedClassPointers) {
+      // Default for UCCP should be true
+      if (FLAG_IS_DEFAULT(UseCompressedClassPointers)) {
+        // Should we ever change the default to false:
+        warning("UseCompactObjectHeaders implies UseCompressedClassPointers.");
+        FLAG_SET_ERGO(UseCompressedClassPointers, true);
+      } else {
+        vm_exit_during_initialization("UseCompactObjectHeaders true, but UseCompressedClassPointers explicitly switched off.");
+      }
+    }
+  } else {
+    // Traditional: 8 byte alignment, 32-bit values
+    LogKlassAlignmentInBytes = 3;
+    MaxNarrowKlassPointerBits = 32;
+  }
+
+  NarrowKlassPointerValueRange = nth_bit(MaxNarrowKlassPointerBits);
+  KlassAlignmentInBytes = nth_bit(LogKlassAlignmentInBytes);
+  assert(is_aligned(KlassAlignmentInBytes, BytesPerWord), "Must be at least word-sized");
+  KlassAlignmentInWords = KlassAlignmentInBytes / BytesPerWord;
+  KlassEncodingMetaspaceMax = UCONST64(1) << (MaxNarrowKlassPointerBits + LogKlassAlignmentInBytes);
 #endif // _LP64
 }
 

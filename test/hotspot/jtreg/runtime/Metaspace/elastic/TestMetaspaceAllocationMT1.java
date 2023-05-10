@@ -58,6 +58,23 @@
  */
 
 /*
+ * @test id=debug-compact-object-headers
+ * @library /test/lib
+ * @modules java.base/jdk.internal.misc
+ *          java.management
+ * @build jdk.test.whitebox.WhiteBox
+ * @key randomness
+ * @requires (vm.debug == true)
+ *
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller jdk.test.whitebox.WhiteBox
+ *
+ * @run main/othervm/timeout=400
+ *      -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
+ *      -XX:VerifyMetaspaceInterval=10 -XX:+UseCompactObjectHeaders
+ *      TestMetaspaceAllocationMT1
+ */
+
+/*
  * @test id=debug-guard
  * @library /test/lib
  * @modules java.base/jdk.internal.misc

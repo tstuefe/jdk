@@ -36,6 +36,7 @@
 #include "memory/metaspace/chunkManager.hpp"
 #include "memory/metaspace/commitLimiter.hpp"
 #include "memory/metaspace/internalStats.hpp"
+#include "memory/metaspace/metaspaceAlignment.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "memory/metaspace/metaspaceContext.hpp"
 #include "memory/metaspace/metaspaceReporter.hpp"
@@ -588,6 +589,13 @@ bool Metaspace::class_space_is_initialized() {
 // On error, returns an unreserved space.
 ReservedSpace Metaspace::reserve_address_space_for_compressed_classes(size_t size) {
 
+  // Note: code below is broken and needs rethinking since it confuses encoding base
+  // with compressed class space attach address; both don't have be the same.
+  // That is also the reason why we atm don't get zero-based encoding for aarch.
+  // Comment is also wrong, at least for 9-bit shift.
+
+  // Will be fixed. For now it works well enough.
+
 #if defined(AARCH64) || defined(PPC64)
   const size_t alignment = Metaspace::reserve_alignment();
 
@@ -617,15 +625,16 @@ ReservedSpace Metaspace::reserve_address_space_for_compressed_classes(size_t siz
 
   for (int i = 0; search_ranges[i].from != nullptr; i ++) {
     address a = search_ranges[i].from;
-    assert(CompressedKlassPointers::is_valid_base(a), "Sanity");
-    while (a < search_ranges[i].to) {
-      ReservedSpace rs(size, Metaspace::reserve_alignment(),
-                       os::vm_page_size(), (char*)a);
-      if (rs.is_reserved()) {
-        assert(a == (address)rs.base(), "Sanity");
-        return rs;
+    if (CompressedKlassPointers::is_valid_base(a)) {
+      while (a < search_ranges[i].to) {
+        ReservedSpace rs(size, Metaspace::reserve_alignment(),
+                         os::vm_page_size(), (char*)a);
+        if (rs.is_reserved()) {
+          assert(a == (address)rs.base(), "Sanity");
+          return rs;
+        }
+        a +=  search_ranges[i].increment;
       }
-      a +=  search_ranges[i].increment;
     }
   }
 #endif // defined(AARCH64) || defined(PPC64)
@@ -864,7 +873,7 @@ void Metaspace::post_initialize() {
 }
 
 size_t Metaspace::max_allocation_word_size() {
-  return metaspace::chunklevel::MAX_CHUNK_WORD_SIZE;
+  return metaspace::chunklevel::MAX_CHUNK_WORD_SIZE - KlassAlignmentInWords;
 }
 
 // This version of Metaspace::allocate does not throw OOM but simply returns null, and
@@ -1028,10 +1037,11 @@ bool Metaspace::contains(const void* ptr) {
   return contains_non_shared(ptr);
 }
 
-bool Metaspace::contains_non_shared(const void* ptr) {
-  if (using_class_space() && VirtualSpaceList::vslist_class()->contains((MetaWord*)ptr)) {
-     return true;
-  }
+bool Metaspace::class_space_contains(const void* ptr) {
+  return using_class_space() && VirtualSpaceList::vslist_class()->contains((MetaWord*)ptr);
+}
 
-  return VirtualSpaceList::vslist_nonclass()->contains((MetaWord*)ptr);
+bool Metaspace::contains_non_shared(const void* ptr) {
+  return class_space_contains(ptr) ||
+         VirtualSpaceList::vslist_nonclass()->contains((MetaWord*)ptr);
 }
