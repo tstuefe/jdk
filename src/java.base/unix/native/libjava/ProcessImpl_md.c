@@ -483,6 +483,19 @@ forkChild(ChildStuff *c) {
     return resultPid;
 }
 
+#ifndef NDEBUG
+static void killMeIfTestModeIs(int mode) {
+  const char* s = getenv("KILLTEST");
+  if (s != NULL) {
+    int i = atoi(s);
+    if (i == mode) {
+        printf("Self-killing with mode %d\n", i);
+        exit(-1);
+    }
+  }
+}
+#endif
+
 static pid_t
 spawnChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) {
     pid_t resultPid;
@@ -534,6 +547,11 @@ spawnChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
 
     rval = posix_spawn(&resultPid, helperpath, 0, 0, (char * const *) hlpargs, environ);
 
+#ifndef NDEBUG
+    printf("Child pid: %d\n", resultPid);
+    killMeIfTestModeIs(1);
+#endif
+
     if (rval != 0) {
         return -1;
     }
@@ -558,6 +576,10 @@ spawnChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
     write(c->childenv[1], (char *)&sp, sizeof(sp));
     write(c->childenv[1], buf, bufsize);
     free(buf);
+
+#ifndef NDEBUG
+    killMeIfTestModeIs(2);
+#endif
 
     /* In this mode an external main() in invoked which calls back into
      * childProcess() in this file, rather than directly
