@@ -1021,6 +1021,10 @@ void Metaspace::purge(bool classes_unloaded) {
   MetaspaceCriticalAllocation::process();
 }
 
+bool Metaspace::class_space_contains(const void* ptr) {
+  return using_class_space() && VirtualSpaceList::vslist_class()->contains((MetaWord*)ptr);
+}
+
 bool Metaspace::contains(const void* ptr) {
   if (MetaspaceShared::is_in_shared_metaspace(ptr)) {
     return true;
@@ -1029,7 +1033,7 @@ bool Metaspace::contains(const void* ptr) {
 }
 
 bool Metaspace::contains_non_shared(const void* ptr) {
-  if (using_class_space() && VirtualSpaceList::vslist_class()->contains((MetaWord*)ptr)) {
+  if (class_space_contains(ptr)) {
      return true;
   }
 

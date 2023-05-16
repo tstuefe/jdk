@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/vmClasses.hpp"
 #include "gc/shared/allocTracer.hpp"
@@ -42,6 +43,7 @@
 #include "logging/log.hpp"
 #include "logging/logStream.hpp"
 #include "memory/classLoaderMetaspace.hpp"
+#include "memory/metaspace.hpp"
 #include "memory/metaspaceUtils.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
@@ -227,7 +229,21 @@ bool CollectedHeap::is_oop(oop object) const {
     return false;
   }
 
-  if (!Metaspace::contains(object->klass_raw())) {
+  Klass* k = nullptr;
+  if (UseCompressedClassPointers) {
+    narrowKlass nklass = Atomic::load_acquire(&_metadata._compressed_klass);
+    if (nklass != 0) {
+      k = CompressedKlassPointers::decode_raw(nklass);
+    }
+  } else {
+    k = object->klass_raw();
+  }
+
+  if (k == nullptr || !is_aligned(k, KlassAlignmentInBytes)) {
+    return false;
+  }
+
+  if (!(MetaspaceShared::contains(k) || Metaspace::class_space_contains(k))) {
     return false;
   }
 
