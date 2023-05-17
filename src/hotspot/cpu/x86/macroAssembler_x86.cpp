@@ -5403,10 +5403,11 @@ void  MacroAssembler::decode_and_move_klass_not_null(Register dst, Register src)
   // vtableStubs also counts instructions in pd_code_size_limit.
   // Also do not verify_oop as this is called by verify_oop.
 
-if (UseNewCode) emit_int8((unsigned char)0xCC);
+  const uint64_t enc_base = (uint64_t)CompressedKlassPointers::base();
+  const int enc_shift = CompressedKlassPointers::shift();
 
-  if (CompressedKlassPointers::base() == nullptr) {
-    if (CompressedKlassPointers::shift() == 0) {
+  if (enc_base == 0) {
+    if (enc_shift == 0) {
       // Zero base, zero shift
       // The best case scenario is that there is no base or shift. Then it is already
       // a pointer that needs nothing but a register rename. A 32-bit mov is sufficient.
@@ -5414,29 +5415,30 @@ if (UseNewCode) emit_int8((unsigned char)0xCC);
     } else {
       // Zero base, non-zero shift
       movq(dst, src);
-      shlq(dst, CompressedKlassPointers::shift());
+      shlq(dst, enc_shift);
     }
   } else {
-    const uint64_t base_u64 = (uint64_t)CompressedKlassPointers::base();
-    switch (CompressedKlassPointers::shift()) {
+
+    switch (enc_shift) {
       case 0:
         // Non-zero, base zero shift
-        mov64(dst, base_u64);
+        mov64(dst, enc_base);
         addq(dst, src);
         break;
       case Address::times_8:
-        // Non-zero base, non-zero word-size shift
-        mov64(dst, base_u64);
+        // Non-zero base, non-zero word-sized shift (legacy header mode)
+        mov64(dst, enc_base);
         leaq(dst, Address(dst, src, Address::times_8, 0));
         break;
       default:
-        // Non-zero base, non-zero non-word-size shift
-        assert((base_u64 & ~right_n_bits(CompressedKlassPointers::shift())) == 0,
-               "base " UINT64_FORMAT_X " invalid for add mode", base_u64); // should have been handled at VM init.
-        const uint64_t base_right_shifted = base_u64 >> CompressedKlassPointers::shift();
-        mov64(dst, base_right_shifted);
+        // Non-zero base, non-zero non-word-sized shift (compact header mode)
+        const uint64_t enc_base_shifted = enc_base >> enc_shift;
+        // Ensure loss-less shift
+        assert(enc_base == (enc_base_shifted << enc_shift),
+               "base " UINT64_FORMAT_X ", shift %d, invalid for add mode", enc_base, enc_shift); // should have been handled at VM init.
+        mov64(dst, enc_base_shifted);
         addq(dst, src);
-        shlq(dst, CompressedKlassPointers::shift());
+        shlq(dst, enc_shift);
         break;
     }
   }

@@ -40,8 +40,8 @@
 //  (Some platforms have restrictions of what constitutes a valid base address).
 bool CompressedKlassPointers::is_valid_base(address p) {
   if (LogKlassAlignmentInBytes > Address::times_8) {
-    // Decoding with larger shifts requires a base that is at least aligned to the shift. Since
-    // encoding base address is usually page aligned, this should pose no problem.
+    // Decoding with larger shifts requires a base that can be right-shifted without loss by encoding shift.
+    // Since encoding base address is usually page aligned, this should pose no problem.
     return is_aligned(p, KlassAlignmentInBytes);
   }
   return true; // For shifts <= 3 every base is fine.

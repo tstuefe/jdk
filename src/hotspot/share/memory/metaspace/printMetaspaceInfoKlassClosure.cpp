@@ -43,7 +43,7 @@ void PrintMetaspaceInfoKlassClosure::do_klass(Klass* k) {
   // Print a 's' for shared classes
   _out->put(k->is_shared() ? 's': ' ');
 
-  _out->print("@" PTR_FORMAT, p2i(k));
+  _out->print(" klass: @" PTR_FORMAT ", mirror: @" PTR_FORMAT, p2i(k), p2i(k->java_mirror()));
 
   ResourceMark rm;
   _out->print("  %s", k->external_name());
