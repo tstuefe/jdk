@@ -29,6 +29,7 @@
 #include "classfile/vmSymbols.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "gc/shared/collectedHeap.inline.hpp"
+#include "logging/log.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
@@ -63,6 +64,9 @@ TypeArrayKlass* TypeArrayKlass::create_klass(BasicType type,
   // an array class without a mirror.
   null_loader_data->add_class(ak);
   JFR_ONLY(ASSIGN_PRIMITIVE_CLASS_ID(ak);)
+
+  log_info(metaspace)("Created Klass for %s[] (" PTR_FORMAT ")", type2name(type), p2i(ak));
+
   return ak;
 }
 

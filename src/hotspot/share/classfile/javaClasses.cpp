@@ -1356,6 +1356,9 @@ void java_lang_Class::release_set_array_klass(oop java_class, Klass* klass) {
 
 BasicType java_lang_Class::primitive_type(oop java_class) {
   assert(is_primitive(java_class), "just checking");
+
+  assert(java_lang_Class::is_instance(java_class), "must be a Class object");
+
   Klass* ak = ((Klass*)java_class->metadata_field(_array_klass_offset));
   BasicType type = T_VOID;
   if (ak != nullptr) {
