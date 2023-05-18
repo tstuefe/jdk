@@ -1422,7 +1422,7 @@ const int ObjectAlignmentInBytes = 8;
   develop(bool, MetaspaceGuardAllocations, false,                           \
           "Metapace allocations are guarded.")                              \
                                                                             \
-  develop(bool, UseCompactObjectHeaders, true,                             \
+  develop(bool, UseCompactObjectHeaders, false,                             \
           "xxxx")                                                           \
                                                                             \
   product(uintx, MinHeapFreeRatio, 40, MANAGEABLE,                          \
