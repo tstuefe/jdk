@@ -3396,11 +3396,13 @@ char* Arguments::get_default_shared_archive_path() {
     if (end != nullptr) *end = '\0';
     size_t jvm_path_len = strlen(jvm_path);
     size_t file_sep_len = strlen(os::file_separator());
-    const size_t len = jvm_path_len + file_sep_len + 20;
+    const size_t len = jvm_path_len + file_sep_len + 24;
     _default_shared_archive_path = NEW_C_HEAP_ARRAY(char, len, mtArguments);
+    static const char* suffix[4] = { "_nocoops", "_nocoops_coh", "", "_coh" };
+    const char* thesuffix = suffix[(UseCompressedOops * 2) + UseCompactObjectHeaders];
     jio_snprintf(_default_shared_archive_path, len,
-                LP64_ONLY(!UseCompressedOops ? "%s%sclasses_nocoops.jsa":) "%s%sclasses.jsa",
-                jvm_path, os::file_separator());
+                "%s%sclasses%s.jsa",
+                jvm_path, os::file_separator(), thesuffix);
   }
   return _default_shared_archive_path;
 }

@@ -197,6 +197,7 @@ private:
   int     _narrow_klass_shift;                    // save narrow klass base and shift
   bool    _compressed_oops;                       // save the flag UseCompressedOops
   bool    _compressed_class_ptrs;                 // save the flag UseCompressedClassPointers
+  bool    _compact_object_headers;                // save the flag UseCompactObjectHeaders
   size_t  _cloned_vtables_offset;                 // The address of the first cloned vtable
   size_t  _serialized_data_offset;                // Data accessed using {ReadClosure,WriteClosure}::serialize()
   address _heap_begin;                            // heap begin at dump time.
@@ -276,6 +277,7 @@ public:
   size_t ptrmap_size_in_bits()             const { return _ptrmap_size_in_bits; }
   bool compressed_oops()                   const { return _compressed_oops; }
   bool compressed_class_pointers()         const { return _compressed_class_ptrs; }
+  bool compact_object_headers()            const { return _compact_object_headers; }
   // FIXME: These should really return int
   jshort max_used_path_index()             const { return _max_used_path_index; }
   jshort app_module_paths_start_index()    const { return _app_module_paths_start_index; }

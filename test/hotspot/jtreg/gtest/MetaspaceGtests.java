@@ -61,7 +61,7 @@
  */
 
 /* @test id=compact-headers
- * @summary Run metaspace-related gtests with compressed class pointers off
+ * @summary Run metaspace-related gtests with compact object headers
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.xml
