@@ -29,6 +29,9 @@
 #include "precompiled.hpp"
 #include "immediate_aarch64.hpp"
 #include "metaprogramming/primitiveConversions.hpp"
+#include "utilities/align.hpp"
+#include "utilities/count_leading_zeros.hpp"
+#include "utilities/count_trailing_zeros.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 // there are at most 2^13 possible logical immediate encodings
@@ -349,6 +352,8 @@ static void initLITables()
       InverseLITable[li_table_entry_count].immediate = LITable[index];
       InverseLITable[li_table_entry_count].encoding = index;
       li_table_entry_count++;
+    } else {
+      LITable[index] = 0;
     }
   }
   // now sort the inverse table
@@ -446,4 +451,123 @@ uint32_t encoding_for_fp_immediate(float immediate)
   res = (s << 7) | (r << 4) | f;
   return res;
 }
+
+#ifdef ASSERT
+// Search the reverse lookup table for the largest y that fulfills:
+// - y <= x
+// - y's least "lsb_zeros" bits are 0 (y is aligned to 2^lsb_zeros)
+static uint64_t find_next_lower_logical_immediate_matching(uint64_t x, int lsb_zeros) {
+  const int alignment = nth_bit(lsb_zeros);
+  uint64_t candidate = UINT64_MAX;
+  for (int i = 0; i < LI_TABLE_SIZE; i++) {
+    uint64_t c = LITable[i];
+    if (c > candidate && c <= x && is_aligned(c, alignment)) {
+      candidate = c;
+    }
+  }
+  return candidate;
+}
+#endif // ASSERT
+
+// Given a number x, find the *largest* y that fulfills the following conditions:
+// - y is a valid logical immediate
+// - y <= x
+// - y is aligned to alignment
+// Returns 0 if no matching immediate was found, >0 otherwise.
+uint64_t calculate_next_lower_logical_immediate_matching(uint64_t x, uint64_t alignment) {
+
+  const int num_leading_zeros = count_leading_zeros(x); // since result has to be smaller
+  const int num_trailing_zeros = exact_log2(alignment);
+
+  const uint64_t y = align_down(x, alignment);
+
+  if (y == 0) {
+    return 0;
+  }
+
+  // "... Such an immediate is a 32-bit or 64-bit pattern viewed as a vector of identical elements
+  //  of size e = 2, 4, 8, 16, 32, or 64 bits. Each element contains the same sub-pattern: a single run of 1 to e-1 non-zero bits,
+  //  rotated by 0 to e-1 bits. This mechanism can generate 5,334 unique 64-bit patterns (as 2,667 pairs of pattern and their
+  //  bitwise inverse). "
+
+  // Element size e: Weed out some element sizes. The minimum element size depends on the number of leading
+  // and trailing zeros the result should match, since we cannot replicate elements if their area has to be zero.
+  // Example: y = "0x0007_ffff_ffff_0000" means e > 16 since lower quadrant is 0
+  int min_element_size = next_power_of_2(1 /* min e == 2 */ + MAX2(num_leading_zeros, num_trailing_zeros));
+
+  // Count length of the most significant one-bit-train in the input:
+  // Examples: 0b00111111_11000110_11011111_10000000
+  //               ^^^^^^ ^^
+  //           0b00101111_11000110_11011111_10000000
+  //               ^
+  const int leading_one_bit_vector_start = 63 - num_leading_zeros;
+  int leading_one_bit_vector_length = 1;
+  int bitno = leading_one_bit_vector_start - 1;
+  while (bitno >= 0 && is_set_nth_bit(y, bitno)) {
+    bitno--;
+    leading_one_bit_vector_length++;
+  }
+
+  // Weed out more element sizes. To find the *largest* lower immediate valid, the element size must fully contain
+  // the leading one-bit-train, because interrupting the train lowers the number.
+
+  // Example 1
+  //                   input = 0b00001111_11001001_11001111_11000000 FC9CFC0
+  //                                 ^^^^ ^^
+  //                     e=8 = 0b00001111_00001111_00001111_00001111 F0F0F0F (much too low - train interrupted at bit 23)
+  //                    e=16 = 0b00001111_11000000_00001111_11000000 FC00FC0 (best result)
+  //                    e=32 = 0b00001111_11000000_00000000_00000000 FC00000 (good result)
+  //
+  // but that can lead to invalid results we need to filter out:
+  // Example 2
+  //                   input = 0b00001111_11000000_00000000_00000001 FC00001
+  //                                 ^^^^ ^^
+  //                     e=8 = 0b00001111_00001111_00001111_00001111 F0F0F0F (much too low - train interrupted at bit 23)
+  //                    e=16 = 0b00001111_11000000_00001111_11000000 FC00FC0 (invalid, larger than input)
+  //                    e=32 = 0b00001111_11000000_00000000_00000000 FC00000 (best result)
+
+  const int fully_containing_element_size = next_power_of_2(num_leading_zeros + leading_one_bit_vector_length);
+  min_element_size = MAX2(min_element_size, fully_containing_element_size);
+
+  assert(min_element_size <= 64, "Weird");
+
+  // From the remaining element sizes, try all combination and chose the best result
+  uint64_t best_candidate = 0;
+  const int length = leading_one_bit_vector_length;
+  for (int e = min_element_size; e <= 64; e *= 2) {
+    const int rotation = e - num_leading_zeros - length;
+    assert(rotation >= 0 && rotation < e, "Sanity");
+
+    const int num_parts = 64 / e;
+
+    // Build up first sequence:
+    uint64_t result = right_n_bits(length) << rotation;
+    assert(((~right_n_bits(e)) & result) == 0, "Sanity"); // Should not spill over into next elem
+
+    // Mirror sequence over to the other parts
+    for (int i = 1; i < num_parts; i++) {
+      result = result | (result << (i * e));
+    }
+
+    if (result <= y && result > best_candidate) {
+      best_candidate = result;
+    }
+  }
+
+  assert(is_aligned(best_candidate, alignment), "Sanity");
+  assert(best_candidate <= x, "Sanity");
+
+  // Counter check in debug build with linearily searching the whole immediate table:
+#ifdef ASSERT
+  {
+    uint64_t v = find_next_lower_logical_immediate_matching(x, num_trailing_zeros);
+    assert(v == best_candidate, "Not the best result: " UINT64_FORMAT " vs " UINT64_FORMAT, best_candidate, v);
+  }
+#endif
+
+  return best_candidate;
+}
+
+
+
 

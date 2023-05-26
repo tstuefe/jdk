@@ -25,7 +25,7 @@
 #ifndef _IMMEDIATE_H
 #define _IMMEDIATE_H
 
-#include <sys/types.h>
+#include <stdint.h>
 
 /*
  * functions to map backwards and forwards between logical or floating
@@ -50,5 +50,13 @@ uint64_t logical_immediate_for_encoding(uint32_t encoding);
 uint32_t encoding_for_logical_immediate(uint64_t immediate);
 uint64_t fp_immediate_for_encoding(uint32_t imm8, int is_dp);
 uint32_t encoding_for_fp_immediate(float immediate);
+
+// Helper function for finding the best base for a compressed encoding scheme.
+// Given a number x, find the *largest* y that fulfills the following conditions:
+// - y is a valid logical immediate
+// - y <= x
+// - y is aligned to alignment
+// Returns 0 if no matching immediate was found, >0 otherwise.
+uint64_t calculate_next_lower_logical_immediate_matching(uint64_t x, uint64_t alignment);
 
 #endif // _IMMEDIATE_H

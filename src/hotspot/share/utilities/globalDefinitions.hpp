@@ -1092,6 +1092,7 @@ inline bool mask_bits_are_true (intptr_t flags, intptr_t mask) { return (flags &
 inline void    set_nth_bit(intptr_t& x, int n) { set_bits  (x, nth_bit(n)); }
 inline void  clear_nth_bit(intptr_t& x, int n) { clear_bits(x, nth_bit(n)); }
 inline bool is_set_nth_bit(intptr_t  x, int n) { return mask_bits (x, nth_bit(n)) != NoBits; }
+inline bool is_clr_nth_bit(intptr_t  x, int n) { return mask_bits (x, nth_bit(n)) == NoBits; }
 
 // returns the bitfield of x starting at start_bit_no with length field_length (no sign-extension!)
 inline intptr_t bitfield(intptr_t x, int start_bit_no, int field_length) {

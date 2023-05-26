@@ -736,6 +736,8 @@ void Metaspace::global_initialize() {
 
   if (DumpSharedSpaces) {
     assert(!UseSharedSpaces, "sanity");
+    // Note: this should happen *before* we reserve the class space below, since optimizing class space
+    // placement may interfere with the desired CDS address range.
     MetaspaceShared::initialize_for_static_dump();
   }
 
@@ -764,6 +766,7 @@ void Metaspace::global_initialize() {
 #ifdef _LP64
 
   if (using_class_space() && !class_space_is_initialized()) {
+    // Note: this code path is taken for either DumpSharedSpaces or if CDS is disabled
     assert(!UseSharedSpaces, "CDS archive is not mapped at this point");
 
     // case (b) (No CDS)

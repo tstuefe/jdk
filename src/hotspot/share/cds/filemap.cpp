@@ -2370,6 +2370,9 @@ int FileMapHeader::compute_crc() {
 
 // This function should only be called during run time with UseSharedSpaces enabled.
 bool FileMapHeader::validate() {
+
+  assert(UseSharedSpaces, "Only for UseSharedSpaces");
+
   if (_obj_alignment != ObjectAlignmentInBytes) {
     log_info(cds)("The shared archive file's ObjectAlignmentInBytes of %d"
                   " does not equal the current ObjectAlignmentInBytes of %d.",
