@@ -34,218 +34,260 @@
 #include "utilities/ostream.hpp"
 #include "runtime/globals.hpp"
 
+CompressedKlassPointerSettings_PD::CompressedKlassPointerSettings_PD()
+  : _base(nullptr), _shift(-1), _mode(Mode::KlassDecodeNone),
+    _do_rshift_base(false),
+    _movk_imm16_q1(0), _movk_imm16_q2(0), _movk_imm16_q3(0)
+{}
 
-class Quads {
-  const uint16_t _imm16_q2;
-  const uint16_t _imm16_q3;
-public:
-  Quads(uint64_t x)
-    : _imm16_q2(x >> 32),
-      _imm16_q3(x >> 48)
-  {}
+//// Zero mode /////////////
 
-  uint16_t q2() const { return _imm16_q2; }
-  uint16_t q3() const { return _imm16_q3; }
-
-  uint64_t v() const {
-    return (((uint64_t)q2()) << 32) +
-           (((uint64_t)q3()) << 48);
+bool CompressedKlassPointerSettings_PD::attempt_initialize_for_zero(address kr2) {
+  if (kr2 < nth_bit(NarrowKlassPointerBits + LogKlassAlignmentInBytes)) {
+    _mode = Mode::KlassDecodeZero;
+    _base = nullptr;
+    _shift = (kr2 < nth_bit(NarrowKlassPointerBits)) ? 0 : LogKlassAlignmentInBytes;
+    return true;
   }
-};
+  return false;
+}
 
+//// XOR mode /////////////
+
+bool CompressedKlassPointerSettings_PD::attempt_initialize_for_xor(address kr1, address kr2) {
+
+  // Calculate the smallest shift that we'd need to cover the whole Klass range, if base were kr1.
+  const int klass_range_len_log2 = exact_log2(next_power_of_2(kr2 - kr1));
+  const int minimal_shift = MAX2(0, klass_range_len_log2 - NarrowKlassPointerBits);
+
+
+  // Find an immediate that gives us a valid encoding; start with minimal shift in the hope that its 0.
+  // Since the form of the immediates - and their distance to kr1 and hence their encoding range -
+  // are difficult to predict, just try all valid shift values.
+
+  for (int candidate_shift = minimal_shift; candidate_shift <= LogKlassAlignmentInBytes; candidate_shift++) {
+
+    const size_t encoding_range_len = nth_bit(candidate_shift + NarrowKlassPointerBits);
+
+    // Unshifted XOR mode?
+    //  (XOR *unshifted* base to *left-shifted* nKlass)
+    {
+      const int bits_offset = NarrowKlassPointerBits + candidate_shift; // left-shifted nKlass
+      const size_t base_alignment = nth_bit(bits_offset);
+      address candidate_base = (address)calculate_next_lower_logical_immediate_matching((uint64_t)kr1, base_alignment);
+      if (candidate_base != nullptr) {
+        assert(is_aligned(candidate_base, base_alignment), "Sanity");
+        assert(candidate_base <= kr1, "Sanity");
+        if ((candidate_base + encoding_range_len) >= kr2) {
+          _mode = Mode::KlassDecodeXor;
+          _do_rshift_base = false;
+          _base = candidate_base;
+          _shift = candidate_shift;
+          return true;
+        }
+      }
+    }
+
+    // Shifted XOR mode?
+    //  (decode: XOR *right-shifted* base to *unshifted* nKlass, then left-shift)
+    {
+      const int bits_offset = NarrowKlassPointerBits; // unshifted nKlass
+      const size_t base_alignment = nth_bit(bits_offset);
+      const uint64_t candidate_base_rightshifted =
+          calculate_next_lower_logical_immediate_matching((uint64_t)kr1 >> candidate_shift, base_alignment);
+      if (candidate_base_rightshifted != nullptr) {
+        assert(is_aligned(candidate_base_rightshifted, base_alignment), "Sanity");
+        address candidate_base = (address)(candidate_base_rightshifted << candidate_shift);
+        assert(candidate_base <= kr1, "Sanity");
+        if ((candidate_base + encoding_range_len) >= kr2) {
+          _mode = Mode::KlassDecodeXor;
+          _do_rshift_base = true;
+          _base = candidate_base;
+          _shift = candidate_shift;
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+//// MOVK mode /////////////
 
 class MovKParameters {
 
-  const uint64_t _kr1;
-  const uint64_t _kr2;
+  // Shift to use
   const int _shift;
 
+  // Whether to apply the right-shifted base to the nKlass
+  // or the unshifted base to the left-shifted nKlass
+  const bool _do_rshift_base;
+
+  // Base
   const Quads _quads;
 
-public:
-
-  MovKParameters(uint64_t kr1, uint64_t kr2, int shift, int num_base_quadrants)
-    : _kr1(kr1), _kr2(kr2), _shift(shift),
-      _quads(kr1 >> shift)
-  {}
-
-  // Returns true if the encoding covers the whole range
-  // between [kr1..kr2)
-  bool has_full_coverage() const {
-
-    const uint64_t the_base
-
-  }
-
-};
-
-
-class MovKBaseSegments {
-
-  const uint16_t _imm16_q2;
-  const uint16_t _imm16_q3;
-
-  static uint16_t extract(uint64_t x, int quadrant) {
-    return (x >> (quadrant * 16)) & 0xFFFF;
+  static uint64_t calc_clipped_base(address kr1, int shift, int num_base_quadrants, bool do_rshift_base) {
+    uint64_t b = (uint64_t)kr1;
+    if (do_rshift_base) {
+      b >>= shift;
+    }
+    switch (num_base_quadrants) {
+      case 1: b &= (right_n_bits(16) << 48); break;
+      case 2: b &= (right_n_bits(32) << 32); break;
+      case 3: b &= (right_n_bits(48) << 16); break;
+      default: ShouldNotReachHere();
+    }
+    return b;
   }
 
 public:
 
-  // Discard the lower 32 bit, store upper 32bit as 16 bit units
-  MovKBaseSegments(uint64_t x)
-    : _imm16_q2(extract(x, 2)), _imm16_q3(extract(x, 3))
+  MovKParameters() : _shift(0), _do_rshift_base(false), _quads(0) {}
+
+  MovKParameters(address kr1, int shift, int num_base_quadrants, bool do_rshift_base)
+    : _shift(shift), _do_rshift_base(do_rshift_base),
+      _quads(calc_clipped_base(kr1, shift, num_base_quadrants, do_rshift_base))
   {}
 
-  uint64_t base() const {
-    return (((uint64_t)_imm16_q2) << 32) |
-           (((uint64_t)_imm16_q3) << 48);
+  const Quads& quads() const { return _quads; }
+
+  int shift() const               { return _shift; }
+  bool needs_shift() const        { return shift() > 0; }
+
+  bool do_rshift_base() const      { return _do_rshift_base; }
+
+  address base_rshifted() const {
+    assert(do_rshift_base(), "Only use for rshift-base-case");
+    return (address)(quads().v());
   }
 
-  int num_movk_operations() const {
-    return (_imm16_q2 > 0 ? 1 : 0) +
-           (_imm16_q3 > 0 ? 1 : 0);
+  address base_unshifted() const {
+    return (address)(quads().v() << (do_rshift_base() ? shift() : 0));
+  }
+
+  // Returns true if the encoding covers the whole range between [kr1..kr2]
+  bool covers_klass_range(address kr1, address kr2) const  {
+    const uint64_t encoding_coverage = nth_bit(NarrowKlassPointerBits + shift());
+    return (base_unshifted() <= kr1 &&
+           (base_unshifted() + encoding_coverage) > kr2);
+  }
+
+  // Returns number of ops necessary
+  int num_ops() const {
+    return quads().num_quadrants_set() + (needs_shift() ? 1 : 0);
   }
 
 };
 
+bool CompressedKlassPointerSettings_PD::attempt_initialize_for_movk(address kr1, address kr2) {
 
-static bool CompressedKlassPointers::attempt_initialize_for_movk(address klass_range_start, size_t klass_range_len) {
+  // Given a Klass range, find the combination of base + shift that allows us to encode the base
+  // with as few operations as possible. Valid solutions are all that give us a base that is
+  // encodable in either or both of q3 (bits 48-63) and q2 (bits 32-47).
+  //
+  // Notes:
+  // - we test for q4 too since we may enconter klass range addresses that have bits set in the
+  //   upper quadrant, if we run on a kernel that allows 52-bit addresses
+  // - we test for q2 too since that allows us to work with nKlass bit sizes that are very small,
+  //   e.g. 16.
 
-  // Given a klass range, find the combination of base + shift that allows us to encode the base
-  // with as few operations as possible.
-
-  assert(is_aligned(klass_range_start, LogKlassAlignmentInBytes), "sanity");
-
-  const address KR1 = klass_range_start;
-  const address KR2 = align_down(KR1 + klass_range_len, KlassAlignmentInBytes);
-
-  uint64_t candidate_base = 0;
-  int candidate_shift = -1;
+  bool found = false;
+  MovKParameters best_so_far;
 
   for (int shift = 0; shift <= LogKlassAlignmentInBytes; shift ++) {
-
-    const MovKBaseSegments helper(((uint64_t)KR1) >> shift);
-    const address base = (address)(helper.base() << shift);
-
-    assert(base <= KR1, "Sanity");
-
-    // Valid base + shift?
-    const size_t encoding_range_size = nth_bit(NarrowKlassPointerBits + shift);
-    if ((base + encoding_range_size) >= KR2) {
-
-      // Yes, valid (covers the whole klass range)
-      // Is this better than the last encoding we found?
-      const int rating_this = helper.num_movk_operations() + ((shift > 0) ? 1 : 0);
-      const int rating_last = MovKBaseSegments(candidate_base).num_movk_operations() + ((candidate_shift > 0) ? 1 : 0);
-
-      if (rating_this < rating_last) {
-        candidate_base = helper.base();
-
-      }
-
-    }
-
-
-
-    if (
-
-    const uint64_t base_masks[] = { ~right_n_bits(32), ~right_n_bits(48) };
-    const int base_mask_combos = 2;
-
-    for (uint64_t base_mask = )
-
-    const uint64_t highest_nklass_value_left_shifted = (((uint64_t)highest_klass_address) - klass_range_start)
-    const uint64_t highest_nklass_value = highest_nklass_value_left_shifted >> shift;
-
-    // Unshifted movk?
-    // (decode: left-shift nklass, then movk unshifted base)
-    {
-      const uint64_t base_mask = movk_base_mask(highest_nklass_value_left_shifted);
-      uint64_t candidate_base = ((uint64_t)klass_range_start) & base_mask;
-
-      // Does this cover the whole range?
-
-
-
-
-    // base quadrant combos (which quadrants we allow to be part of the base address)
-    // - We leave out q0.
-    // - A movk to q1 is theoretically possible for very small class spaces and large shifts. It would give us
-    //   64K classes, with e.g. a 9-bit shift this would cover 32MB of class space. Maybe interesting for micro VMs?
-    // - movk to q2 is the standard
-    // - movk to q3 is possible if we run on a kernel with 52 bit address space, where virtual addresses can have
-    //   address bits set beyond bit 47.
-    const uint64_t valid_quadrant_combos[] = {
-        // needs 1 movk
-        (right_n_bits(16) << 32), // q2 only
-        (right_n_bits(16) << 48), // q3 only
-        (right_n_bits(16) << 16), // q1 only
-        // Needs 2 movks
-        (right_n_bits(16) << 32) + (right_n_bits(16) << 48), // q2 + q3
-        (right_n_bits(16) << 32) + (right_n_bits(16) << 16), // q2 + q1
-        (right_n_bits(16) << 48) + (right_n_bits(16) << 16), // q3 + q1
-        0
-    };
-
-    for (int combo = 0; valid_quadrant_combos[combo] != 0; combo++) {
-      const uint64_t mask = valid_quadrant_combos[combo];
-      const int log2_offset_part = count_trailing_zeros(mask);
-      const size_t value_range_offset =
-      if ()
-      if (klass_range_start_ui64)
-
-    }
-
-      uint64_t possible_base = klass_range_start_ui64 >> shift;
-
-      const uint64_t mask = 0;
-      if (quadrantcombo & 1) {
-        mask |= right_n_bits(16) << 16;
-      }
-      if (quadrantcombo & 1) {
-        mask |= right_n_bits(16) << 32;
-      }
-      if (quadrantcombo & 1) {
-        mask |= right_n_bits(16) << 48;
-      }
-      possible_base &=
-
-
-      const uint64_t possible_base = ((uint64_t) klass_range_start) & mask;
-      if (possible_base < klass_range_start_ui64) { // no bits set in upper quadrants
-
+    for (int num_base_quadrants = 1; num_base_quadrants <= 3; num_base_quadrants ++) {
+      for (int do_rshift = 0; do_rshift < 2; do_rshift++) {
+        MovKParameters here(kr1, shift, num_base_quadrants, do_rshift == 1);
+        if (here.covers_klass_range(kr1, kr2)) {
+          if (!found || (here.num_ops() < best_so_far.num_ops())) {
+            best_so_far = here;
+            found = true;
+          }
+        }
       }
     }
+  }
 
-    for (int )
+  if (found) {
+    assert(best_so_far.covers_klass_range(kr1, kr2), "Sanity");
+    _mode = Mode::KlassDecodeMovk;
+    _base = best_so_far.base_unshifted();
+    _shift = best_so_far.shift();
+    _do_rshift_base = best_so_far.do_rshift_base();
+    _movk_imm16_quads = best_so_far.quads();
+    return true;
+  }
+  return false;
 
-    // q3 alone?
-    uint64_t base_extracted =
+}
 
-    for (quadrant )
+bool CompressedKlassPointerSettings_PD::attempt_initialize(address kr1, address kr2) {
+  // We prefer zero over xor over movk
+  return
+      attempt_initialize_for_zero(kr2) ||
+      attempt_initialize_for_xor(kr1, kr2) ||
+      attempt_initialize_for_movk(kr1, kr2);
+}
 
-    if ()
+// "reverse-initialize" from a given base and shift, for a given klass range (called for the CDS runtime path)
+bool CompressedKlassPointerSettings_PD::attempt_initialize_for_fixed_base_and_shift(address base, int shift, address kr1, address kr2) {
+
+  _mode = Mode::KlassDecodeNone;
+
+  if (base == nullptr) {
+    _mode = Mode::KlassDecodeZero;
+    _base = base;
+    _shift = shift;
+  } else {
+    if (Assembler::operand_valid_for_logical_immediate(false, base)) {
+      _mode = Mode::KlassDecodeXor;
+      _base = base;
+      _shift = shift;
+      _do_rshift_base = false;
+    } else if (Assembler::operand_valid_for_logical_immediate(false, ((uint64_t)base) >> shift)) {
+      _mode = Mode::KlassDecodeXor;
+      _base = (address)(((uint64_t)base) >> shift);
+      _shift = shift;
+      _do_rshift_base = true;
+    } else {
+
+      bool unshifted_is_valid =
 
 
-    // With pre-shifted base?
 
-    const address =
+      // deduce number of base quadrants
 
-    // With unshifted base?
+      // For a given base and shift, search all possible combos for the best one that covers the klass range
+      for (int num_base_quadrants = 1; num_base_quadrants <= 3; num_base_quadrants ++) {
+        for (int do_rshift = 0; do_rshift < 2; do_rshift++) {
+          MovKParameters here(base, shift, num_base_quadrants, do_rshift == 1);
+          if (here.is_valid() && here.covers_klass_range(kr1, kr2)) {
+            if (!found || best_so_far.num_ops() > here.num_ops()) {
+              found = true;
+              best_so_far = here;
+            }
+          }
+        }
+      }
 
-    const size_t resulting_encoding_range_len = nth_bit(shift + NarrowKlassPointerBits);
-
-    MovKHelper h(((uint64_t)klass_range_start), shift);
-
-    address candidate_base = (address)h.unshifted_base();
-
+      if (found) {
+        assert(best_so_far.is_valid() && best_so_far.covers_klass_range(kr1, kr2), "Sanity");
+        assert()
+        _mode = Mode::KlassDecodeMovk;
+        _base = best_so_far.base_unshifted();
+        _shift = best_so_far.shift();
+        _do_rshift_base = best_so_far.do_rshift_base();
+        _movk_imm16_q1 = best_so_far.q1();
+        _movk_imm16_q2 = best_so_far.q2();
+        _movk_imm16_q3 = best_so_far.q3();
+      }
+    }
 
   }
 
-
-
-
+  return _mode != Mode::KlassDecodeNone ? true : false;
 }
+
 
 
 // Given the future klass range, decide encoding.

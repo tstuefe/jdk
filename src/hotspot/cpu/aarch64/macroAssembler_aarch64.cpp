@@ -4665,8 +4665,15 @@ void  MacroAssembler::set_narrow_klass(Register dst, Klass* k) {
   RelocationHolder rspec = metadata_Relocation::spec(index);
   code_section()->relocate(inst_mark(), rspec);
   narrowKlass nk = CompressedKlassPointers::encode(k);
-  movz(dst, (nk >> 16), 16);
-  movk(dst, nk & 0xffff);
+
+  const uint16_t q0 = nk & 0xFFFF;
+  const uint16_t q1 = nk >> 16;
+  if (q1 != 0) {
+    movz(dst, q1, 16);
+    movk(dst, q0);
+  } else {
+    movz(dst, q0);
+  }
 }
 
 void MacroAssembler::access_load_at(BasicType type, DecoratorSet decorators,
