@@ -41,7 +41,31 @@
 
 // Dummy constructor
 ReservedSpace::ReservedSpace() : _base(nullptr), _size(0), _noaccess_prefix(0),
-    _alignment(0), _special(false), _fd_for_heap(-1), _executable(false) {
+    _alignment(0), _page_size(0), _special(false), _fd_for_heap(-1), _executable(false) {
+}
+
+// Simple constructor that overlays ReservedSpace atop of an existing mapping.
+// For now, small paged memory only.
+ReservedSpace::ReservedSpace(address base, size_t size) : _base(base), _size(size), _noaccess_prefix(0),
+    _alignment(os::vm_page_size()), _page_size(os::vm_page_size()),
+    _special(false), _fd_for_heap(-1), _executable(false)
+{
+  assert(is_aligned(_base, os::vm_allocation_granularity()), "invalid base");
+  assert(is_aligned(_size, os::vm_page_size()), "invalid size");
+}
+
+// Overlay RS over existing mapping.
+void ReservedSpace::set_from_existing_mapping(address base, size_t size) {
+  assert(is_aligned(base, os::vm_allocation_granularity()), "invalid base");
+  assert(is_aligned(size, os::vm_page_size()), "invalid size");
+  _base = base;
+  _size = size;
+  _noaccess_prefix = 0;
+  _alignment = os::vm_page_size();
+  _page_size = os::vm_page_size();
+  _special = false;
+  _fd_for_heap = -1;
+  _executable = false;
 }
 
 ReservedSpace::ReservedSpace(size_t size) : _fd_for_heap(-1) {

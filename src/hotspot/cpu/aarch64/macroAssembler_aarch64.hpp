@@ -86,19 +86,6 @@ class MacroAssembler: public Assembler {
 
   void call_VM_helper(Register oop_result, address entry_point, int number_of_arguments, bool check_exceptions = true);
 
-  enum KlassDecodeMode {
-    KlassDecodeNone,
-    KlassDecodeZero,
-    KlassDecodeXor,
-    KlassDecodeMovk
-  };
-
-  KlassDecodeMode klass_decode_mode();
-
- private:
-  static KlassDecodeMode _klass_decode_mode;
-
- public:
   MacroAssembler(CodeBuffer* code) : Assembler(code) {}
 
  // These routines should emit JVMTI PopFrame and ForceEarlyReturn handling code.

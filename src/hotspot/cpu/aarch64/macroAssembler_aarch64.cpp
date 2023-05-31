@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2014, 2021, Red Hat Inc. All rights reserved.
+ * Copyright (c) 2014, 2023, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -45,6 +45,7 @@
 #include "memory/universe.hpp"
 #include "nativeInst_aarch64.hpp"
 #include "oops/accessDecorators.hpp"
+#include "oops/compressedKlass.inline.hpp"
 #include "oops/compressedOops.inline.hpp"
 #include "oops/klass.inline.hpp"
 #include "runtime/continuation.hpp"
@@ -4521,71 +4522,8 @@ void  MacroAssembler::decode_heap_oop_not_null(Register dst, Register src) {
   }
 }
 
-MacroAssembler::KlassDecodeMode MacroAssembler::_klass_decode_mode(KlassDecodeNone);
-
-MacroAssembler::KlassDecodeMode MacroAssembler::klass_decode_mode() {
-  assert(UseCompressedClassPointers, "not using compressed class pointers");
-  assert(Metaspace::initialized(), "metaspace not initialized yet");
-
-  if (_klass_decode_mode != KlassDecodeNone) {
-    return _klass_decode_mode;
-  }
-
-  assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift()
-         || 0 == CompressedKlassPointers::shift(), "decode alg wrong");
-
-  if (CompressedKlassPointers::base() == nullptr) {
-    return (_klass_decode_mode = KlassDecodeZero);
-  }
-
-  if (operand_valid_for_logical_immediate(
-        /*is32*/false, (uint64_t)CompressedKlassPointers::base())) {
-    const uint64_t range_mask =
-      (1ULL << log2i(CompressedKlassPointers::range())) - 1;
-    if (((uint64_t)CompressedKlassPointers::base() & range_mask) == 0) {
-      return (_klass_decode_mode = KlassDecodeXor);
-    }
-  }
-
-  const uint64_t shifted_base =
-    (uint64_t)CompressedKlassPointers::base() >> CompressedKlassPointers::shift();
-  guarantee((shifted_base & 0xffff0000ffffffff) == 0,
-            "compressed class base bad alignment");
-
-  return (_klass_decode_mode = KlassDecodeMovk);
-}
-
 void MacroAssembler::encode_klass_not_null(Register dst, Register src) {
-  switch (klass_decode_mode()) {
-  case KlassDecodeZero:
-    if (CompressedKlassPointers::shift() != 0) {
-      lsr(dst, src, LogKlassAlignmentInBytes);
-    } else {
-      if (dst != src) mov(dst, src);
-    }
-    break;
-
-  case KlassDecodeXor:
-    if (CompressedKlassPointers::shift() != 0) {
-      eor(dst, src, (uint64_t)CompressedKlassPointers::base());
-      lsr(dst, dst, LogKlassAlignmentInBytes);
-    } else {
-      eor(dst, src, (uint64_t)CompressedKlassPointers::base());
-    }
-    break;
-
-  case KlassDecodeMovk:
-    if (CompressedKlassPointers::shift() != 0) {
-      ubfx(dst, src, LogKlassAlignmentInBytes, 32);
-    } else {
-      movw(dst, src);
-    }
-    break;
-
-  case KlassDecodeNone:
-    ShouldNotReachHere();
-    break;
-  }
+  CompressedKlassPointers.pd().encode_klass_not_null(this, dst, src);
 }
 
 void MacroAssembler::encode_klass_not_null(Register r) {
@@ -4593,44 +4531,8 @@ void MacroAssembler::encode_klass_not_null(Register r) {
 }
 
 void  MacroAssembler::decode_klass_not_null(Register dst, Register src) {
+  CompressedKlassPointers.pd().decode_klass_not_null(this, dst, src);
   assert (UseCompressedClassPointers, "should only be used for compressed headers");
-
-  switch (klass_decode_mode()) {
-  case KlassDecodeZero:
-    if (CompressedKlassPointers::shift() != 0) {
-      lsl(dst, src, LogKlassAlignmentInBytes);
-    } else {
-      if (dst != src) mov(dst, src);
-    }
-    break;
-
-  case KlassDecodeXor:
-    if (CompressedKlassPointers::shift() != 0) {
-      lsl(dst, src, LogKlassAlignmentInBytes);
-      eor(dst, dst, (uint64_t)CompressedKlassPointers::base());
-    } else {
-      eor(dst, src, (uint64_t)CompressedKlassPointers::base());
-    }
-    break;
-
-  case KlassDecodeMovk: {
-    const uint64_t shifted_base =
-      (uint64_t)CompressedKlassPointers::base() >> CompressedKlassPointers::shift();
-
-    if (dst != src) movw(dst, src);
-    movk(dst, shifted_base >> 32, 32);
-
-    if (CompressedKlassPointers::shift() != 0) {
-      lsl(dst, dst, LogKlassAlignmentInBytes);
-    }
-
-    break;
-  }
-
-  case KlassDecodeNone:
-    ShouldNotReachHere();
-    break;
-  }
 }
 
 void  MacroAssembler::decode_klass_not_null(Register r) {

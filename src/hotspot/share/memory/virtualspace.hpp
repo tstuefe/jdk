@@ -79,6 +79,13 @@ class ReservedSpace {
   ReservedSpace(size_t size, size_t alignment, size_t page_size,
                 char* requested_address = nullptr);
 
+  // Simple constructor that overlays ReservedSpace atop of an existing mapping.
+  // For now, small paged memory only.
+  ReservedSpace(address base, size_t size);
+
+  // Overlay RS over existing mapping.
+  void set_from_existing_mapping(address base, size_t size);
+
   // Accessors
   char*  base()            const { return _base;      }
   size_t size()            const { return _size;      }

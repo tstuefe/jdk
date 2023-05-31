@@ -48,14 +48,14 @@ extern int NarrowKlassPointerBits;
 // Or, the size of the alignment shadow of a valid Klass* pointer.
 // Or, the interval at which Klass structures can be located.
 extern int LogKlassAlignmentInBytes;
-extern int KlassAlignmentInBytes;
+extern size_t KlassAlignmentInBytes;
 extern int KlassAlignmentInWords;
 
 // How many valid values can be expressed with an nKlass (aka 1<<NarrowKlassPointerBits)
 extern uint64_t NarrowKlassPointerValueRange;
 
 // The maximum size of the range that can be encoded with the current nKlass geometry
-extern size_t KlassEncodingMetaspaceMax;
+//extern size_t KlassEncodingMetaspaceMax;
 
 #else
 // Most of the compressed class pointer encoding gets compiled for 32-bit too, even though
@@ -71,69 +71,24 @@ const uint64_t KlassEncodingMetaspaceMax = (uint64_t(max_juint) + 1) << LogKlass
 
 typedef uint32_t narrowKlass;
 
-class CompressedKlassPointerSettings {
-
-  // A dense representation of values that are frequently used together, in order to fold
-  // them into a single load:
-  // - UseCompactObjectHeaders and UseCompressedClassPointers flags
-  // - encoding base and encoding shift
-  // All of them we can encode in a 64-bit word. Since the encoding base will be page-aligned,
-  // we have a 12-bit alignment shadow to store the rest of the data.
-
-  uintptr_t _config;
-  constexpr int useCompactObjectHeadersShift = 0;
-  constexpr int useCompressedClassPointersShift = 1;
-  constexpr int encodingShiftShift = 2;
-  constexpr int encodingShiftWidth = 5;
-  constexpr int baseAddressMask = ~right_n_bits(12);
-
-public:
-
-  CompressedKlassPointerSettings() : _config(0) {}
-
-  void set_encoding_base(address base);
-  void set_encoding_shift(int shift);
-  void set_use_compact_headers(bool b);
-  void set_use_compressed_class_pointers(bool b);
-
-  address base() const  { return (address)(_config & baseAddressMask); }
-  int shift() const     { return (_config >> encodingShiftShift) & right_n_bits(encodingShiftWidth); }
-  bool use_compact_object_headers() const     { return (_config >> useCompactObjectHeadersShift) & 1; }
-  bool use_compressed_class_pointers() const  { return (_config >> useCompressedClassPointersShift) & 1; }
-
-  void print_mode_pd(outputStream* st) const;
-
-};
-
 class CompressedKlassPointers : public AllStatic {
 
-  static CompressedKlassPointerSettings _settings;
+  // Encoding base and shift
+  static address _base;
+  static int _shift;
 
-  // optional platform-specific details
+  // Optional platform-specific details
   static CompressedKlassPointerSettings_PD _pd;
 
-  // These members hold copies of encoding base and shift and only exist for SA (see vmStructs.cpp and
-  // sun/jvm/hotspot/oops/CompressedKlassPointers.java)
-  static address _base_copy;
-  static int _shift_copy;
+#ifdef ASSERT
+  // First and last valid Klass location
+  static address _kr1;
+  static address _kr2;
 
-  static void initialize_raw(address base, int shift);
-
-  // Platform specific hooks:
-
-  // Given a memory range [addr, addr + len) to be encoded (future Klass location range), set encoding.
-  static void initialize_pd(address addr, size_t len);
+  static void set_kr12(address klass_range_start, size_t klass_range_length);
+#endif
 
 public:
-
-  // Given a shift, calculate the max. memory range encoding would have given the current nKlass width
-  static inline size_t calc_encoding_range_size(int num_narrow_klass_bits, int shift);
-  static inline size_t calc_encoding_range_size(int shift);
-
-  static void set_encoding_base(address base)           { _settings.set_encoding_base(base); }
-  static void set_encoding_shift(int shift)             { _settings.set_encoding_shift(shift); }
-  static void set_use_compact_headers(bool b)           { _settings.set_use_compact_headers(b); }
-  static void set_use_compressed_class_pointers(bool b) { _settings.set_use_compressed_class_pointers(b); }
 
   // The decode/encode versions taking an explicit base are for the sole use of CDS during dump time
   // (see ArchiveBuilder).
@@ -142,44 +97,30 @@ public:
   static inline narrowKlass encode_not_null(Klass* v, address base);
   DEBUG_ONLY(static inline void verify_klass_pointer(const Klass* v, address base));
 
-  static void print_mode_pd(outputStream* st)           { _settings.print_mode_pd(st); }
+  static const CompressedKlassPointerSettings_PD& pd() const { return _pd; }
 
-  // Given an address p, return true if p can be used as an encoding base.
-  //  (Some platforms have restrictions of what constitutes a valid base
-  //   address).
-  static bool is_valid_base(address p);
+  // Given a memory range to be encoded (future Klass range), chose a suitable encoding scheme
+  void initialize(address klass_range_start, size_t klass_range_length);
 
   // Given:
-  // - a memory range [addr, addr + len) to be encoded (future Klass location range)
-  // - a desired encoding base and shift
-  // if the desired encoding base and shift are suitable to encode the desired memory range, initialize
-  // CompressedClassPointers with the desired base/shift, and return true. Otherwise return false.
-  // Used to initialize compressed class pointer encoding for the CDS runtime case, where we would really
-  // prefer the encoding base and shift used when the archive was generated, but where due to runtime condition
-  // the CDS may have been mapped at a different base, or where the to-be-encoded range is larger than at dump time
-  // (e.g. larger CompressedClassSPaceSize).
-  bool attempt_initialize_for_encoding(address addr, size_t len, address desired_base, int desired_shift);
+  // - a memory range to be encoded (future Klass range)
+  // - a preferred encoding base and shift
+  // If the desired encoding base and shift can be used for encoding, use that and return true; return false otherwise.
+  // This is used for the CDS runtime case, where the archive we load pre-determines a base and shift value, but which may or may
+  // not fit the range we actually managed to reserve.
+  bool attempt_initialize_for_encoding(address klass_range_start, size_t klass_range_length,
+                                       address desired_base, int desired_shift);
 
-  // Given a memory range [addr, addr + len) to be encoded (future Klass location range),
-  // choose base and shift.
-  void initialize(address addr, size_t len);
+  // attempt to reserve a memory range well suited to compressed class encoding
+  address reserve_klass_range(size_t len);
 
-  static void print_mode(outputStream* st);
+  static void print_on(outputStream* st);
 
   // The encoding base and shift. Note that this shift is not necessarily the same as
   // LogKlassAlignmentInBytes - a platform could avoid the shift if the reduced encoding
   // range would still be large enough to encode all possible Klass* values.
-  static inline address base()                       { return _settings.base(); }
-  static inline int shift()                          { return _settings.shift(); }
-  static inline bool use_compact_object_headers()    { return _settings.use_compact_object_headers(); }
-  static inline bool use_compressed_class_pointers() { return _settings.use_compressed_class_pointers(); }
-
-  // Encoding range size
-  static inline size_t encoding_range_size();
-
-  // End of encoding range
-  static inline address end();
-
+  static inline address base()                       { return _base; }
+  static inline int shift()                          { return _shift; }
 
   static bool is_null(Klass* v)      { return v == nullptr; }
   static bool is_null(narrowKlass v) { return v == 0; }
@@ -192,9 +133,8 @@ public:
 
   DEBUG_ONLY(static inline void verify_klass_pointer(const Klass* v));
   DEBUG_ONLY(static inline void verify_narrow_klass_pointer(narrowKlass v);)
-
-  const CompressedKlass_PD& pd() { return _pd; }
+  DEBUG_ONLY(static void verify());
 
 };
 
-#endif // SHARE_OOPS_COMPRESSEDOOPS_HPP
+#endif // SHARE_OOPS_COMPRESSEDKLASS_HPP

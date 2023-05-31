@@ -32,23 +32,6 @@
 #include "utilities/align.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-
-inline size_t CompressedKlassPointers::calc_encoding_range_size(int num_narrow_klass_bits, int shift) {
-  return nth_bit(num_narrow_klass_bits + shift);
-}
-
-inline size_t CompressedKlassPointers::calc_encoding_range_size(int shift) {
-  return calc_encoding_range_size(NarrowKlassPointerBits, shift);
-}
-
-inline size_t CompressedKlassPointers::encoding_range_size() {
-  return calc_encoding_range_size(shift());
-}
-
-inline address CompressedKlassPointers::end() {
-  return base() + encoding_range_size();
-}
-
 inline Klass* CompressedKlassPointers::decode_raw(narrowKlass v) {
   return decode_raw(v, base());
 }
@@ -96,9 +79,8 @@ inline void CompressedKlassPointers::verify_klass_pointer(const Klass* v, addres
   // Must be properly aligned...
   assert(is_aligned(v, KlassAlignmentInBytes), "misaligned Klass* pointer (" PTR_FORMAT ")", p2i(v));
   // ... and live within the encoding range
-  assert((address)v >= narrow_base && (address)v < end,
-         "Klass (" PTR_FORMAT ") located outside encoding range [" PTR_FORMAT ", " PTR_FORMAT ")",
-         p2i(v), p2i(narrow_base), p2i(end));
+  assert(v >= _kr1 && v <= _kr2, "Klass (" PTR_FORMAT ") located outside klass range [" PTR_FORMAT ", " PTR_FORMAT ")",
+         p2i(v), p2i(_kr1), p2i(_kr2));
 }
 
 inline void CompressedKlassPointers::verify_klass_pointer(const Klass* v) {
@@ -109,6 +91,6 @@ inline void CompressedKlassPointers::verify_narrow_klass_pointer(narrowKlass v) 
   // Make sure we only use the lower n bits
   assert((uint64_t)v < NarrowKlassPointerValueRange, "%x: not a valid narrow klass pointer", v);
 }
-#endif
+#endif // ASSERT
 
 #endif // SHARE_OOPS_COMPRESSEDOOPS_HPP

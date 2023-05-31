@@ -30,9 +30,29 @@
 
 class CompressedKlassPointerSettings_PD {
 
+  // Base, shift
+  address _base;
+  int _shift;
 
+public:
 
+  CompressedKlassPointerSettings_PD();
+
+  // Given a klass range, initialize to use the best encoding (if it exists)
+  bool attempt_initialize(address kr1, address kr2);
+
+  // "reverse-initialize" from a given base and shift, for a given klass range (called for the CDS runtime path)
+  bool attempt_initialize_for_fixed_base_and_shift(address base, int shift, address kr1, address kr2);
+
+  // attempt to reserve a memory range well suited to compressed class encoding
+  static address reserve_klass_range(size_t len);
+
+  address base() const  { return _base; }
+  int shift() const     { return _shift; }
+
+  void print_on(outputStream* st) const;
+
+  DEBUG_ONLY(void verify() const;)
 };
-
 
 #endif // CPU_X86_COMPRESSEDKLASS_X86_HPP

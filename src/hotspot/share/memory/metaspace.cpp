@@ -49,6 +49,7 @@
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "oops/compressedOops.hpp"
+#include "oops/compressedKlass.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/globals_extension.hpp"
@@ -581,74 +582,6 @@ bool Metaspace::class_space_is_initialized() {
   return MetaspaceContext::context_class() != nullptr;
 }
 
-// Reserve a range of memory at an address suitable for en/decoding narrow
-// Klass pointers (see: CompressedClassPointers::is_valid_base()).
-// The returned address shall both be suitable as a compressed class pointers
-//  base, and aligned to Metaspace::reserve_alignment (which is equal to or a
-//  multiple of allocation granularity).
-// On error, returns an unreserved space.
-ReservedSpace Metaspace::reserve_address_space_for_compressed_classes(size_t size) {
-
-  // Note: code below is broken and needs rethinking since it confuses encoding base
-  // with compressed class space attach address; both don't have be the same.
-  // That is also the reason why we atm don't get zero-based encoding for aarch.
-  // Comment is also wrong, at least for 9-bit shift.
-
-  // Will be fixed. For now it works well enough.
-
-#if defined(AARCH64) || defined(PPC64)
-  const size_t alignment = Metaspace::reserve_alignment();
-
-  // AArch64: Try to align metaspace so that we can decode a compressed
-  // klass with a single MOVK instruction. We can do this iff the
-  // compressed class base is a multiple of 4G.
-  // Additionally, above 32G, ensure the lower LogKlassAlignmentInBytes bits
-  // of the upper 32-bits of the address are zero so we can handle a shift
-  // when decoding.
-
-  // PPC64: smaller heaps up to 2g will be mapped just below 4g. Then the
-  // attempt to place the compressed class space just after the heap fails on
-  // Linux 4.1.42 and higher because the launcher is loaded at 4g
-  // (ELF_ET_DYN_BASE). In that case we reach here and search the address space
-  // below 32g to get a zerobased CCS. For simplicity we reuse the search
-  // strategy for AARCH64.
-
-  static const struct {
-    address from;
-    address to;
-    size_t increment;
-  } search_ranges[] = {
-    {  (address)(4*G),   (address)(32*G),   4*G, },
-    {  (address)(32*G),  (address)(1024*G), (4 << LogKlassAlignmentInBytes) * G },
-    {  nullptr, nullptr, 0 }
-  };
-
-  for (int i = 0; search_ranges[i].from != nullptr; i ++) {
-    address a = search_ranges[i].from;
-    if (CompressedKlassPointers::is_valid_base(a)) {
-      while (a < search_ranges[i].to) {
-        ReservedSpace rs(size, Metaspace::reserve_alignment(),
-                         os::vm_page_size(), (char*)a);
-        if (rs.is_reserved()) {
-          assert(a == (address)rs.base(), "Sanity");
-          return rs;
-        }
-        a +=  search_ranges[i].increment;
-      }
-    }
-  }
-#endif // defined(AARCH64) || defined(PPC64)
-
-#ifdef AARCH64
-  // Note: on AARCH64, if the code above does not find any good placement, we
-  // have no recourse. We return an empty space and the VM will exit.
-  return ReservedSpace();
-#else
-  // Default implementation: Just reserve anywhere.
-  return ReservedSpace(size, Metaspace::reserve_alignment(), os::vm_page_size(), (char*)nullptr);
-#endif // AARCH64
-}
-
 #endif // _LP64
 
 size_t Metaspace::reserve_alignment_words() {
@@ -797,27 +730,12 @@ void Metaspace::global_initialize() {
       }
     }
 
+    // ...failing that, defer to platform
     if (!rs.is_reserved()) {
-      // If UseCompressedOops=1 and the java heap has been placed in coops-friendly
-      //  territory, i.e. its base is under 32G, then we attempt to place ccs
-      //  right above the java heap.
-      // Otherwise the lower 32G are still free. We try to place ccs at the lowest
-      // allowed mapping address.
-      base = (UseCompressedOops && (uint64_t)CompressedOops::base() < OopEncodingHeapMax) ?
-              CompressedOops::end() : (address)HeapBaseMinAddress;
-      base = align_up(base, Metaspace::reserve_alignment());
-
+      address base = CompressedClassPointers::reserve_klass_range(size);
       if (base != nullptr) {
-        if (CompressedKlassPointers::is_valid_base(base)) {
-          rs = ReservedSpace(size, Metaspace::reserve_alignment(),
-                             os::vm_page_size(), (char*)base);
-        }
+        rs.set_from_existing_mapping(base, size);
       }
-    }
-
-    // ...failing that, reserve anywhere, but let platform do optimized placement:
-    if (!rs.is_reserved()) {
-      rs = Metaspace::reserve_address_space_for_compressed_classes(size);
     }
 
     // ...failing that, give up.
@@ -864,7 +782,7 @@ void Metaspace::global_initialize() {
       LogStream ls(lt);
       CDS_ONLY(MetaspaceShared::print_on(&ls);)
       Metaspace::print_compressed_class_space(&ls);
-      CompressedKlassPointers::print_mode(&ls);
+      CompressedKlassPointers::print_on(&ls);
     }
   }
 #endif

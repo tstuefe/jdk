@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2021 SAP SE. All rights reserved.
  * Copyright (c) 2023 Red Hat, Inc. All rights reserved.
  * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021 SAP SE. All rights reserved.
  *
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -34,114 +34,118 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
 
-CompressedKlassPointerSettings CompressedKlassPointers::_settings;
-address CompressedKlassPointers::_base_copy = nullptr;
-int CompressedKlassPointers::_shift_copy = 0;
-
 #ifdef _LP64
+
 int NarrowKlassPointerBits = -1;
 int LogKlassAlignmentInBytes = -1;
-int KlassAlignmentInBytes = -1;
+size_t KlassAlignmentInBytes = -1;
 int KlassAlignmentInWords = -1;
 uint64_t NarrowKlassPointerValueRange = 0;
-size_t KlassEncodingMetaspaceMax = 0;
+
+address CompressedKlassPointers::_base;
+int CompressedKlassPointers::_shift;
+CompressedKlassPointerSettings_PD CompressedKlassPointers::_pd;
+#ifdef ASSERT
+address CompressedKlassPointers::_kr1 = nullptr;
+address CompressedKlassPointers::_kr2 = nullptr;
 #endif
 
-static void CompressedKlassPointers::initialize_raw(address base, int shift) {
-  _settings.set_encoding_base(base);
-  _settings.set_encoding_shift(shift);
-  _settings.set_use_compact_headers(UseCompactObjectHeaders);
-  _settings.set_use_compressed_class_pointers(UseCompressedClassPointers);
-  _base_copy = base;
-  _shift_copy = shift;
+void CompressedKlassPointers::set_kr12(address klass_range_start, size_t klass_range_length) {
+  _kr1 = align_up(klass_range_start, LogKlassAlignmentInBytes);
+  _kr2 = align_down(klass_range_start + klass_range_length - 1, LogKlassAlignmentInBytes);
+  assert(_kr2 > _kr1, "Sanity");
+}
+
+// Given a memory range to be encoded (future Klass range), chose a suitable encoding scheme
+void CompressedKlassPointers::initialize(address klass_range_start, size_t klass_range_length) {
+  set_kr12(klass_range_start, klass_range_length);
+  if (_pd.attempt_initialize(_kr1, _kr2)) {
+    _base = pd().base();
+    _shift = pd().shift();
+  } else {
+    fatal("Failed to initialize CCS encoding"); // Todo
+  }
 }
 
 // Given:
-// - a memory range [addr, addr + len) to be encoded (future Klass location range)
-// - a desired encoding base and shift
-// if the desired encoding base and shift are suitable to encode the desired memory range, use them
-// and return true. Otherwise return false.
-// Used to initialize compressed class pointer encoding for the CDS runtime case, where we prefer to use
-// the same encoding base and shift as we used at archive dump time. But since the CDS archive may be located
-// at a different base address or class space may be larger and hence to-be-encoded range may be larger than at
-// dump time, the desired base/shift are not a guaranteed fit.
-bool CompressedKlassPointers::attempt_initialize_for_encoding(address addr, size_t len, address desired_base, int desired_shift) {
-#ifdef _LP64
-  assert(UseCompressedClassPointers, "Only for +UseCompressedClassPointers");
-  assert(UseSharedSpaces, "Only at CDS runtime");
-  assert(len <= KlassEncodingMetaspaceMax,
-         "to be encoded range is too large to be covered by Klass encoding");
-  assert(NarrowKlassPointerBits + desired_shift < BitsPerLong, "Invalid proposed shift (%d)", desired_shift);s
-  assert(desired_shift <= LogKlassAlignmentInBytes,
-         "Archive narrow Klass shift (%d) > LogKlassAlignmentInBytes (%d) - are we using the wrong archive?",
-         desired_shift, LogKlassAlignmentInBytes);
-
-  // Does the proposed encoding scheme cover all of the to-be-encoded range?
-  const size_t encoding_range_size = calc_encoding_range_size(NarrowKlassPointerBits, desired_shift);
-  if (desired_base <= addr && (desired_base + encoding_range_size) >= (addr + len)) {
-    // Yes, we can use this.
-    initialize_raw(desired_base, desired_shift);
+// - a memory range to be encoded (future Klass range)
+// - a preferred encoding base and shift
+// If the desired encoding base and shift can be used for encoding, use that and return true; return false otherwise.
+// This is used for the CDS runtime case, where the archive we load pre-determines a base and shift value, but which may or may
+// not fit the range we actually managed to reserve.
+bool CompressedKlassPointers::attempt_initialize_for_encoding(address klass_range_start, size_t klass_range_length, address desired_base, int desired_shift) {
+  set_kr12(klass_range_start, klass_range_length);
+  if (_pd.attempt_initialize_for_fixed_base_and_shift(desired_base, desired_shift, _kr1, _kr2)) {
+    _base = pd().base();
+    _shift = pd().shift();
     return true;
   }
-
-#else
-  ShouldNotReachHere();
-#endif // _LP64
-
-  return false;
 }
 
-// Given a memory range [addr, addr + len) to be encoded (future Klass location range),
-// choose base and shift.
-void CompressedKlassPointers::initialize(address addr, size_t len) {
-#ifdef _LP64
-  assert(UseCompressedClassPointers, "Only for CCS");
-  assert(len <= KlassEncodingMetaspaceMax,
-         "to be encoded range is too large to be covered by Klass encoding");
+// Attempt to reserve a memory range well suited to compressed class encoding
+address CompressedKlassPointers::reserve_klass_range(size_t len) {
 
-  initialize_pd(addr, len);
+  len = align_up(len, os::vm_allocation_granularity());
+  address result = nullptr;
 
-  // Double check base/shift proposed by the platfom
-  assert(NarrowKlassPointerBits + shift() < BitsPerLong, "Invalid proposed shift (%d)", shift());
-  assert(shift() <= LogKlassAlignmentInBytes, "Invalid proposed shift (%d), larger than LogKlassAlignmentInBytes (%d)",
-         shift(), LogKlassAlignmentInBytes);
-  const size_t encoding_range_size = nth_bit(NarrowKlassPointerBits + shift());
-  assert(encoding_range_size >= len, "Invalid proposed shift (%d), not large enough to encode Klass range "
-         "[" PTR_FORMAT "-" PTR_FORMAT ")", shift(), p2i(addr), p2i(addr + len));
-  assert(base() <= addr && (base() + encoding_range_size) >= (addr + len),
-         "Invalid proposed base (" PTR_FORMAT ") and shift (%d), does not cover Klass range "
-         "[" PTR_FORMAT "-" PTR_FORMAT ")", p2i(base()), shift(), p2i(addr), p2i(addr + len));
+  // Attempt to allocate for zero-based encoding:
+  // This is useful for all platforms, so do this here.
+  for (int shift = 0; result == nullptr && shift <= LogKlassAlignmentInBytes; shift++) {
+    const size_t encoding_size = nth_bit(shift + NarrowKlassPointerBits);
+    if (encoding_size >= len) {
+      const address base = (address)(encoding_size - len);
+      address p = (address)os::attempt_reserve_memory_at((char*)base, len, false); // Todo tag??
+    }
+  }
 
-#else
-  ShouldNotReachHere(); // 64-bit only
-#endif
+  // Otherwise ask platform
+  if (result == nullptr) {
+    result = pd().reserve_klass_range(len);
+  }
 
+  // Failing that (or, if the platform does not care), reserve anywhere and hope for the best
+  result = os::reserve_memory(len, false, mtMetaspace);
+
+  // Todo: NMT tag memory
+
+  return result;
 }
 
-void CompressedKlassPointers::print_mode(outputStream* st) {
+void CompressedKlassPointers::print_on(outputStream* st) {
+
   st->print_cr("UseCompactObjectHeaders: %d", UseCompactObjectHeaders);
   st->print_cr("UseCompressedClassPointers: %d", UseCompressedClassPointers);
+
+  st->print_cr("UseSharedSpaces: %d", UseSharedSpaces);
+  st->print_cr("DumpSharedSpaces: %d", DumpSharedSpaces);
+
+  st->print_cr("NarrowKlassPointerBits: %d", NarrowKlassPointerBits);
   st->print_cr("LogKlassAlignmentInBytes: %d", LogKlassAlignmentInBytes);
-  st->print_cr("KlassAlignmentInBytes: %d", KlassAlignmentInBytes);
-  st->print_cr("MaxNarrowKlassPointerBits: %d", MaxNarrowKlassPointerBits);
+  st->print_cr("KlassAlignmentInBytes: " SIZE_FORMAT, KlassAlignmentInBytes);
   st->print_cr("NarrowKlassPointerValueRange: " UINT64_FORMAT, NarrowKlassPointerValueRange);
-#ifdef _LP64
-  st->print_cr("KlassEncodingMetaspaceMax: " UINT64_FORMAT " (" UINT64_FORMAT_X ")", KlassEncodingMetaspaceMax, KlassEncodingMetaspaceMax);
-  st->print_cr("Narrow klass base: " PTR_FORMAT ", Narrow klass shift: %d, "
-               "Narrow klass range: " SIZE_FORMAT_X "( " PROPERFMT ")",
-               p2i(base()), shift(), KlassEncodingMetaspaceMax, PROPERFMTARGS(KlassEncodingMetaspaceMax));
-  print_mode_pd(st);
+
+#ifdef ASSERT
+  st->print_cr("Klass range: " PTR_FORMAT "-" PTR_FORMAT ", (" SIZE_FORMAT " bytes)",
+      p2i(_kr1), p2i(_kr2), (size_t)(_kr2 - _kr1));
 #endif
+
+  st->print_cr("Encoding base: " PTR_FORMAT, p2i(base()));
+  st->print_cr("Encoding shift: %d", _shift);
+  const size_t encoding_range = nth_bit(NarrowKlassPointerBits + shift());
+  st->print_cr("Theoretical encoding range: " PTR_FORMAT "-" PTR_FORMAT ", (" SIZE_FORMAT " bytes)",
+      p2i(base()), p2i(base() + encoding_range), encoding_range);
+
+  // Print platform specifics
+  pd().print_on(st);
 }
 
-// 64-bit platforms define these functions on a per-platform base. They are not needed for
-//  32-bit (in fact, the whole setup is not needed and could be excluded from compilation,
-//  but that is a question for another RFE).
-#ifndef _LP64
-// Given an address p, return true if p can be used as an encoding base.
-//  (Some platforms have restrictions of what constitutes a valid base address).
-bool CompressedKlassPointers::is_valid_base(address p) {
-  ShouldNotReachHere(); // 64-bit only
-  return false;
+#ifdef ASSERT
+void CompressedKlassPointers::verify() const {
+  assert(base() == pd().base() && shift() == pd().shift(), "Sanity");
+  const size_t encoding_range = nth_bit(NarrowKlassPointerBits + shift());
+  assert(base() <= _kr1 && (base() + encoding_range) > _kr2, "Encoding not large enough");
+  pd().verify();
 }
 #endif
+
+#endif // _LP64
