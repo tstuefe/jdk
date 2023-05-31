@@ -218,10 +218,38 @@ static char* compute_shared_base(size_t cds_max) {
   char* specified_base = (char*)SharedBaseAddress;
   char* aligned_base = align_up(specified_base, MetaspaceShared::core_region_alignment());
 
+  // At dump time, the user may have us given an explicit SharedBaseAddress that overrides
+  // our default. Later, at runtime, that address will be the start of the klass range. Here,
+  // at dumptime, we want to make as sure as possible that the future klass range can be encoded
+  // for use with compressed class pointers.
+  //
+  // Unfortunately, here we miss the runtime information of how large that klass range is
+  // gonna be. That size is determined by
+  // - the future archive size
+  // - the size of the future class space
+  // In order to weed out values for SharedBaseAddress that are likely to fail at runtime,
+  // we need to assume a size of the future klass range.
+  // Older JVMs applied the implicit knowledge that the klass range cannot be larger than
+  // 4G (3G capped class space, plus archive size that is assumed to be < 1G). This is too
+  // generous, and for different nKlass geometries it can be wrong. Too generous, since it
+  // effectively prevents any SharedBaseAddress that would allow zero-based encoding without
+  // shift. Wrong, since with different nKlass geometries the klass range may be larger than
+  // 4GB. Note that the former is much more likely than the latter.
+  //
+
+  size_t future_klass_range_length = 0;
+#ifdef _LP64
+  future_klass_range_length = 4 * G;
+#else
+  // We don't support archives larger than 256MB on 32-bit due to limited
+  //  virtual address space.
+  future_klass_range_length = 256 * G;
+#endif
+
   const char* err = nullptr;
   if (shared_base_too_high(specified_base, aligned_base, cds_max)) {
     err = "too high";
-  } else if (!shared_base_valid(aligned_base)) {
+  } else if (!CompressedKlassPointers::can_encode_klass_range((address)specified_base, future_klass_range_length)) {
     err = "invalid for this platform";
   } else {
     return aligned_base;

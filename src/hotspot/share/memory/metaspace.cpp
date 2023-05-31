@@ -732,7 +732,7 @@ void Metaspace::global_initialize() {
 
     // ...failing that, defer to platform
     if (!rs.is_reserved()) {
-      address base = CompressedClassPointers::reserve_klass_range(size);
+      address base = CompressedKlassPointers::reserve_klass_range(size);
       if (base != nullptr) {
         rs.set_from_existing_mapping(base, size);
       }
@@ -749,7 +749,9 @@ void Metaspace::global_initialize() {
     Metaspace::initialize_class_space(rs);
 
     // Set up compressed class pointer encoding.
-    CompressedKlassPointers::initialize((address)rs.base(), rs.size());
+    if (!CompressedKlassPointers::attempt_initialize((address)rs.base(), rs.size())) {
+      vm_exit_during_initialization(err_msg("Could not find a suitable compressed class space encoding scheme"));
+    }
   }
 
 #endif

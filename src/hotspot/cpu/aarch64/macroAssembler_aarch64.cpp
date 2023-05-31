@@ -4523,7 +4523,7 @@ void  MacroAssembler::decode_heap_oop_not_null(Register dst, Register src) {
 }
 
 void MacroAssembler::encode_klass_not_null(Register dst, Register src) {
-  CompressedKlassPointers.pd().encode_klass_not_null(this, dst, src);
+  CompressedKlassPointers::pd().encode_klass_not_null(this, dst, src);
 }
 
 void MacroAssembler::encode_klass_not_null(Register r) {
@@ -4531,7 +4531,7 @@ void MacroAssembler::encode_klass_not_null(Register r) {
 }
 
 void  MacroAssembler::decode_klass_not_null(Register dst, Register src) {
-  CompressedKlassPointers.pd().decode_klass_not_null(this, dst, src);
+  CompressedKlassPointers::pd().decode_klass_not_null(this, dst, src);
   assert (UseCompressedClassPointers, "should only be used for compressed headers");
 }
 

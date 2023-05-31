@@ -79,7 +79,7 @@ inline void CompressedKlassPointers::verify_klass_pointer(const Klass* v, addres
   // Must be properly aligned...
   assert(is_aligned(v, KlassAlignmentInBytes), "misaligned Klass* pointer (" PTR_FORMAT ")", p2i(v));
   // ... and live within the encoding range
-  assert(v >= _kr1 && v <= _kr2, "Klass (" PTR_FORMAT ") located outside klass range [" PTR_FORMAT ", " PTR_FORMAT ")",
+  assert((address)v >= _kr1 && (address)v <= _kr2, "Klass (" PTR_FORMAT ") located outside klass range [" PTR_FORMAT ", " PTR_FORMAT ")",
          p2i(v), p2i(_kr1), p2i(_kr2));
 }
 

@@ -42,6 +42,7 @@
 #include "logging/logTag.hpp"
 #include "memory/allocation.inline.hpp"
 #include "oops/instanceKlass.hpp"
+#include "oops/compressedKlass.hpp"
 #include "oops/oop.inline.hpp"
 #include "prims/jvmtiAgentList.hpp"
 #include "prims/jvmtiExport.hpp"
@@ -1487,7 +1488,7 @@ void Arguments::set_use_compressed_klass_ptrs() {
   if (UseCompactObjectHeaders) {
     // 512 byte alignment, 22-bit values (Lilliput)
     LogKlassAlignmentInBytes = 9;
-    MaxNarrowKlassPointerBits = 22;
+    NarrowKlassPointerBits = 22;
     if (!UseCompressedClassPointers) {
       // Default for UCCP should be true
       if (FLAG_IS_DEFAULT(UseCompressedClassPointers)) {
@@ -1501,14 +1502,13 @@ void Arguments::set_use_compressed_klass_ptrs() {
   } else {
     // Traditional: 8 byte alignment, 32-bit values
     LogKlassAlignmentInBytes = 3;
-    MaxNarrowKlassPointerBits = 32;
+    NarrowKlassPointerBits = 32;
   }
 
-  NarrowKlassPointerValueRange = nth_bit(MaxNarrowKlassPointerBits);
+  NarrowKlassPointerValueRange = nth_bit(NarrowKlassPointerBits);
   KlassAlignmentInBytes = nth_bit(LogKlassAlignmentInBytes);
   assert(is_aligned(KlassAlignmentInBytes, BytesPerWord), "Must be at least word-sized");
   KlassAlignmentInWords = KlassAlignmentInBytes / BytesPerWord;
-  KlassEncodingMetaspaceMax = UCONST64(1) << (MaxNarrowKlassPointerBits + LogKlassAlignmentInBytes);
 #endif // _LP64
 }
 

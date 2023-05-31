@@ -180,7 +180,8 @@ JVMFlag::Error CompressedClassSpaceSizeConstraintFunc(size_t value, bool verbose
   // We can test (a) and (b) here, but not (c), since CDS is not yet initialized. Therefore we just test (a)
   // and (b) and leave testing (c) to later (see CompressedKlassPointers::initialize())
   const size_t artificial_legacy_cap = UseCompactObjectHeaders ? SIZE_MAX : 3 * G;
-  const size_t max_class_space_size = MIN2(KlassEncodingMetaspaceMax, artificial_legacy_cap);
+  const size_t theoretical_encoding_cap = nth_bit(NarrowKlassPointerBits + LogKlassAlignmentInBytes);
+  const size_t max_class_space_size = MIN2(theoretical_encoding_cap, artificial_legacy_cap);
   if (value > max_class_space_size) {
     JVMFlag::printError(verbose, "CompressedClassSpaceSize " SIZE_FORMAT " too large (max: " SIZE_FORMAT ")\n",
                         value, max_class_space_size);

@@ -50,7 +50,7 @@ CompressedKlassPointerSettings_PD::CompressedKlassPointerSettings_PD()
 
 bool CompressedKlassPointerSettings_PD::attempt_initialize_for_zero(address kr2) {
   for (int shift = 0; shift <= LogKlassAlignmentInBytes; shift++) {
-    if (kr2 < nth_bit(NarrowKlassPointerBits + shift)) {
+    if (kr2 < (address)nth_bit(NarrowKlassPointerBits + shift)) {
       _mode = Mode::KlassDecodeZero;
       _base = nullptr;
       _shift = shift;
@@ -69,11 +69,10 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_xor(address kr1, 
   // are difficult to predict, just try all valid shift values.
 
   for (int candidate_shift = 0; candidate_shift <= LogKlassAlignmentInBytes; candidate_shift++) {
-
     const size_t encoding_range_len = nth_bit(candidate_shift + NarrowKlassPointerBits);
 
     // Ignore shift values that are obviously too small
-    if (encoding_range_len < (kr2 - kr1)) {
+    if (encoding_range_len < (size_t)(kr2 - kr1)) {
       continue;
     }
 
@@ -103,7 +102,7 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_xor(address kr1, 
       const size_t base_alignment = nth_bit(bits_offset);
       const uint64_t candidate_base_rightshifted =
           calculate_next_lower_logical_immediate_matching((uint64_t)kr1 >> candidate_shift, base_alignment);
-      if (candidate_base_rightshifted != nullptr) {
+      if (candidate_base_rightshifted != 0) {
         assert(is_aligned(candidate_base_rightshifted, base_alignment), "Sanity");
         address candidate_base = (address)(candidate_base_rightshifted << candidate_shift);
         assert(candidate_base <= kr1, "Sanity");
@@ -154,7 +153,7 @@ public:
   }
 };
 
-class MovKParameters {
+class MovKParameters : public CHeapObj<mtMetaspace> {
 
   // Shift to use
   const int _shift;
@@ -182,7 +181,8 @@ class MovKParameters {
 
 public:
 
-  MovKParameters() : _shift(0), _do_rshift_base(false), _quads(0) {}
+  MovKParameters()
+    : _shift(0), _do_rshift_base(false), _quads(0) {}
 
   MovKParameters(address kr1, int shift, int num_base_quadrants, bool do_rshift_base)
     : _shift(shift), _do_rshift_base(do_rshift_base),
@@ -233,33 +233,34 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_movk(address kr1,
   // - we test for q2 too since that allows us to work with nKlass bit sizes that are very small,
   //   e.g. 16.
 
-  bool found = false;
-  MovKParameters best_so_far;
+  MovKParameters* best_so_far = nullptr;
 
   for (int shift = 0; shift <= LogKlassAlignmentInBytes; shift ++) {
     for (int num_base_quadrants = 1; num_base_quadrants <= 3; num_base_quadrants ++) {
       for (int do_rshift = 0; do_rshift < 2; do_rshift++) {
-        MovKParameters here(kr1, shift, num_base_quadrants, do_rshift == 1);
-        if (here.covers_klass_range(kr1, kr2)) {
-          if (!found || (here.num_ops() < best_so_far.num_ops())) {
+        MovKParameters* here = new MovKParameters(kr1, shift, num_base_quadrants, do_rshift == 1);
+        MovKParameters* deletethis = here;
+        if (here->covers_klass_range(kr1, kr2)) {
+          if (best_so_far == nullptr || (here->num_ops() < best_so_far->num_ops())) {
+            deletethis = best_so_far;
             best_so_far = here;
-            found = true;
           }
         }
+        delete deletethis;
       }
     }
   }
 
-  if (found) {
-    assert(best_so_far.covers_klass_range(kr1, kr2), "Sanity");
+  if (best_so_far != nullptr) {
+    assert(best_so_far->covers_klass_range(kr1, kr2), "Sanity");
     _mode = Mode::KlassDecodeMovk;
-    _base = best_so_far.base_unshifted();
-    _shift = best_so_far.shift();
-    _do_rshift_base = best_so_far.do_rshift_base();
+    _base = best_so_far->base_unshifted();
+    _shift = best_so_far->shift();
+    _do_rshift_base = best_so_far->do_rshift_base();
+    delete best_so_far;
     return true;
   }
   return false;
-
 }
 
 bool CompressedKlassPointerSettings_PD::attempt_initialize(address kr1, address kr2) {
@@ -440,7 +441,7 @@ void CompressedKlassPointerSettings_PD::print_on(outputStream* st) const {
   // Don't print base, shift, since those are printed at the caller already
   const char* const modes[] = { "none", "zero", "xor", "movk" };
   const int modei = (int)_mode;
-  assert(modei >= 0 && modei < (sizeof(modes)/sizeof(const char*)), "Sanity");
+  assert(modei >= 0 && modei < 4, "Sanity");
   st->print_cr("Encoding Mode: %s", modes[modei]);
   if (_mode == Mode::KlassDecodeMovk || _mode == Mode::KlassDecodeXor) {
     st->print_cr("Rshifted base: %d", _do_rshift_base);

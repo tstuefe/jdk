@@ -64,8 +64,8 @@ extern uint64_t NarrowKlassPointerValueRange;
 const int LogKlassAlignmentInBytes = 3; // traditional 64-bit alignment
 const int KlassAlignmentInBytes    = 1 << LogKlassAlignmentInBytes;
 const int KlassAlignmentInWords = KlassAlignmentInBytes / BytesPerWord;
-const int MaxNarrowKlassPointerBits = 32;
-const uint64_t NarrowKlassPointerValueRange = ((uint64_t)1) << MaxNarrowKlassPointerBits;
+const int NarrowKlassPointerBits = 32;
+const uint64_t NarrowKlassPointerValueRange = ((uint64_t)1) << NarrowKlassPointerBits;
 const uint64_t KlassEncodingMetaspaceMax = (uint64_t(max_juint) + 1) << LogKlassAlignmentInBytes;
 #endif
 
@@ -84,8 +84,6 @@ class CompressedKlassPointers : public AllStatic {
   // First and last valid Klass location
   static address _kr1;
   static address _kr2;
-
-  static void set_kr12(address klass_range_start, size_t klass_range_length);
 #endif
 
 public:
@@ -97,10 +95,15 @@ public:
   static inline narrowKlass encode_not_null(Klass* v, address base);
   DEBUG_ONLY(static inline void verify_klass_pointer(const Klass* v, address base));
 
-  static const CompressedKlassPointerSettings_PD& pd() const { return _pd; }
+  static const CompressedKlassPointerSettings_PD& pd() { return _pd; }
 
-  // Given a memory range to be encoded (future Klass range), chose a suitable encoding scheme
-  void initialize(address klass_range_start, size_t klass_range_length);
+  // Given a memory range to be encoded (future Klass range), chose a suitable encoding scheme and initialize encoding.
+  // Return false if there is no encoding that would work with the given klass range.
+  static bool attempt_initialize(address klass_range_start, size_t klass_range_length);
+
+  // Given a memory range to be encoded, test if that range can be encoded. Only used at
+  // CDS dumptime to check if a given (overridden via command line) SharedBaseAddress is feasible.
+  static bool can_encode_klass_range(address klass_range_start, size_t klass_range_length);
 
   // Given:
   // - a memory range to be encoded (future Klass range)
@@ -108,11 +111,11 @@ public:
   // If the desired encoding base and shift can be used for encoding, use that and return true; return false otherwise.
   // This is used for the CDS runtime case, where the archive we load pre-determines a base and shift value, but which may or may
   // not fit the range we actually managed to reserve.
-  bool attempt_initialize_for_encoding(address klass_range_start, size_t klass_range_length,
+  static bool attempt_initialize_for_encoding(address klass_range_start, size_t klass_range_length,
                                        address desired_base, int desired_shift);
 
   // attempt to reserve a memory range well suited to compressed class encoding
-  address reserve_klass_range(size_t len);
+  static address reserve_klass_range(size_t len);
 
   static void print_on(outputStream* st);
 

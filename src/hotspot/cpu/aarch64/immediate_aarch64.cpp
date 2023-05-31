@@ -459,7 +459,7 @@ uint32_t encoding_for_fp_immediate(float immediate)
 static uint64_t find_next_lower_logical_immediate_matching(uint64_t x, int lsb_zeros) {
   const int alignment = nth_bit(lsb_zeros);
   uint64_t candidate = UINT64_MAX;
-  for (int i = 0; i < LI_TABLE_SIZE; i++) {
+  for (unsigned i = 0; i < LI_TABLE_SIZE; i++) {
     uint64_t c = LITable[i];
     if (c > candidate && c <= x && is_aligned(c, alignment)) {
       candidate = c;
