@@ -137,14 +137,6 @@ size_t MetaspaceShared::core_region_alignment() {
   return os::cds_core_region_alignment();
 }
 
-static bool shared_base_valid(char* shared_base) {
-#ifdef _LP64
-  return CompressedKlassPointers::is_valid_base((address)shared_base);
-#else
-  return true;
-#endif
-}
-
 class DumpClassListCLDClosure : public CLDClosure {
   static const int INITIAL_TABLE_SIZE = 1987;
   static const int MAX_TABLE_SIZE = 61333;

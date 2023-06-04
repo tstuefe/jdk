@@ -33,10 +33,13 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
+#include "utilities/tribool.hpp"
 #include "unittest.hpp"
 #ifdef _WIN32
 #include "os_windows.hpp"
 #endif
+
+#include "testutils.hpp"
 
 static size_t small_page_size() {
   return os::vm_page_size();
@@ -924,3 +927,57 @@ TEST_VM(os, open_O_CLOEXEC) {
   ::close(fd);
 #endif
 }
+
+#ifdef _LP64
+static void test_find_hole_in_address_range(TriBool expected_result, address range_start, address range_end, size_t bytes, size_t alignment)
+{
+  address addr = os::find_hole_in_address_range(range_start, range_end, bytes, alignment);
+  if (!expected_result.is_default()) {
+    if (expected_result.value()) {
+      EXPECT_NOT_NULL(addr);
+    } else {
+      EXPECT_NULL(addr);
+    }
+  }
+  if (addr != nullptr) {
+    ASSERT_TRUE(is_aligned(addr, alignment));
+    ASSERT_TRUE(is_aligned(addr, os::vm_allocation_granularity()));
+    ASSERT_GE(addr, range_start);
+    ASSERT_LT(addr, range_end);
+  }
+}
+
+TEST_VM(os, find_hole_in_address_range) {
+  const size_t ag = os::vm_allocation_granularity();
+  const size_t ps = os::vm_page_size();
+  const address amin = (address)1;
+  const address amax = (address)SIZE_MAX;
+  const address a2g = (address)(2 * G);
+  const address a4g = (address)(4 * G);
+  const address a32g = (address)(32 * G);
+  const address a64g = (address)(64 * G);
+
+#ifndef LINUX
+  test_find_hole_in_address_range(TriBool(false), amin, amax, ag, ag);
+#else
+
+  // These should fail:
+  test_find_hole_in_address_range(TriBool(true), a2g, a4g, 3 * G, ps); // range too small for 3Gb
+  test_find_hole_in_address_range(TriBool(true), a2g, a4g, 4096, 4 * G); // range too small to hold an allocation aligned to 4G
+
+  // the following ones should always succeed
+  test_find_hole_in_address_range(TriBool(true), amin, amax, ps, ps);
+  test_find_hole_in_address_range(TriBool(true), amin, amax, ps, 1 * M);
+
+  // The following ones may fail to find a hole, but if they succeed, check the result
+  test_find_hole_in_address_range(TriBool(), amin, a4g, ps, ps);
+  test_find_hole_in_address_range(TriBool(), a2g, a4g, ps, ps);
+  for (size_t i = 0; i < 100; i++) {
+    for (size_t alignment = 2; alignment < 1 * G; alignment *= 2) {
+      address arand = (address)((uint64_t)os::random() * 4096);
+      test_find_hole_in_address_range(TriBool(), arand, arand + 32 * G, 2 * M, alignment);
+    }
+  }
+#endif // LINUX
+}
+#endif //  _LP64

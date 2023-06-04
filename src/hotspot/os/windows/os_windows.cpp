@@ -6023,3 +6023,7 @@ void os::print_user_info(outputStream* st) {
 void os::print_active_locale(outputStream* st) {
   // not implemented yet
 }
+
+address os::find_hole_in_address_range(address range_start, address range_end, size_t bytes, size_t alignment) {
+  return nullptr; // TOdo: implement (see os::print_memory_mappings)
+}

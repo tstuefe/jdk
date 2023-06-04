@@ -5508,3 +5508,42 @@ bool os::trim_native_heap(os::size_change_t* rss_change) {
   return false; // musl
 #endif
 }
+
+address os::find_hole_in_address_range(address range_start, address range_end, size_t bytes, size_t alignment) {
+  // Scan /proc/self/maps for a suitable hole.
+
+  FILE* f = fopen("/proc/self/maps", "r");
+  if (f == nullptr) {
+    return nullptr;
+  }
+
+  alignment = MAX2(os::vm_allocation_granularity(), alignment);
+  size_t bytes_aligned = align_up(bytes, os::vm_page_size());
+
+  address result = nullptr;
+
+  char* line = NULL;
+  size_t len = 0;
+  uint64_t last_end = 0;
+  int safety = 20000; // Prevent long search time for heavily populated address spaces
+  while (safety > 0 && result != nullptr && getline(&line, &len, f) != -1) {
+    uint64_t start, end;
+    const int scanf_result = sscanf(line, UINT64_FORMAT_X_0 "-" UINT64_FORMAT_X_0, &start, &end);
+    assert(scanf_result == 2, "Failed to parse /proc/self/maps line %s", line);
+    assert(start >= last_end && end >= start, "Sanity");
+    const uint64_t hole_start = last_end;
+    const uint64_t hole_end = start;
+    const uint64_t intersected_start = align_up(MAX2((uint64_t)range_start, hole_start), alignment);
+    const uint64_t intersected_end = MIN2((uint64_t)range_end, hole_end);
+    if ((intersected_end - intersected_start) > bytes) {
+      result = (address)intersected_start;
+    }
+    safety --;
+    last_end = end;
+  }
+
+  free(line);
+  fclose(f);
+
+  return result;
+}

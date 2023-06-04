@@ -569,17 +569,7 @@ void ReservedHeapSpace::initialize_compressed_heap(const size_t size, size_t ali
     }
 
     // zerobased: Attempt to allocate in the lower 32G.
-    // But leave room for the compressed class pointers, which is allocated above
-    // the heap.
     char *zerobased_max = (char *)OopEncodingHeapMax;
-    const size_t class_space = align_up(CompressedClassSpaceSize, alignment);
-    // For small heaps, save some space for compressed class pointer
-    // space so it can be decoded with no base.
-    if (UseCompressedClassPointers && !UseSharedSpaces &&
-        OopEncodingHeapMax <= KlassEncodingMetaspaceMax &&
-        (uint64_t)(aligned_heap_base_min_address + size + class_space) <= KlassEncodingMetaspaceMax) {
-      zerobased_max = (char *)OopEncodingHeapMax - class_space;
-    }
 
     // Give it several tries from top of range to bottom.
     if (aligned_heap_base_min_address + size <= zerobased_max &&    // Zerobased theoretical possible.

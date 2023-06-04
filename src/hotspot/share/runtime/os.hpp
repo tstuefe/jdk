@@ -427,6 +427,8 @@ class os: AllStatic {
   // Reserves virtual memory that starts at an address that is aligned to 'alignment'.
   static char*  reserve_memory_aligned(size_t size, size_t alignment, bool executable = false);
 
+  static address find_hole_in_address_range(address range_start, address range_end, size_t bytes, size_t alignment);
+
   // Attempts to reserve the virtual memory at [addr, addr + bytes).
   // Does not overwrite existing mappings.
   static char*  attempt_reserve_memory_at(char* addr, size_t bytes, bool executable = false);

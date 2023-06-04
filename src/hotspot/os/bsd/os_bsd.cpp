@@ -2453,3 +2453,6 @@ bool os::start_debugging(char *buf, int buflen) {
 }
 
 void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {}
+
+address os::find_hole_in_address_range(address range_start, address range_end, size_t bytes, size_t alignment) { return nullptr; }
+

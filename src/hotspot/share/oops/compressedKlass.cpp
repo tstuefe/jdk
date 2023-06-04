@@ -26,6 +26,7 @@
  */
 
 #include "precompiled.hpp"
+#include "gc/shared/gc_globals.hpp" // for HeapBaseMinAddress
 #include "logging/log.hpp"
 #include "oops/compressedKlass.inline.hpp"
 #include "runtime/java.hpp"
@@ -104,12 +105,11 @@ address CompressedKlassPointers::reserve_klass_range(size_t len) {
 
   // Attempt to allocate for zero-based encoding:
   // This is useful for all platforms, so do this here.
-  for (int shift = 0; result == nullptr && shift <= LogKlassAlignmentInBytes; shift++) {
-    const size_t encoding_size = nth_bit(shift + NarrowKlassPointerBits);
-    if (encoding_size >= len) {
-      const address base = (address)(encoding_size - len);
-      address p = (address)os::attempt_reserve_memory_at((char*)base, len, false); // Todo tag??
-    }
+  address min_address = (address)HeapBaseMinAddress; // no special reason, just being careful without actually knowing why
+  address max_address = (address)nth_bit(NarrowKlassPointerBits + LogKlassAlignmentInBytes);
+  address addr = os::find_hole_in_address_range(min_address, max_address, len, os::vm_allocation_granularity());
+  if (addr != nullptr) {
+    result = (address)os::attempt_reserve_memory_at((char*)addr, len, false); // Todo tag??
   }
 
   // Otherwise ask platform
@@ -119,8 +119,6 @@ address CompressedKlassPointers::reserve_klass_range(size_t len) {
 
   // Failing that (or, if the platform does not care), reserve anywhere and hope for the best
   result = (address)os::reserve_memory(len, false, mtMetaspace);
-
-  // Todo: NMT tag memory
 
   return result;
 }

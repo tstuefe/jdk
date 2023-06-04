@@ -57,9 +57,12 @@ class TriBool{
     return !static_cast<bool>(_value >> 1);
   }
 
+  bool value() const { return (_value & 1); }
+
   /*explicit*/ operator bool() const {
-    return (_value & 1);
+    return value();
   }
+
 };
 
 // compacted array of TriBool
