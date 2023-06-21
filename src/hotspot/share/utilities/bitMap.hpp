@@ -693,6 +693,9 @@ class BitMapClosure {
 };
 
 // Simple bitmaps over an unsigned integer
+// Note: problem: this is inefficient since Bitmap stores pointer to array and size separately,
+// then works via pointer. Better: abstract storage handling away in Bitmap via template parameter,
+// then have a normal storage (pointer, size) and a simple storage (over a variable, using &variable)
 template <class int_type>
 class BitMapN : public BitMapView {
  // Unfortunately, we always need at least word-sized backing storage
