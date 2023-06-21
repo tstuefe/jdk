@@ -692,4 +692,19 @@ class BitMapClosure {
   virtual bool do_bit(BitMap::idx_t index) = 0;
 };
 
+// Simple bitmaps over an unsigned integer
+template <class int_type>
+class BitMapN : public BitMapView {
+ // Unfortunately, we always need at least word-sized backing storage
+ union { bm_word_t bm; int_type i; } _holder;
+ public:
+   BitMapN(int_type i = 0) :
+     BitMapView(&_holder.bm, sizeof(int_type) * BitsPerByte) {
+     _holder.i = i;
+   }
+};
+
+typedef BitMapN<uint64_t> BitMap64;
+typedef BitMapN<uint32_t> BitMap32;
+
 #endif // SHARE_UTILITIES_BITMAP_HPP

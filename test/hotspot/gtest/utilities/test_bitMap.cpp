@@ -203,4 +203,37 @@ TEST_VM(BitMap, print_on) {
   }
 }
 
+template <class simple_bitmap, size_t bits>
+static void test_simple_bitmap() {
+
+  // Spillover test
+  simple_bitmap bm[3];
+
+  for (int i = 0; i < 3; i ++) {
+    EXPECT_EQ(bm[i].size(), bits);
+    EXPECT_TRUE(bm[i].is_empty());
+  }
+
+  bm[1].set_range(0, bits);
+  EXPECT_TRUE(bm[0].is_empty());
+  EXPECT_TRUE(bm[2].is_empty());
+  EXPECT_TRUE(bm[1].is_full());
+
+  // Assert size
+  EXPECT_EQ(sizeof(simple_bitmap), (size_t)3 * BytesPerWord);
+
+  // Test use as a constant
+  const simple_bitmap cb(bits == 32 ? 0xAAAAAAAA : 0xAAAAAAAAAAAAAAAAULL);
+  for (size_t i = 0; i < bits; i++) {
+    if ((i % 2) == 0) {
+      EXPECT_FALSE(cb.at(i));
+    } else {
+      EXPECT_TRUE(cb.at(i));
+    }
+  }
+}
+
+TEST_VM(BitMap, bm32) { test_simple_bitmap<BitMap32, 32>(); }
+TEST_VM(BitMap, bm64) { test_simple_bitmap<BitMap64, 64>(); }
+
 #endif
