@@ -42,9 +42,9 @@ class CompressedKlassPointerSettings_PD {
 
   Mode _mode;
 
-  // for MOVK mode: whether to apply the *unshifted* base to the *left-shifted* nKlass
-  // or the *right-shifted* base to the unshifted nKlass
-  bool _movk_unshifted_base;
+  // Movk mode A: apply unshifted base to leftshifted nK
+  //      mode B: apply pre-rightshifted base to original nK, then left-shift
+  bool _movk_modeA;
 
   bool attempt_initialize_for_zero(address kr2);
   bool attempt_initialize_for_movk(address kr1, address kr2);

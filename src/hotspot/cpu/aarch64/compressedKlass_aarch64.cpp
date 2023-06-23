@@ -26,9 +26,10 @@
 
 #include "precompiled.hpp"
 
-#include "immediate_aarch64.hpp"
 #include "macroAssembler_aarch64.hpp"
 #include "register_aarch64.hpp"
+
+#include "logging/log.hpp"
 
 #include "oops/compressedKlass.hpp"
 #include "compressedKlass_aarch64.hpp"
@@ -38,7 +39,7 @@
 
 CompressedKlassPointerSettings_PD::CompressedKlassPointerSettings_PD()
   : _base(nullptr), _shift(-1), _mode(Mode::KlassDecodeNone),
-    _movk_unshifted_base(false)
+    _movk_modeA(false)
 {}
 
 //// Zero mode /////////////
@@ -81,95 +82,133 @@ public:
   uint16_t q(int quadrant) const { return _v.i16[quadrant]; }
 
   int num_quadrants_set() const {
-    int r = 0;
-    if (q(0) > 0) r++;
-    if (q(1) > 0) r++;
-    if (q(2) > 0) r++;
-    if (q(3) > 0) r++;
-    return r;
+    return
+      ((q(0) > 0) ? 1 : 0) +
+      ((q(1) > 0) ? 1 : 0) +
+      ((q(2) > 0) ? 1 : 0) +
+      ((q(3) > 0) ? 1 : 0);
   }
 };
 
-class MovkSetting {
+struct movk_mode_t {
   uint64_t _base;
   int _shift;
-  bool _unshifted_base;
-public:
-  MovkSetting(uint64_t base, int shift, bool unshifted_base) : _q(base), _shift(shift), _unshifted_base(unshifted_base) {}
+  bool _modeA;
 
-  bool valid() const {
-    if (_base & right_n_bits(NarrowKlassPointerBits + (_unshifted_base ? _shift : 0))) {
-      return false;
+  bool is_valid_for_movk() {
+    // mode A:   unshifted   base must be restricted to q2 q3
+    // mode B: right-shifted base must be restricted to q2 q3
+    if (_modeA) {
+      return (_base & right_n_bits(32)) == 0;
+    } else {
+      return (_base & right_n_bits(32 + _shift)) == 0;
     }
-
   }
 
-  int weight() const {
-    int rc = Quads(_base).num_quadrants_set();
-    rc += (_unshifted_base ? 0 : 1);
+  // less is better
+  int quality() const {
+    int num_ops = Quads(_base).num_quadrants_set();
+    if (_shift > 0) {
+      num_ops ++;
+    }
+    if (!_modeA) {
+      num_ops ++;
+    }
+    return num_ops;
+  }
+
+  bool covers_range(uint64_t kr1, uint64_t kr2) const {
+    bool rc = false;
+    if (kr1 >= _base) {
+      const uint64_t needed_coverage = kr2 - _base;
+      rc = (needed_coverage <= nth_bit(NarrowKlassPointerBits + _shift));
+    }
     return rc;
   }
 };
 
-// returns weight, the lower the better. returns -1 if this is an invalid combination.
-static int weight_movk_setting(address kr1, address kr2, address base, int shift, bool unshifted_base) {
-  Quads quads(p2i(base));
-  address enc_range_end = base + nth_bit(NarrowKlassPointerBits + shift);
-  if (enc_range_end >= kr2) {
+NOT_DEBUG(static)
+DEBUG_ONLY(extern) // for testing in gtests
+bool find_best_movk_mode(address kr1, address kr2, movk_mode_t* out) {
 
-  }
-}
+  //   |---------------------( e  n  c  o  d  i  n  g     r  a  n  g  e )--------->|
+  //   |                                                                           |
+  //   |--------------(minimal needed coverage)------------>|                      |
+  //   |                                                    |                      |
+  //   |------------------------|XXXXXXXXXXXXXXXXXXXXXXXXXXX|--------------------->|
+  //   |                        |      (klass range)        |                      |
+  //  base                     kr1                         kr2                enc range end
 
+  // Have: kr1 and kr2 (e.g. class space or class space + cds)
+  // Want: base and shift and movkmode
 
-bool CompressedKlassPointerSettings_PD::attempt_initialize_for_movk(address kr1, address kr2) {
+  // base is just a number, does not have to correlate with anything physical.
+  // Distance between base and kr2 is the coverage we need to provide via
+  // NarrowKlassPointerBits >> shift.
+  // Ideally, that distance is just the size of the klass range. In that case, base==kr1,
+  // which is the case when we managed to attach to a preferred address location in
+  // CompressedKlassPointerSettings_PD::reserve_klass_range.
 
-  // Given an address range (that may start at a nicely aligned address, but could be
-  // located wherever), find the best combination of movk parameters.
-
-  // This is hard because:
-  // - the range of valid shift parameters depends on the distance between encoding base and kr2
-  // - the encoding base alignment depends on the shift parameter
-
-  // Here, we just keep it simple and try all combinations.
-  for (bool unshifted_base =
-
-
-
-  // Given a Klass range, find the combination of base + shift that allows us to encode the base
-  // with as few operations as possible. Valid solutions are all that give us a base that is
-  // encodable in either or both of q3 (bits 48-63) and q2 (bits 32-47).
+  // In MacroAssembler, we have two modes:
+  // In movk mode A, we apply the *unshifted* base to the *left-shifted* nK
+  // In movk mode B, we apply the *pre-right-shifted* base to the *original* nK, then left-shift
   //
-  // Notes:
-  // - we test for q4 too since we may enconter klass range addresses that have bits set in the
-  //   upper quadrant, if we run on a kernel that allows 52-bit addresses
-  // - we test for q2 too since that allows us to work with nKlass bit sizes that are very small,
-  //   e.g. 16.
+  // movk mode A needs one operation less when src != dst (because we need an additional movw in mode B)
+  //
+  // Here, given an arbitrary Klass range [kr1, kr2), we calculate the best base+shift+mode for it.
+  // This is complex, because of circularities:
+  //
+  // Base:
+  // - must be ORable with the original (mode B) or left-shifted (mode A) nK.
+  // - must be MOVK-able, so:
+  //    - in mode A, it must only have bits in the upper 32 bits (ideally restricted to bits 32+shift..47+shift)
+  //    - in mode B, it must only have bits in the upper 32+shift bits (ideally restricted to bits 32+shit..47+shift)
+  //
+  // So, Base depends on shift. But shift depends on the needed coverage range. And the coverage range depends on
+  //  the distance between base and kr2. Which depends on base.
 
-  MovKParameters* best_so_far = nullptr;
+  // We solve this by just calculating all options, then taking the best variant.
 
-  for (int shift = 0; shift <= LogKlassAlignmentInBytes; shift ++) {
-    for (int num_base_quadrants = 1; num_base_quadrants <= 3; num_base_quadrants ++) {
-      for (int do_rshift = 0; do_rshift < 2; do_rshift++) {
-        MovKParameters* here = new MovKParameters(kr1, shift, num_base_quadrants, do_rshift == 1);
-        MovKParameters* deletethis = here;
-        if (here->covers_klass_range(kr1, kr2)) {
-          if (best_so_far == nullptr || (here->num_ops() < best_so_far->num_ops())) {
-            deletethis = best_so_far;
-            best_so_far = here;
-          }
+  bool found = false;
+  movk_mode_t found_mode;
+
+  for (int candidate_shift = 0; candidate_shift <= LogKlassAlignmentInBytes; candidate_shift ++) {
+    for (int mode = 0; mode < 3; mode ++) {
+      const bool modeA = (mode == 0);
+      uint64_t candidate_base = p2i(kr1);
+      if (modeA) {
+        candidate_base &= right_n_bits(32);
+      } else {
+        candidate_base &= right_n_bits(32 + candidate_shift);
+      }
+      movk_mode_t mode;
+      mode._base = candidate_base;
+      mode._shift = candidate_shift;
+      mode._modeA = modeA;
+      assert(mode.is_valid_for_movk(), "Must be valid"); // must be, since we sheared off q1 q2 above.
+      if (mode.covers_range((uint64_t)kr1, (uint64_t)kr2)) {
+        if (found == false || mode.quality() < found_mode.quality()) {
+          found_mode = mode;
         }
-        delete deletethis;
       }
     }
   }
 
-  if (best_so_far != nullptr) {
-    assert(best_so_far->covers_klass_range(kr1, kr2), "Sanity");
+  if (found) {
+    (*out) = found_mode;
+  }
+
+  return found;
+}
+
+bool CompressedKlassPointerSettings_PD::attempt_initialize_for_movk(address kr1, address kr2) {
+
+  movk_mode_t mode;
+  if (find_best_movk_mode(kr1, kr2, &mode)) {
+    _base = mode._base;
+    _shift = mode._shift;
+    _movk_modeA = mode._modeA;
     _mode = Mode::KlassDecodeMovk;
-    _base = best_so_far->base_unshifted();
-    _shift = best_so_far->shift();
-    _do_rshift_base = best_so_far->do_rshift_base();
-    delete best_so_far;
     return true;
   }
   return false;
@@ -179,7 +218,6 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize(address kr1, address 
   // We prefer zero over xor over movk
   return
       attempt_initialize_for_zero(kr2) ||
-      attempt_initialize_for_xor(kr1, kr2) ||
       attempt_initialize_for_movk(kr1, kr2);
 }
 
@@ -188,178 +226,51 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_fixed_base_and_sh
 
   _mode = Mode::KlassDecodeNone;
 
-  if (!encoding_covers_range(base, shift, kr1, kr2)) {
+  // is the coverage ok?
+  const size_t coverage = nth_bit(NarrowKlassPointerBits + shift);
+
+  if (_base + coverage < kr2) {
+    log_warning(cds) ("Provided base " PTR_FORMAT ", shift %d, does not cover "
+                      "klass range [" PTR_FORMAT ".." PTR_FORMAT ")",
+                      p2i(base), shift, p2i(kr1), p2i(kr2));
     return false;
   }
 
+  // given base and shift - which is all CDS stores in archive - deduce mode.
   if (base == nullptr) {
-
     _mode = Mode::KlassDecodeZero;
     _base = base;
     _shift = shift;
+    return true;
+  }
 
-  } else if (Assembler::operand_valid_for_logical_immediate(false, (uint64_t)base)) {
+  // MOVK mode:
+  movk_mode_t mode;
+  mode._base = base;
+  mode._shift = shift;
 
-    _mode = Mode::KlassDecodeXor;
-    _base = base;
-    _shift = shift;
-    _do_rshift_base = false;
-
-  } else if (Assembler::operand_valid_for_logical_immediate(false, ((uint64_t)base) >> shift)) {
-
-    _mode = Mode::KlassDecodeXor;
-    _base = (address)(((uint64_t)base) >> shift);
-    _shift = shift;
-    _do_rshift_base = true;
-
-  } else {
-
-    // MOVK mode?
-
-    const uint64_t base_unshifted = (uint64_t) base;
-    const bool base_unshifted_xorable = ((base_unshifted & right_n_bits(NarrowKlassPointerBits + shift)) == 0);
-
-    const uint64_t base_rshifted = ((uint64_t) base) >> shift;
-    const bool base_rshifted_xorable = ((base_rshifted & right_n_bits(NarrowKlassPointerBits)) == 0);
-
-    if (base_unshifted_xorable || base_rshifted_xorable) {
-      // we can use movk. Now figure out whether rshifted or unshifted is better.
-      _mode = Mode::KlassDecodeMovk;
-      _shift = shift;
-      if (!base_rshifted_xorable) {
-        _do_rshift_base = false;
-      } else if (!base_unshifted_xorable) {
-        _do_rshift_base = true;
-      } else {
-        // Both work, chose the one with the fewer ops
-        _do_rshift_base = Quads(base_unshifted).num_quadrants_set() > Quads(base_rshifted).num_quadrants_set();
-      }
-      _base = (address)(_do_rshift_base ? base_rshifted : base_unshifted);
+  // Prefer modeA if possible modeB if not
+  mode._modeA = true;
+  if (!mode.is_valid_for_movk()) {
+    mode._modeA = false;
+    if (!mode.is_valid_for_movk()) {
+      // Nope. Out of ideas.
+      return false;
     }
   }
 
-  return _mode != Mode::KlassDecodeNone ? true : false;
+  assert(mode.covers_range((uint64_t)kr1, (uint64_t)kr2), "Must be"); // already asserted at start of function
+
+  _mode = Mode::KlassDecodeMovk;
+  _base = mode._base;
+  _shift = mode._shift;
+  _movk_modeA = mode._modeA;
+
+  return true;
 }
 
-///// Code generation /////////////
-
-#define __ masm->
-
-static void copy_nKlass_if_needed(MacroAssembler* masm, Register dst, Register src) {
-  if (dst != src) {
-    assert(NarrowKlassPointerBits <= 32, "Sanity");
-    __ movw(dst, src);
-  }
-}
-
-static void generate_movk_ops(MacroAssembler* masm, uint64_t base, Register dst) {
-  Quads quads(base);
-  if (quads.q1() > 0) {
-    __ movk(dst, quads.q1(), 16);
-  }
-  if (quads.q2() > 0) {
-    __ movk(dst, quads.q2(), 32);
-  }
-  if (quads.q3() > 0) {
-    __ movk(dst, quads.q3(), 48);
-  }
-}
-
-void CompressedKlassPointerSettings_PD::decode_klass_not_null_for_zero(MacroAssembler* masm, Register dst, Register src) const {
-  assert(_base == nullptr, "Sanity");
-  if (_shift == 0) {
-    copy_nKlass_if_needed(masm, dst, src);
-  } else {
-    __ lsl(dst, src, _shift);
-  }
-}
-
-void CompressedKlassPointerSettings_PD::decode_klass_not_null_for_xor(MacroAssembler* masm, Register dst, Register src) const {
-  assert(_base != nullptr, "Sanity");
-  const uint64_t base_ui64 = (uint64_t)_base;
-  const uint64_t base_ui64_rshifted = ((uint64_t)_base) >> _shift;
-
-  if (_shift == 0) {
-    __ eor(dst, src, base_ui64);
-  } else {
-    if (_do_rshift_base) {
-      __ eor(dst, src, base_ui64_rshifted);
-      __ lsl(dst, dst, _shift);
-    } else {
-      __ lsl(dst, src, _shift);
-      __ eor(dst, dst, base_ui64);
-    }
-  }
-}
-
-void CompressedKlassPointerSettings_PD::decode_klass_not_null_for_movk(MacroAssembler* masm, Register dst, Register src) const {
-  assert(_base != nullptr, "Sanity");
-  const uint64_t base_ui64 = (uint64_t)_base;
-  const uint64_t base_ui64_rshifted = ((uint64_t)_base) >> _shift;
-
-  if (_shift == 0) {
-    copy_nKlass_if_needed(masm, dst, src);
-    generate_movk_ops(masm, base_ui64, dst);
-  } else {
-    if (_do_rshift_base) {
-      copy_nKlass_if_needed(masm, dst, src);
-      generate_movk_ops(masm, base_ui64_rshifted, dst);
-      __ lsl(dst, dst, _shift);
-    } else {
-      __ lsl(dst, src, _shift);
-      generate_movk_ops(masm, base_ui64, dst);
-    }
-  }
-}
-
-void CompressedKlassPointerSettings_PD::decode_klass_not_null(MacroAssembler* masm, Register dst, Register src) const {
-  assert(UseCompressedClassPointers, "should only be used for compressed headers");
-  switch (_mode) {
-  case Mode::KlassDecodeZero:
-    decode_klass_not_null_for_zero(masm, dst, src);
-    break;
-  case Mode::KlassDecodeXor:
-    decode_klass_not_null_for_xor(masm, dst, src);
-    break;
-  case Mode::KlassDecodeMovk:
-    decode_klass_not_null_for_movk(masm, dst, src);
-    break;
-  default:
-    ShouldNotReachHere();
-  }
-}
-
-void CompressedKlassPointerSettings_PD::encode_klass_not_null(MacroAssembler* masm, Register dst, Register src) const {
-  assert(UseCompressedClassPointers, "should only be used for compressed headers");
-  switch (_mode) {
-  case Mode::KlassDecodeZero:
-    if (_shift == 0) {
-      // nKlass == Klass*
-      copy_nKlass_if_needed(masm, dst, src);
-    } else {
-      __ lsr(dst, src, _shift);
-    }
-    break;
-  case Mode::KlassDecodeMovk:
-    __ ubfx(dst, src, _shift, NarrowKlassPointerBits);
-    break;
-  default:
-    ShouldNotReachHere();
-  }
-}
-
-void CompressedKlassPointerSettings_PD::print_on(outputStream* st) const {
-  // Don't print base, shift, since those are printed at the caller already
-  const char* const modes[] = { "none", "zero", "movk" };
-  const int modei = (int)_mode;
-  assert(modei >= 0 && modei < 4, "Sanity");
-  st->print_cr("Encoding Mode: %s", modes[modei]);
-  if (_mode == Mode::KlassDecodeMovk) {
-    st->print_cr("Unshifted base: %d", _movk_unshifted_base);
-  }
-}
-
-// attempt to reserve a memory range well suited to compressed class encoding
+// Called at VM init time to reserve a klass range (either class space or class space+cds)
+// - called for -Xshare:off or -Xshare:dump
 address CompressedKlassPointerSettings_PD::reserve_klass_range(size_t len) {
   assert(is_aligned(len, os::vm_allocation_granularity()), "Sanity");
 
@@ -446,3 +357,95 @@ address CompressedKlassPointerSettings_PD::reserve_klass_range(size_t len) {
 
   return result;
 }
+
+///// Code generation /////////////
+
+#define __ masm->
+
+static void copy_nKlass_if_needed(MacroAssembler* masm, Register dst, Register src) {
+  if (dst != src) {
+    assert(NarrowKlassPointerBits <= 32, "Sanity");
+    __ movw(dst, src);
+  }
+}
+
+static void generate_movk_ops(MacroAssembler* masm, uint64_t base, Register dst) {
+  Quads quads(base);
+  assert(quads.q(0) == 0 && quads.q(1) == 0, "invalid base");
+  if (quads.q(2) > 0) {
+    __ movk(dst, quads.q(2), 32);
+  }
+  if (quads.q(3) > 0) {
+    __ movk(dst, quads.q(3), 48);
+  }
+}
+
+void CompressedKlassPointerSettings_PD::decode_klass_not_null_for_zero(MacroAssembler* masm, Register dst, Register src) const {
+  assert(_base == nullptr, "Sanity");
+  if (_shift == 0) {
+    copy_nKlass_if_needed(masm, dst, src);
+  } else {
+    __ lsl(dst, src, _shift);
+  }
+}
+
+void CompressedKlassPointerSettings_PD::decode_klass_not_null_for_movk(MacroAssembler* masm, Register dst, Register src) const {
+  assert(_base != nullptr, "Sanity");
+  const uint64_t base_ui64 = (uint64_t)_base;
+  const uint64_t base_ui64_rshifted = ((uint64_t)_base) >> _shift;
+  if (_shift == 0) {
+    copy_nKlass_if_needed(masm, dst, src);
+    generate_movk_ops(masm, base_ui64, dst);
+  } else {
+    if (_movk_modeA) {
+      // unshifted base to left-shifted nK
+      __ lsl(dst, src, _shift);
+      generate_movk_ops(masm, base_ui64, dst);
+    } else {
+      // right-shifted base to orginal nK, then leftshift
+      copy_nKlass_if_needed(masm, dst, src);
+      generate_movk_ops(masm, base_ui64_rshifted, dst);
+      __ lsl(dst, dst, _shift);
+    }
+  }
+}
+
+void CompressedKlassPointerSettings_PD::decode_klass_not_null(MacroAssembler* masm, Register dst, Register src) const {
+  assert(UseCompressedClassPointers, "should only be used for compressed headers");
+  switch (_mode) {
+  case Mode::KlassDecodeZero: decode_klass_not_null_for_zero(masm, dst, src);
+    break;
+  case Mode::KlassDecodeMovk: decode_klass_not_null_for_movk(masm, dst, src);
+    break;
+  default: ShouldNotReachHere();
+  }
+}
+
+void CompressedKlassPointerSettings_PD::encode_klass_not_null(MacroAssembler* masm, Register dst, Register src) const {
+  assert(UseCompressedClassPointers, "should only be used for compressed headers");
+  switch (_mode) {
+  case Mode::KlassDecodeZero:
+    if (_shift == 0) { // nKlass is Klass*
+      copy_nKlass_if_needed(masm, dst, src);
+    } else {
+      __ lsr(dst, src, _shift);
+    }
+    break;
+  case Mode::KlassDecodeMovk:
+    __ ubfx(dst, src, _shift, NarrowKlassPointerBits);
+    break;
+  default: ShouldNotReachHere();
+  }
+}
+
+void CompressedKlassPointerSettings_PD::print_on(outputStream* st) const {
+  // Don't print base, shift, since those are printed at the caller already
+  switch (_mode) {
+  case Mode::KlassDecodeZero: st->print("encoding mode: zero");
+    break;
+  case Mode::KlassDecodeMovk: st->print("encoding mode: movk (movk mode %c)", _movk_modeA ? 'A' : 'B');
+    break;
+  default: ShouldNotReachHere();
+  }
+}
+
