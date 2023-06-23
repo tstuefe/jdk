@@ -81,7 +81,7 @@ class CompressedKlassPointers : public AllStatic {
   static CompressedKlassPointerSettings_PD _pd;
 
 #ifdef ASSERT
-  // First and last valid Klass location
+  // First and last valid Klass storage location
   static address _kr1;
   static address _kr2;
 #endif

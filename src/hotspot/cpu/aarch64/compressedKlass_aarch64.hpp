@@ -38,34 +38,25 @@ class CompressedKlassPointerSettings_PD {
   address _base;
   int _shift;
 
-  enum class Mode {
-    KlassDecodeNone,
-    KlassDecodeZero,
-    KlassDecodeXor,
-    KlassDecodeMovk
-  };
+  enum class Mode { KlassDecodeNone, KlassDecodeZero, KlassDecodeMovk };
 
   Mode _mode;
 
-  // for XOR and MOVK, decode:
-  // Whether to xor the *right-shifted* base to the *unshifted* nKlass,
-  // or the *unshifted* base to the *left-shifted* nKlass
-  // Does not matter for encode, both use ubfx (or movw/movz if possible)
-  bool _do_rshift_base;
+  // for MOVK mode: whether to apply the *unshifted* base to the *left-shifted* nKlass
+  // or the *right-shifted* base to the unshifted nKlass
+  bool _movk_unshifted_base;
 
   bool attempt_initialize_for_zero(address kr2);
-  bool attempt_initialize_for_xor(address kr1, address kr2);
   bool attempt_initialize_for_movk(address kr1, address kr2);
 
   void decode_klass_not_null_for_zero(MacroAssembler* masm, Register dst, Register src) const;
-  void decode_klass_not_null_for_xor(MacroAssembler* masm, Register dst, Register src) const;
   void decode_klass_not_null_for_movk(MacroAssembler* masm, Register dst, Register src) const;
 
 public:
 
   CompressedKlassPointerSettings_PD();
 
-  // Given a klass range, initialize to use the best encoding (if it exists)
+  // Given a klass range kr, initialize to use the best encoding
   bool attempt_initialize(address kr1, address kr2);
 
   // "reverse-initialize" from a given base and shift, for a given klass range (called for the CDS runtime path)

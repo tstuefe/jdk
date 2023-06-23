@@ -36,85 +36,23 @@
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
 
-static bool encoding_covers_range(address base, int shift, address kr1, address kr2) {
-  return base <= kr1 &&
-         (base + (nth_bit(NarrowKlassPointerBits + shift))) > kr2; // Note: kr2 included.
-}
-
 CompressedKlassPointerSettings_PD::CompressedKlassPointerSettings_PD()
   : _base(nullptr), _shift(-1), _mode(Mode::KlassDecodeNone),
-    _do_rshift_base(false)
+    _movk_unshifted_base(false)
 {}
 
 //// Zero mode /////////////
 
+// Given the end of the klass range, find the lowest value of shift that works with a zero base.
+// If none work, return false.
 bool CompressedKlassPointerSettings_PD::attempt_initialize_for_zero(address kr2) {
-  for (int shift = 0; shift <= LogKlassAlignmentInBytes; shift++) {
-    if (kr2 < (address)nth_bit(NarrowKlassPointerBits + shift)) {
-      _mode = Mode::KlassDecodeZero;
-      _base = nullptr;
-      _shift = shift;
-      return true;
-    }
-  }
-  return false;
-}
-
-//// XOR mode /////////////
-
-bool CompressedKlassPointerSettings_PD::attempt_initialize_for_xor(address kr1, address kr2) {
-
-  // Find an immediate that gives us a valid encoding; start with minimal shift in the hope that its 0.
-  // Since the form of the immediates - and their distance to kr1 and hence their encoding range -
-  // are difficult to predict, just try all valid shift values.
-
-  for (int candidate_shift = 0; candidate_shift <= LogKlassAlignmentInBytes; candidate_shift++) {
-    const size_t encoding_range_len = nth_bit(candidate_shift + NarrowKlassPointerBits);
-
-    // Ignore shift values that are obviously too small
-    if (encoding_range_len < (size_t)(kr2 - kr1)) {
-      continue;
-    }
-
-    // Unshifted XOR mode?
-    //  (XOR *unshifted* base to *left-shifted* nKlass)
-    {
-      const int bits_offset = NarrowKlassPointerBits + candidate_shift; // left-shifted nKlass
-      const size_t base_alignment = nth_bit(bits_offset);
-      address candidate_base = (address)calculate_next_lower_logical_immediate_matching((uint64_t)kr1, base_alignment);
-      if (candidate_base != nullptr) {
-        assert(is_aligned(candidate_base, base_alignment), "Sanity");
-        assert(candidate_base <= kr1, "Sanity");
-        if ((candidate_base + encoding_range_len) >= kr2) {
-          _mode = Mode::KlassDecodeXor;
-          _do_rshift_base = false;
-          _base = candidate_base;
-          _shift = candidate_shift;
-          return true;
-        }
-      }
-    }
-
-    // Shifted XOR mode?
-    //  (decode: XOR *right-shifted* base to *unshifted* nKlass, then left-shift)
-    {
-      const int bits_offset = NarrowKlassPointerBits; // unshifted nKlass
-      const size_t base_alignment = nth_bit(bits_offset);
-      const uint64_t candidate_base_rightshifted =
-          calculate_next_lower_logical_immediate_matching((uint64_t)kr1 >> candidate_shift, base_alignment);
-      if (candidate_base_rightshifted != 0) {
-        assert(is_aligned(candidate_base_rightshifted, base_alignment), "Sanity");
-        address candidate_base = (address)(candidate_base_rightshifted << candidate_shift);
-        assert(candidate_base <= kr1, "Sanity");
-        if ((candidate_base + encoding_range_len) >= kr2) {
-          _mode = Mode::KlassDecodeXor;
-          _do_rshift_base = true;
-          _base = candidate_base;
-          _shift = candidate_shift;
-          return true;
-        }
-      }
-    }
+  const uint64_t high_address_log2 = exact_log2(next_power_of_2(p2i(kr2)));
+  if (high_address_log2 <= (NarrowKlassPointerBits + LogKlassAlignmentInBytes)) {
+    _mode = Mode::KlassDecodeZero;
+    _base = nullptr;
+    _shift = (high_address_log2 > NarrowKlassPointerBits) ?
+              high_address_log2 - LogKlassAlignmentInBytes : 0;
+    return true;
   }
   return false;
 }
@@ -123,105 +61,79 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_xor(address kr1, 
 
 // Helper structure for movk mode
 class Quads {
-  const uint16_t _imm16_q1;
-  const uint16_t _imm16_q2;
-  const uint16_t _imm16_q3;
+  union {
+    uint64_t i64;
+    struct {
+      uint16_t q[4];
+    } i16;
+  } _v;
 public:
 
-  Quads(uint64_t x)
-    : _imm16_q1(x >> 16),
-      _imm16_q2(x >> 32),
-      _imm16_q3(x >> 48)
-  {}
-
-  uint16_t q1() const { return _imm16_q1; }
-  uint16_t q2() const { return _imm16_q2; }
-  uint16_t q3() const { return _imm16_q3; }
-
-  uint64_t v() const {
-    return (((uint64_t)q2()) << 16) +
-           (((uint64_t)q2()) << 32) +
-           (((uint64_t)q3()) << 48);
+  Quads(uint64_t x) {
+    _v.i64 = x;
   }
+
+  void mask_lower_bits(int bits) { _v.i64 &= ~right_n_bits(bits); }
+  void shl(int bits) { _v.i64 <<= bits; }
+  void shr(int bits) { _v.i64 >>= bits; }
+
+  uint64_t v() const { return _v.i64; }
+  uint16_t q(int quadrant) const { return _v.i16[quadrant]; }
 
   int num_quadrants_set() const {
     int r = 0;
-    if (q1() > 0) r++;
-    if (q2() > 0) r++;
-    if (q3() > 0) r++;
+    if (q(0) > 0) r++;
+    if (q(1) > 0) r++;
+    if (q(2) > 0) r++;
+    if (q(3) > 0) r++;
     return r;
   }
 };
 
-class MovKParameters : public CHeapObj<mtMetaspace> {
-
-  // Shift to use
-  const int _shift;
-
-  // Whether to apply the right-shifted base to the nKlass
-  // or the unshifted base to the left-shifted nKlass
-  const bool _do_rshift_base;
-
-  // Base
-  const Quads _quads;
-
-  static uint64_t calc_clipped_base(address kr1, int shift, int num_base_quadrants, bool do_rshift_base) {
-    uint64_t b = (uint64_t)kr1;
-    if (do_rshift_base) {
-      b >>= shift;
-    }
-    switch (num_base_quadrants) {
-      case 1: b &= (right_n_bits(16) << 48); break;
-      case 2: b &= (right_n_bits(32) << 32); break;
-      case 3: b &= (right_n_bits(48) << 16); break;
-      default: ShouldNotReachHere();
-    }
-    return b;
-  }
-
+class MovkSetting {
+  uint64_t _base;
+  int _shift;
+  bool _unshifted_base;
 public:
+  MovkSetting(uint64_t base, int shift, bool unshifted_base) : _q(base), _shift(shift), _unshifted_base(unshifted_base) {}
 
-  MovKParameters()
-    : _shift(0), _do_rshift_base(false), _quads(0) {}
-
-  MovKParameters(address kr1, int shift, int num_base_quadrants, bool do_rshift_base)
-    : _shift(shift), _do_rshift_base(do_rshift_base),
-      _quads(calc_clipped_base(kr1, shift, num_base_quadrants, do_rshift_base))
-  {}
-
-  const Quads& quads() const { return _quads; }
-
-  int shift() const               { return _shift; }
-  bool needs_shift() const        { return shift() > 0; }
-
-  bool do_rshift_base() const      { return _do_rshift_base; }
-
-  address base_rshifted() const {
-    assert(do_rshift_base(), "Only use for rshift-base-case");
-    return (address)(quads().v());
-  }
-
-  address base_unshifted() const {
-    return (address)(quads().v() << (do_rshift_base() ? shift() : 0));
-  }
-
-  // Returns true if the encoding covers the whole range between [kr1..kr2]
-  bool covers_klass_range(address kr1, address kr2) const  {
-    return encoding_covers_range(base_unshifted(), shift(), kr1, kr2);
-  }
-
-  // Returns number of ops necessary
-  int num_ops() const {
-    int r = quads().num_quadrants_set(); // one movk per quadrant, hopefully just one
-    if (needs_shift()) {
-      // for decode right-shifted base, if src != dst, we need a movw first
-      r += _do_rshift_base ? 2 : 1;
+  bool valid() const {
+    if (_base & right_n_bits(NarrowKlassPointerBits + (_unshifted_base ? _shift : 0))) {
+      return false;
     }
-    return r;
+
+  }
+
+  int weight() const {
+    int rc = Quads(_base).num_quadrants_set();
+    rc += (_unshifted_base ? 0 : 1);
+    return rc;
   }
 };
+
+// returns weight, the lower the better. returns -1 if this is an invalid combination.
+static int weight_movk_setting(address kr1, address kr2, address base, int shift, bool unshifted_base) {
+  Quads quads(p2i(base));
+  address enc_range_end = base + nth_bit(NarrowKlassPointerBits + shift);
+  if (enc_range_end >= kr2) {
+
+  }
+}
+
 
 bool CompressedKlassPointerSettings_PD::attempt_initialize_for_movk(address kr1, address kr2) {
+
+  // Given an address range (that may start at a nicely aligned address, but could be
+  // located wherever), find the best combination of movk parameters.
+
+  // This is hard because:
+  // - the range of valid shift parameters depends on the distance between encoding base and kr2
+  // - the encoding base alignment depends on the shift parameter
+
+  // Here, we just keep it simple and try all combinations.
+  for (bool unshifted_base =
+
+
 
   // Given a Klass range, find the combination of base + shift that allows us to encode the base
   // with as few operations as possible. Valid solutions are all that give us a base that is
@@ -428,7 +340,6 @@ void CompressedKlassPointerSettings_PD::encode_klass_not_null(MacroAssembler* ma
       __ lsr(dst, src, _shift);
     }
     break;
-  case Mode::KlassDecodeXor:
   case Mode::KlassDecodeMovk:
     __ ubfx(dst, src, _shift, NarrowKlassPointerBits);
     break;
@@ -439,12 +350,12 @@ void CompressedKlassPointerSettings_PD::encode_klass_not_null(MacroAssembler* ma
 
 void CompressedKlassPointerSettings_PD::print_on(outputStream* st) const {
   // Don't print base, shift, since those are printed at the caller already
-  const char* const modes[] = { "none", "zero", "xor", "movk" };
+  const char* const modes[] = { "none", "zero", "movk" };
   const int modei = (int)_mode;
   assert(modei >= 0 && modei < 4, "Sanity");
   st->print_cr("Encoding Mode: %s", modes[modei]);
-  if (_mode == Mode::KlassDecodeMovk || _mode == Mode::KlassDecodeXor) {
-    st->print_cr("Rshifted base: %d", _do_rshift_base);
+  if (_mode == Mode::KlassDecodeMovk) {
+    st->print_cr("Unshifted base: %d", _movk_unshifted_base);
   }
 }
 
@@ -454,13 +365,84 @@ address CompressedKlassPointerSettings_PD::reserve_klass_range(size_t len) {
 
   address result = nullptr;
 
-  // Fallback case on aarch64:
+  // We reserve memory with MOVK mode in mind.
   //
-  // Any address with lower 32 bits all zero can be used as a base for rshift MOVK mode
-  // (as long as NarrowKlassPointerBits <= 32)
-  assert(NarrowKlassPointerBits <= 32, "Sanity");
-  result = (address)os::reserve_memory_aligned(len, nth_bit(32), false);
-  assert(p2i(result) & right_n_bits(32) == 0, "Sanity");
+  // Note that this is a "best effort" scenario: here, we attempt to reserve
+  //  memory best suitable for MOVK encoding. That may or may not work due to
+  //  ASLR etc.
+  //
+  // Later, we will setup up encoding depending on the klass range we reserve here.
+  //  See attempt_initialize().
+  //  That setup attempts to work well with any arbitrary klass range we give
+  //  it, but will benefit from "good" klass ranges we manage to reserve here.
+
+  // We have two MOVK modes (assuming non-zero shift and base):
+  // A) unshifted base: where we first left-shift nKlass, then movk the unshifted base onto it
+  // B) pre-shifted base: where we first movk the right-shifted base into the unshifted nK,
+  //     then left-shift nK
+  // We prefer the former since it may save one move when src and dst registers are different.
+
+  // Minimal shift that would be needed to cover the klass range iff encoding base==klass range start
+  // (which we aim for here):
+  const int minimal_shift_needed = exact_log2(next_power_of_2(len));
+  assert(minimal_shift_needed <= (NarrowKlassPointerBits + LogKlassAlignmentInBytes), "range too large");
+  assert(minimal_shift_needed <= 12, "Lets have a reasonable Limit here.");
+
+  // Depending on whether we need more than 32bits to cover the whole of klass range len,
+  // calculate the amount by which we will need to shift the base.
+  const int base_shift_amount = (minimal_shift_needed > 32) ?
+                                32 - minimal_shift_needed : // Mode B
+                                0;                          // Mode A
+
+  const int log_klass_range_start_address_alignment = 32 + base_shift_amount;
+
+  // Assume that 64k system page translates to 52-bit address space vs 48-bit with 4k pages.
+  // Depends on whether we support ARMv8.2-LVA, but its easier just to check the page size.
+  const uint64_t highest_possible_address = (os::vm_page_size() == 64 * K) ? nth_bit(52) : nth_bit(48);
+
+
+  // Now attempt to reserve a "good" range. That is any range that:
+  // a) starts at an address aligned to log_klass_range_start_address
+  // b) when being right-shifted (mode B) or unshifted (mode A) only contains bits in either the
+  //    third or (assuming a 52-bit address space) the fourth quadrant.
+  // For simplicity we ignore the fourth quadrant. We don't have that many tries anyway.
+
+  // Example: for 48-bit addresses, for base_shift_amount = 0, test:
+  //   0x0000_0001_0000_0000 ... 0x0001_0000_0000_0000
+  //          for 52-bit addresses, for base_shift_amount = 2, test:
+  //   0x0000_0004_0000_0000 ... 0x0004_0000_0000_0000
+  const uint64_t min = nth_bit(log_klass_range_start_address_alignment);
+  const uint64_t max = MIN2(highest_possible_address, (uint64_t)nth_bit(log_klass_range_start_address_alignment + 16));
+
+  // Lets do 32 tries
+  const size_t stepsize = CONST64(0x800) << log_klass_range_start_address_alignment;
+
+  const uint64_t klass_range_start_address_alignment = nth_bit(log_klass_range_start_address_alignment);
+
+  for (uint64_t probe_point = min;
+      probe_point < max && result == nullptr;
+      probe_point += stepsize) {
+    assert(is_aligned(probe_point, klass_range_start_address_alignment), "Sanity");
+
+    result = (address)os::attempt_reserve_memory_at((char*)probe_point, len, false);
+    assert(result == nullptr || result == (address)probe_point, "Sanity");
+  }
+
+  // Fallback case:
+  //
+  // Any address with lower 32 bits all zero can be used as a base for rshift MOVK mode.
+  // So try for that. Note that this may fail too, since reserve_memory_aligned over-allocates
+  // alignment. We may run into os limits with the following mmap call.
+  if (result == nullptr) {
+    assert(NarrowKlassPointerBits <= 32, "Sanity");
+    result = (address)os::reserve_memory_aligned(len, nth_bit(32), false);
+    assert(result == nullptr || is_aligned(result, nth_bit(32)), "Sanity");
+  }
+
+  // Fallback fallback: result anywhere and lets hope encoding setup can deal with the address
+  if (result == nullptr) {
+    result = (address)os::reserve_memory(len, false);
+  }
 
   return result;
 }
