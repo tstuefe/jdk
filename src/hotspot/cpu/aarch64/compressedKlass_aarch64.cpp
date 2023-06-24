@@ -95,7 +95,7 @@ struct movk_mode_t {
   int _shift;
   bool _modeA;
 
-  bool is_valid_for_movk() {
+  bool is_valid_for_movk() const {
     // mode A:   unshifted   base must be restricted to q2 q3
     // mode B: right-shifted base must be restricted to q2 q3
     if (_modeA) {
@@ -245,12 +245,7 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_fixed_base_and_sh
   }
 
   // MOVK mode:
-  movk_mode_t mode;
-  mode._base = base;
-  mode._shift = shift;
-
-  // Prefer modeA if possible modeB if not
-  mode._modeA = true;
+  movk_mode_t mode = { base, shift, true };
   if (!mode.is_valid_for_movk()) {
     mode._modeA = false;
     if (!mode.is_valid_for_movk()) {
