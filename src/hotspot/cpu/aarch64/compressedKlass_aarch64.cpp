@@ -36,6 +36,8 @@
 #include "utilities/ostream.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
+#include <_types/_uint64_t.h>
+#include <cstddef>
 
 CompressedKlassPointerSettings_PD::CompressedKlassPointerSettings_PD()
   : _base(nullptr), _shift(-1), _mode(Mode::KlassDecodeNone),
@@ -48,7 +50,7 @@ CompressedKlassPointerSettings_PD::CompressedKlassPointerSettings_PD()
 // If none work, return false.
 bool CompressedKlassPointerSettings_PD::attempt_initialize_for_zero(address kr2) {
   const uint64_t high_address_log2 = exact_log2(next_power_of_2(p2i(kr2)));
-  if (high_address_log2 <= (NarrowKlassPointerBits + LogKlassAlignmentInBytes)) {
+  if (high_address_log2 <= nth_bit(NarrowKlassPointerBits + LogKlassAlignmentInBytes)) {
     _mode = Mode::KlassDecodeZero;
     _base = nullptr;
     _shift = (high_address_log2 > NarrowKlassPointerBits) ?
@@ -62,6 +64,7 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_zero(address kr2)
 
 // Helper structure for movk mode
 class Quads {
+  STATIC_ASSERT(VM_LITTLE_ENDIAN == 1);
   union {
     uint64_t i64;
     struct {
@@ -74,12 +77,8 @@ public:
     _v.i64 = x;
   }
 
-  void mask_lower_bits(int bits) { _v.i64 &= ~right_n_bits(bits); }
-  void shl(int bits) { _v.i64 <<= bits; }
-  void shr(int bits) { _v.i64 >>= bits; }
-
   uint64_t v() const { return _v.i64; }
-  uint16_t q(int quadrant) const { return _v.i16[quadrant]; }
+  uint16_t q(int quadrant) const { return _v.i16.q[quadrant]; }
 
   int num_quadrants_set() const {
     return
@@ -90,19 +89,17 @@ public:
   }
 };
 
-struct movk_mode_t {
+struct MovkParms {
   uint64_t _base;
   int _shift;
   bool _modeA;
 
-  bool is_valid_for_movk() {
-    // mode A:   unshifted   base must be restricted to q2 q3
-    // mode B: right-shifted base must be restricted to q2 q3
-    if (_modeA) {
-      return (_base & right_n_bits(32)) == 0;
-    } else {
-      return (_base & right_n_bits(32 + _shift)) == 0;
-    }
+  // Returns true if the parameter set is valid for movk
+  bool is_valid_for_movk() const {
+    // mode A:   unshifted   base must be restricted to q2, q3
+    // mode B: right-shifted base must be restricted to q2, q3
+    const int zero_bits_needed = 32 + (_modeA ? 0 : _shift);
+    return (_base & right_n_bits(zero_bits_needed)) == 0;
   }
 
   // less is better
@@ -129,7 +126,7 @@ struct movk_mode_t {
 
 NOT_DEBUG(static)
 DEBUG_ONLY(extern) // for testing in gtests
-bool find_best_movk_mode(address kr1, address kr2, movk_mode_t* out) {
+bool find_best_movk_mode(uint64_t kr1, uint64_t kr2, MovkParms* out) {
 
   //   |---------------------( e  n  c  o  d  i  n  g     r  a  n  g  e )--------->|
   //   |                                                                           |
@@ -145,15 +142,16 @@ bool find_best_movk_mode(address kr1, address kr2, movk_mode_t* out) {
   // base is just a number, does not have to correlate with anything physical.
   // Distance between base and kr2 is the coverage we need to provide via
   // NarrowKlassPointerBits >> shift.
-  // Ideally, that distance is just the size of the klass range. In that case, base==kr1,
-  // which is the case when we managed to attach to a preferred address location in
-  // CompressedKlassPointerSettings_PD::reserve_klass_range.
+  // Ideally, distance == klass range. That is the case if base==kr1, which we try
+  // for when we attempt to attach to a preferred address location in
+  // CompressedKlassPointerSettings_PD::reserve_klass_range. Alas, ASLR gods may
+  // interfere.
 
   // In MacroAssembler, we have two modes:
-  // In movk mode A, we apply the *unshifted* base to the *left-shifted* nK
-  // In movk mode B, we apply the *pre-right-shifted* base to the *original* nK, then left-shift
+  // - movk mode A: apply the *unshifted* base to the *left-shifted* nK
+  // - movk mode B: apply the *pre-right-shifted* base to the *original* nK, then left-shift
   //
-  // movk mode A needs one operation less when src != dst (because we need an additional movw in mode B)
+  // mode A is preferred: one operation less.
   //
   // Here, given an arbitrary Klass range [kr1, kr2), we calculate the best base+shift+mode for it.
   // This is complex, because of circularities:
@@ -170,25 +168,20 @@ bool find_best_movk_mode(address kr1, address kr2, movk_mode_t* out) {
   // We solve this by just calculating all options, then taking the best variant.
 
   bool found = false;
-  movk_mode_t found_mode;
+  MovkParms found_mode;
 
   for (int candidate_shift = 0; candidate_shift <= LogKlassAlignmentInBytes; candidate_shift ++) {
-    for (int mode = 0; mode < 3; mode ++) {
-      const bool modeA = (mode == 0);
-      uint64_t candidate_base = p2i(kr1);
-      if (modeA) {
-        candidate_base &= right_n_bits(32);
+    for (int modeA = 0; modeA < 3; modeA ++) {
+      const int base_trailing_zeros = 32 + ((modeA == 1) ? 0 : candidate_shift);
+      address candidate_base = kr1 & right_n_bits(base_trailing_zeros);
       } else {
         candidate_base &= right_n_bits(32 + candidate_shift);
       }
-      movk_mode_t mode;
-      mode._base = candidate_base;
-      mode._shift = candidate_shift;
-      mode._modeA = modeA;
-      assert(mode.is_valid_for_movk(), "Must be valid"); // must be, since we sheared off q1 q2 above.
-      if (mode.covers_range((uint64_t)kr1, (uint64_t)kr2)) {
-        if (found == false || mode.quality() < found_mode.quality()) {
-          found_mode = mode;
+      MovkParms this_mode = { candidate_base, candidate_shift, (bool)modeA };
+      assert(this_mode.is_valid_for_movk(), "Must be valid"); // must be, since we sheared off q1 q2 above.
+      if (this_mode.covers_range((uint64_t)kr1, (uint64_t)kr2)) {
+        if (found == false || this_mode.quality() < found_mode.quality()) {
+          found_mode = this_mode;
         }
       }
     }
@@ -224,19 +217,20 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize(address kr1, address 
 // "reverse-initialize" from a given base and shift, for a given klass range (called for the CDS runtime path)
 bool CompressedKlassPointerSettings_PD::attempt_initialize_for_fixed_base_and_shift(address base, int shift, address kr1, address kr2) {
 
+  const uint64_t basei64 = p2u(base);
   _mode = Mode::KlassDecodeNone;
 
-  // is the coverage ok?
-  const size_t coverage = nth_bit(NarrowKlassPointerBits + shift);
-
-  if (_base + coverage < kr2) {
+  // Bail out early if this setting is plain invalid (if given base and shift wont
+  //  cover klass range regardless of what mode we use)
+  const uint64_t coverage = nth_bit(NarrowKlassPointerBits + shift);
+  if (base + coverage < kr2) {
     log_warning(cds) ("Provided base " PTR_FORMAT ", shift %d, does not cover "
                       "klass range [" PTR_FORMAT ".." PTR_FORMAT ")",
                       p2i(base), shift, p2i(kr1), p2i(kr2));
     return false;
   }
 
-  // given base and shift - which is all CDS stores in archive - deduce mode.
+  // Zero based mode ?
   if (base == nullptr) {
     _mode = Mode::KlassDecodeZero;
     _base = base;
@@ -244,65 +238,57 @@ bool CompressedKlassPointerSettings_PD::attempt_initialize_for_fixed_base_and_sh
     return true;
   }
 
-  // MOVK mode:
-  movk_mode_t mode;
-  mode._base = base;
-  mode._shift = shift;
-
-  // Prefer modeA if possible modeB if not
-  mode._modeA = true;
-  if (!mode.is_valid_for_movk()) {
-    mode._modeA = false;
-    if (!mode.is_valid_for_movk()) {
+  // Must be MOVK mode. Check if valid, and find out movk mode A or B:
+  MovkParms movkparms = { basei64, shift, true};
+  if (!movkparms.is_valid_for_movk()) {
+    movkparms._modeA = false;
+    if (!movkparms.is_valid_for_movk()) {
       // Nope. Out of ideas.
       return false;
     }
   }
 
-  assert(mode.covers_range((uint64_t)kr1, (uint64_t)kr2), "Must be"); // already asserted at start of function
+  assert(movkparms.covers_range(p2u(kr1), p2u(kr2)), "Must be"); // already asserted at start of function
 
   _mode = Mode::KlassDecodeMovk;
-  _base = mode._base;
-  _shift = mode._shift;
-  _movk_modeA = mode._modeA;
+  _base = base;
+  _shift = shift;
+  _movk_modeA = movkparms._modeA;
 
   return true;
 }
 
 // Called at VM init time to reserve a klass range (either class space or class space+cds)
-// - called for -Xshare:off or -Xshare:dump
 address CompressedKlassPointerSettings_PD::reserve_klass_range(size_t len) {
   assert(is_aligned(len, os::vm_allocation_granularity()), "Sanity");
 
   address result = nullptr;
 
-  // We reserve memory with MOVK mode in mind.
+  // Here, we are called to allocate a memory range ameneable to fast encoding later.
+  // Note that the caller will already have attempted to reserve a range for zero-based
+  // encoding and failed. No need to try again. Instead, here we reserve memory with
+  // MOVK mode in mind.
   //
-  // Note that this is a "best effort" scenario: here, we attempt to reserve
-  //  memory best suitable for MOVK encoding. That may or may not work due to
-  //  ASLR etc.
+  // Reserving an "good" range may or may not work due to ASLR and memory layout at
+  // this time. Later, when we setup encoding, we will attempt to do the best with
+  // the range we could get (see CompressedKlassPointerSettings_PD::attempt_initialize()).
   //
-  // Later, we will setup up encoding depending on the klass range we reserve here.
-  //  See attempt_initialize().
-  //  That setup attempts to work well with any arbitrary klass range we give
-  //  it, but will benefit from "good" klass ranges we manage to reserve here.
 
   // We have two MOVK modes (assuming non-zero shift and base):
-  // A) unshifted base: where we first left-shift nKlass, then movk the unshifted base onto it
-  // B) pre-shifted base: where we first movk the right-shifted base into the unshifted nK,
-  //     then left-shift nK
-  // We prefer the former since it may save one move when src and dst registers are different.
+  // mode A) unshifted base: where we first left-shift nKlass, then movk the unshifted base onto it
+  // mode B) pre-shifted base: where we first movk the right-shifted base into the unshifted nK,
+  //         then left-shift nK
+  // We prefer A since it will may one instruction
 
-  // Minimal shift that would be needed to cover the klass range iff encoding base==klass range start
-  // (which we aim for here):
+  // Minimal shift that we'd need to cover the klass range iff encoding base == klass range start
   const int minimal_shift_needed = exact_log2(next_power_of_2(len));
   assert(minimal_shift_needed <= (NarrowKlassPointerBits + LogKlassAlignmentInBytes), "range too large");
-  assert(minimal_shift_needed <= 12, "Lets have a reasonable Limit here.");
 
-  // Depending on whether we need more than 32bits to cover the whole of klass range len,
-  // calculate the amount by which we will need to shift the base.
+  // Do we need more than 32 bits to cover the future klass range len? Then we cannot use mode A, and the base
+  // will be right-shifted before application.
+  // The base, when applied, must fit 0xFFFF_FFFF_0000_0000 (since we only set q2 and possibly q3).
   const int base_shift_amount = (minimal_shift_needed > 32) ?
-                                32 - minimal_shift_needed : // Mode B
+                                32 - minimal_shift_needed : // Mode B: apply right-shifted base
                                 0;                          // Mode A
 
   const int log_klass_range_start_address_alignment = 32 + base_shift_amount;
