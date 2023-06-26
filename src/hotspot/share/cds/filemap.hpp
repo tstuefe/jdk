@@ -194,7 +194,8 @@ private:
   bool   _compact_strings;                        // value of CompactStrings
   uintx  _max_heap_size;                          // java max heap size during dumping
   CompressedOops::Mode _narrow_oop_mode;          // compressed oop encoding mode
-  int     _narrow_klass_shift;                    // save narrow klass base and shift
+  address _narrow_klass_base;                     // narrow klass encoding base
+  int     _narrow_klass_shift;                    // narrow klass encoding shift
   bool    _compressed_oops;                       // save the flag UseCompressedOops
   bool    _compressed_class_ptrs;                 // save the flag UseCompressedClassPointers
   bool    _compact_object_headers;                // save the flag UseCompactObjectHeaders
@@ -264,7 +265,7 @@ public:
   uintx max_heap_size()                    const { return _max_heap_size; }
   CompressedOops::Mode narrow_oop_mode()   const { return _narrow_oop_mode; }
   int narrow_klass_shift()                 const { return _narrow_klass_shift; }
-  address narrow_klass_base()              const { return (address)mapped_base_address(); }
+  address narrow_klass_base()              const { return _narrow_klass_base; }
   char* cloned_vtables()                   const { return from_mapped_offset(_cloned_vtables_offset); }
   char* serialized_data()                  const { return from_mapped_offset(_serialized_data_offset); }
   address heap_begin()                     const { return _heap_begin; }

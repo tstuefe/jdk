@@ -224,6 +224,7 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
   _compressed_class_ptrs = UseCompressedClassPointers;
   _compact_object_headers = UseCompactObjectHeaders;
   _max_heap_size = MaxHeapSize;
+  _narrow_klass_base = CompressedKlassPointers::base();
   _narrow_klass_shift = CompressedKlassPointers::shift();
   _use_optimized_module_handling = MetaspaceShared::use_optimized_module_handling();
   _use_full_module_graph = MetaspaceShared::use_full_module_graph();
@@ -285,6 +286,7 @@ void FileMapHeader::print(outputStream* st) {
   st->print_cr("- compact_strings:                %d", _compact_strings);
   st->print_cr("- max_heap_size:                  " UINTX_FORMAT, _max_heap_size);
   st->print_cr("- narrow_oop_mode:                %d", _narrow_oop_mode);
+  st->print_cr("- narrow_klass_base:              " INTPTR_FORMAT, p2i(_narrow_klass_base));
   st->print_cr("- narrow_klass_shift:             %d", _narrow_klass_shift);
   st->print_cr("- compressed_oops:                %d", _compressed_oops);
   st->print_cr("- compressed_class_ptrs:          %d", _compressed_class_ptrs);

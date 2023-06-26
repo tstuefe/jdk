@@ -112,7 +112,7 @@ public:
   // This is used for the CDS runtime case, where the archive we load pre-determines a base and shift value, but which may or may
   // not fit the range we actually managed to reserve.
   static bool attempt_initialize_for_encoding(address klass_range_start, size_t klass_range_length,
-                                       address desired_base, int desired_shift);
+                                              address desired_base, int desired_shift);
 
   // attempt to reserve a memory range well suited to compressed class encoding
   static address reserve_klass_range(size_t len);

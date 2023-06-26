@@ -256,7 +256,6 @@ static char* compute_shared_base(size_t cds_max) {
 
   // Make sure the default value of SharedBaseAddress specified in globals.hpp is sane.
   assert(!shared_base_too_high(specified_base, aligned_base, cds_max), "Sanity");
-  assert(shared_base_valid(aligned_base), "Sanity");
   return aligned_base;
 }
 
@@ -1154,25 +1153,64 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
     }
   }
 
+  // Now we have reserved the klass range, possibly at our desired address, possibly not.
+  // Last step: re-setup narrow Klass encoding. Try to re-instate the settings we used at dump
+  // time. That could fail for two reasons:
+  // - the klass range may be located at a different location
+  // - the klass range may be larger than at dump time and fall out of the covered encoding
+  //   range.
+#ifdef _LP64
+  if (result == MAP_ARCHIVE_SUCCESS) {
+    if (Metaspace::using_class_space()) {
+      // Set up ccs in metaspace.
+      Metaspace::initialize_class_space(class_space_rs);
+
+      // Set up compressed Klass pointer encoding: the encoding range must
+      //  cover both archive and class space.
+      address cds_base = (address)static_mapinfo->mapped_base();
+      address ccs_end = (address)class_space_rs.end();
+      assert(ccs_end > cds_base, "Sanity check");
+      address klass_encoding_base = static_mapinfo->header()->narrow_klass_base();
+      int klass_encoding_shift = static_mapinfo->header()->narrow_klass_shift();
+
+      const size_t klass_range_size = ccs_end - cds_base;
+      bool success = false;
+
+      // Initialize klass encoding:
+      // first, use encoding base and shift given from archive
+      // - failing that, calculate new base and shift
+      success = CompressedKlassPointers::attempt_initialize_for_encoding(cds_base, klass_range_size, klass_encoding_base, klass_encoding_shift);
+      if (success) {
+        log_info(cds)("Successfully reinstated narrow Klass encoding for klass range [" PTR_FORMAT ".." PTR_FORMAT ") from archived settings "
+                      "(base: " PTR_FORMAT ", shift: %d).", p2i(cds_base), p2i(ccs_end), p2i(klass_encoding_base), klass_encoding_shift);
+        assert(CompressedKlassPointers::base() == klass_encoding_base &&
+               CompressedKlassPointers::shift() == klass_encoding_shift, "Different settings though?");
+      } else {
+        log_info(cds)("Failed to reinstate narrow Klass encoding for klass range [" PTR_FORMAT ".." PTR_FORMAT ") from archived settings "
+                      "(base: " PTR_FORMAT ", shift: %d).", p2i(cds_base), p2i(ccs_end), p2i(klass_encoding_base), klass_encoding_shift);
+        success = CompressedKlassPointers::attempt_initialize(cds_base, klass_range_size);
+        if (success) {
+          log_info(cds)("Initialized narrow Klass encoding for klass range [" PTR_FORMAT ".." PTR_FORMAT ") with settings: "
+                        "(base: " PTR_FORMAT ", shift: %d).", p2i(cds_base), p2i(ccs_end), p2i(klass_encoding_base), klass_encoding_shift);
+        } else {
+          log_info(cds)("Cannot find valid klass encoding scheme for klass range [" PTR_FORMAT ".." PTR_FORMAT ")");
+        }
+      }
+
+      if (success) {
+        // map_or_load_heap_region() compares the current narrow oop and klass encodings
+        // with the archived ones, so it must be done after all encodings are determined.
+        static_mapinfo->map_or_load_heap_region();
+      } else {
+        // This should be rare, but could happen in a very full address space. We cannot load this archive.
+        result = MAP_ARCHIVE_OTHER_FAILURE;
+      }
+    }
+  }
+#endif // _LP64
+
   if (result == MAP_ARCHIVE_SUCCESS) {
     SharedBaseAddress = (size_t)mapped_base_address;
-    LP64_ONLY({
-        if (Metaspace::using_class_space()) {
-          // Set up ccs in metaspace.
-          Metaspace::initialize_class_space(class_space_rs);
-
-          // Set up compressed Klass pointer encoding: the encoding range must
-          //  cover both archive and class space.
-          address cds_base = (address)static_mapinfo->mapped_base();
-          address ccs_end = (address)class_space_rs.end();
-          assert(ccs_end > cds_base, "Sanity check");
-          CompressedKlassPointers::initialize(cds_base, ccs_end - cds_base);
-
-          // map_or_load_heap_region() compares the current narrow oop and klass encodings
-          // with the archived ones, so it must be done after all encodings are determined.
-          static_mapinfo->map_or_load_heap_region();
-        }
-      });
     log_info(cds)("optimized module handling: %s", MetaspaceShared::use_optimized_module_handling() ? "enabled" : "disabled");
     log_info(cds)("full module graph: %s", MetaspaceShared::use_full_module_graph() ? "enabled" : "disabled");
   } else {
@@ -1257,14 +1295,10 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
   size_t archive_end_offset  = (dynamic_mapinfo == nullptr) ? static_mapinfo->mapping_end_offset() : dynamic_mapinfo->mapping_end_offset();
   size_t archive_space_size = align_up(archive_end_offset, archive_space_alignment);
 
-  // If a base address is given, it must have valid alignment and be suitable as encoding base.
+  // If a base address is given, it must be properly aligned
   if (base_address != nullptr) {
     assert(is_aligned(base_address, archive_space_alignment),
            "Archive base address invalid: " PTR_FORMAT ".", p2i(base_address));
-    if (Metaspace::using_class_space()) {
-      assert(CompressedKlassPointers::is_valid_base(base_address),
-             "Archive base address invalid: " PTR_FORMAT ".", p2i(base_address));
-    }
   }
 
   if (!Metaspace::using_class_space()) {
@@ -1333,8 +1367,8 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
       total_space_rs = ReservedSpace(total_range_size, archive_space_alignment,
                                      os::vm_page_size(), (char*) base_address);
     } else {
-      // Reserve at any address, but leave it up to the platform to choose a good one.
-      total_space_rs = Metaspace::reserve_address_space_for_compressed_classes(total_range_size);
+      address addr = CompressedKlassPointers::reserve_klass_range(total_range_size);
+      total_space_rs = ReservedSpace::create_space_from_range(addr, total_range_size);
     }
 
     if (!total_space_rs.is_reserved()) {
@@ -1346,7 +1380,6 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
            "Sanity (" PTR_FORMAT " vs " PTR_FORMAT ")", p2i(base_address), p2i(total_space_rs.base()));
     assert(is_aligned(total_space_rs.base(), archive_space_alignment), "Sanity");
     assert(total_space_rs.size() == total_range_size, "Sanity");
-    assert(CompressedKlassPointers::is_valid_base((address)total_space_rs.base()), "Sanity");
 
     // Now split up the space into ccs and cds archive. For simplicity, just leave
     //  the gap reserved at the end of the archive space. Do not do real splitting.
