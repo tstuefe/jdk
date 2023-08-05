@@ -4547,13 +4547,22 @@ MacroAssembler::KlassDecodeMode MacroAssembler::klass_decode_mode() {
 
   const uint64_t shifted_base =
     (uint64_t)CompressedKlassPointers::base() >> CompressedKlassPointers::shift();
-  guarantee((shifted_base & 0xffff0000ffffffff) == 0,
-            "compressed class base bad alignment");
+  if ((shifted_base & 0xffff0000ffffffff) == 0) {
+    return (_klass_decode_mode = KlassDecodeMovk);
+  }
 
-  return (_klass_decode_mode = KlassDecodeMovk);
+  return (_klass_decode_mode = KlassDecodeAdd);
 }
 
 void MacroAssembler::encode_klass_not_null(Register dst, Register src) {
+  Register tmp = rscratch2; // for KlassDecodeAdd
+  assert_different_registers(tmp, src);
+  assert_different_registers(tmp, dst);
+
+  const uint64_t base_i64 = (uint64_t)CompressedKlassPointers::base();
+  const int shift = CompressedKlassPointers::shift();
+  const uint64_t base_i64_rshifted = base_i64 >> shift;
+if (UseNewCode)brk(0);
   switch (klass_decode_mode()) {
   case KlassDecodeZero:
     if (CompressedKlassPointers::shift() != 0) {
@@ -4580,6 +4589,22 @@ void MacroAssembler::encode_klass_not_null(Register dst, Register src) {
     }
     break;
 
+  case KlassDecodeAdd:
+    if (src == dst) {
+      mov_immediate64(rscratch1, -base_i64_rshifted);
+      add(src, src, rscratch1);
+      if (shift > 0) {
+        lsr(src, src, shift);
+      }
+    } else {
+      mov_immediate64(dst, -base_i64_rshifted);
+      add(dst, dst, src);
+      if (shift > 0) {
+        lsr(dst, dst, shift);
+      }
+    }
+    break;
+
   case KlassDecodeNone:
     ShouldNotReachHere();
     break;
@@ -4591,7 +4616,14 @@ void MacroAssembler::encode_klass_not_null(Register r) {
 }
 
 void  MacroAssembler::decode_klass_not_null(Register dst, Register src) {
+  Register tmp = rscratch2; // for KlassDecodeAdd
+  assert_different_registers(tmp, src);
+  assert_different_registers(tmp, dst);
   assert (UseCompressedClassPointers, "should only be used for compressed headers");
+if (UseNewCode)brk(0);
+  const uint64_t base_i64 = (uint64_t)CompressedKlassPointers::base();
+  const int shift = CompressedKlassPointers::shift();
+  const uint64_t base_i64_rshifted = base_i64 >> shift;
 
   switch (klass_decode_mode()) {
   case KlassDecodeZero:
@@ -4621,9 +4653,24 @@ void  MacroAssembler::decode_klass_not_null(Register dst, Register src) {
     if (CompressedKlassPointers::shift() != 0) {
       lsl(dst, dst, LogKlassAlignmentInBytes);
     }
-
     break;
   }
+
+  case KlassDecodeAdd:
+    if (src == dst) {
+      mov_immediate64(rscratch1, base_i64_rshifted);
+      add(src, src, rscratch1);
+      if (shift > 0) {
+        lsl(src, src, shift);
+      }
+    } else {
+      mov_immediate64(dst, base_i64_rshifted);
+      add(dst, dst, src);
+      if (shift > 0) {
+        lsl(dst, dst, shift);
+      }
+    }
+    break;
 
   case KlassDecodeNone:
     ShouldNotReachHere();

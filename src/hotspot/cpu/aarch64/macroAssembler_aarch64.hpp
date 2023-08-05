@@ -91,7 +91,8 @@ class MacroAssembler: public Assembler {
     KlassDecodeNone,
     KlassDecodeZero,
     KlassDecodeXor,
-    KlassDecodeMovk
+    KlassDecodeMovk,
+    KlassDecodeAdd
   };
 
   KlassDecodeMode klass_decode_mode();

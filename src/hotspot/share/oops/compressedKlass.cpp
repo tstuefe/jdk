@@ -95,7 +95,7 @@ void CompressedKlassPointers::initialize(address addr, size_t len) {
 // Given an address p, return true if p can be used as an encoding base.
 //  (Some platforms have restrictions of what constitutes a valid base address).
 bool CompressedKlassPointers::is_valid_base(address p) {
-#ifdef AARCH64
+#ifdef ____AARCH64
   // Below 32G, base must be aligned to 4G.
   // Above that point, base must be aligned to 32G
   if (p < (address)(32 * G)) {
