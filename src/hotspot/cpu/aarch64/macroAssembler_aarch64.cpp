@@ -4533,6 +4533,7 @@ MacroAssembler::KlassDecodeMode MacroAssembler::klass_decode_mode() {
          || 0 == CompressedKlassPointers::shift(), "decode alg wrong");
 
   if (CompressedKlassPointers::base() == nullptr) {
+    log_info(gc, metaspace)("nKlass decode mode zero");
     return (_klass_decode_mode = KlassDecodeZero);
   }
 
@@ -4541,6 +4542,7 @@ MacroAssembler::KlassDecodeMode MacroAssembler::klass_decode_mode() {
     const uint64_t range_mask =
       (1ULL << log2i(CompressedKlassPointers::range())) - 1;
     if (((uint64_t)CompressedKlassPointers::base() & range_mask) == 0) {
+      log_info(gc, metaspace)("nKlass decode mode xor");
       return (_klass_decode_mode = KlassDecodeXor);
     }
   }
@@ -4549,6 +4551,7 @@ MacroAssembler::KlassDecodeMode MacroAssembler::klass_decode_mode() {
     (uint64_t)CompressedKlassPointers::base() >> CompressedKlassPointers::shift();
   guarantee((shifted_base & 0xffff0000ffffffff) == 0,
             "compressed class base bad alignment");
+  log_info(gc, metaspace)("nKlass decode mode movk");
 
   return (_klass_decode_mode = KlassDecodeMovk);
 }
@@ -4564,14 +4567,6 @@ void MacroAssembler::encode_klass_not_null(Register dst, Register src) {
     break;
 
   case KlassDecodeXor:
-    if (CompressedKlassPointers::shift() != 0) {
-      eor(dst, src, (uint64_t)CompressedKlassPointers::base());
-      lsr(dst, dst, LogKlassAlignmentInBytes);
-    } else {
-      eor(dst, src, (uint64_t)CompressedKlassPointers::base());
-    }
-    break;
-
   case KlassDecodeMovk:
     if (CompressedKlassPointers::shift() != 0) {
       ubfx(dst, src, LogKlassAlignmentInBytes, 32);
