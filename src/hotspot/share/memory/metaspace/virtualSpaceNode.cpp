@@ -252,9 +252,31 @@ VirtualSpaceNode* VirtualSpaceNode::create_node(size_t word_size,
                                                 SizeCounter* commit_words_counter)
 {
   DEBUG_ONLY(assert_is_aligned(word_size, chunklevel::MAX_CHUNK_WORD_SIZE);)
-  ReservedSpace rs(word_size * BytesPerWord,
-                   Settings::virtual_space_node_reserve_alignment_words() * BytesPerWord,
-                   os::vm_page_size());
+  const size_t reserve_alignment_bytes = Settings::virtual_space_node_reserve_alignment_words() * BytesPerWord;
+  const size_t byte_size = word_size * BytesPerWord;
+  ReservedSpace rs;
+
+#ifdef _LP64
+  {
+    // On 64-bit, favor low address space.
+    // To make this worthwhile and to limit low address fragmentation, create node with a larger size. Chances
+    // are this will be the only node we'll create.
+    const size_t byte_size_larger = MAX2(byte_size, (256 * M));
+    constexpr uint64_t max_address = 0x80000000;
+    constexpr bool randomize = false;
+    char* p = os::attempt_reserve_memory_between(nullptr, (char*)max_address, byte_size_larger,
+                                                 reserve_alignment_bytes, randomize);
+    if (p != nullptr) {
+      rs = ReservedSpace::space_for_range(p, byte_size_larger, reserve_alignment_bytes,
+                                          os::vm_page_size(), false, false);
+    }
+  }
+#endif // _LP64
+
+  if (!rs.is_reserved()) {
+    // Okay, try anywhere.
+    ReservedSpace rs(byte_size, reserve_alignment_bytes, os::vm_page_size());
+  }
   if (!rs.is_reserved()) {
     vm_exit_out_of_memory(word_size * BytesPerWord, OOM_MMAP_ERROR, "Failed to reserve memory for metaspace");
   }
