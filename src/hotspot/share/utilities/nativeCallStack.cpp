@@ -90,10 +90,17 @@ void NativeCallStack::print_on(outputStream* out, int indent) const {
       if (pc == nullptr) break;
       // Print indent
       for (int index = 0; index < indent; index ++) out->print(" ");
+      out->print("[" PTR_FORMAT "]", p2i(pc));
+      bool have_function_name = false;
       if (os::dll_address_to_function_name(pc, buf, sizeof(buf), &offset)) {
-        out->print("[" PTR_FORMAT "] %s+0x%x", p2i(pc), buf, offset);
-      } else {
-        out->print("[" PTR_FORMAT "]", p2i(pc));
+        out->print(" %s+0x%x", buf, offset);
+        bool have_function_name = true;
+      }
+      if (os::dll_address_to_library_name(pc, buf, sizeof(buf), &offset)) {
+        out->print(", %s", buf);
+        if (!have_function_name) { // print offset if not printed for function name
+          out->print("+0x%x", offset);
+        }
       }
 
       // Note: we deliberately omit printing source information here. NativeCallStack::print_on()
