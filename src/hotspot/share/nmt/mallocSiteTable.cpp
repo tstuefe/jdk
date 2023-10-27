@@ -25,6 +25,7 @@
 
 #include "memory/allocation.inline.hpp"
 #include "nmt/mallocSiteTable.hpp"
+#include "nmt/nmt_interposition.hpp"
 #include "runtime/atomic.hpp"
 
 // Malloc site hashtable buckets
@@ -41,6 +42,8 @@ const MallocSiteHashtableEntry* MallocSiteTable::_hash_entry_allocation_site = n
  * time, it is in single-threaded mode from JVM perspective.
  */
 bool MallocSiteTable::initialize() {
+
+  assert(!NMTInterposition::enabled(), "before interposition enablement");
 
   ALLOW_C_FUNCTION(::calloc,
                    _table = (MallocSiteHashtableEntry**)::calloc(table_size, sizeof(MallocSiteHashtableEntry*));)

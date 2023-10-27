@@ -99,6 +99,7 @@ class outputStream;
   LOG_TAG(init) \
   LOG_TAG(inlining) \
   LOG_TAG(install) \
+  LOG_TAG(interpose) \
   LOG_TAG(interpreter) \
   LOG_TAG(itables) \
   LOG_TAG(jfr) \
