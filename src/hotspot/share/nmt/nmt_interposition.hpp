@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2005, 2023, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2011, 2023, Red Hat Inc. All rights reserved.
+ * Copyright (c) 2023, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,6 +27,7 @@
 
 #include "memory/allStatic.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include <sys/mman.h>
 
 class NMTInterposition : public AllStatic {
   static bool _enabled;
@@ -38,6 +38,23 @@ public:
   static void* libjvm_callback_malloc(size_t len);
   static void* libjvm_callback_realloc(void* old, size_t len);
   static void  libjvm_callback_free(void* old);
+  static void* libjvm_callback_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+  static int   libjvm_callback_munmap(void *addr, size_t length);
 };
+
+// Convenience wrapper
+// Call those wherever the libjvm takes care of NMT registration itself. Don't call if the JVM does not
+// care about NMT registration.
+inline void* raw_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  return NMTInterposition::enabled() ?
+         NMTInterposition::libjvm_callback_mmap(addr, length, prot, flags, fd, offset) :
+         ::mmap(addr, length, prot, flags, fd, offset);
+}
+
+inline int raw_munmap(void *addr, size_t length) {
+  return NMTInterposition::enabled() ?
+         NMTInterposition::libjvm_callback_munmap(addr, length) :
+         ::munmap(addr, length);
+}
 
 #endif // OS_LINUX_NMT_INTERPOSITION_HPP
