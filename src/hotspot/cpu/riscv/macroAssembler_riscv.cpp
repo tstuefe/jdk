@@ -2262,11 +2262,10 @@ void MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
 
 void MacroAssembler::decode_klass_not_null(Register dst, Register src, Register tmp) {
   assert(UseCompressedClassPointers, "should only be used for compressed headers");
-
+  const int shift = CompressedKlassPointers::shift();
   if (CompressedKlassPointers::base() == nullptr) {
-    if (CompressedKlassPointers::shift() != 0) {
-      assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift(), "decode alg wrong");
-      slli(dst, src, LogKlassAlignmentInBytes);
+    if (shift != 0) {
+      slli(dst, src, shift);
     } else {
       mv(dst, src);
     }
@@ -2281,10 +2280,9 @@ void MacroAssembler::decode_klass_not_null(Register dst, Register src, Register 
   assert_different_registers(src, xbase);
   mv(xbase, (uintptr_t)CompressedKlassPointers::base());
 
-  if (CompressedKlassPointers::shift() != 0) {
-    assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift(), "decode alg wrong");
+  if (shift != 0) {
     assert_different_registers(t0, xbase);
-    shadd(dst, src, xbase, t0, LogKlassAlignmentInBytes);
+    shadd(dst, src, xbase, t0, shift);
   } else {
     add(dst, xbase, src);
   }
@@ -2297,19 +2295,18 @@ void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
 
 void MacroAssembler::encode_klass_not_null(Register dst, Register src, Register tmp) {
   assert(UseCompressedClassPointers, "should only be used for compressed headers");
+  const int shift = CompressedKlassPointers::shift();
 
   if (CompressedKlassPointers::base() == nullptr) {
-    if (CompressedKlassPointers::shift() != 0) {
-      assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift(), "decode alg wrong");
-      srli(dst, src, LogKlassAlignmentInBytes);
+    if (shift != 0) {
+      srli(dst, src, shift);
     } else {
       mv(dst, src);
     }
     return;
   }
 
-  if (((uint64_t)CompressedKlassPointers::base() & 0xffffffff) == 0 &&
-      CompressedKlassPointers::shift() == 0) {
+  if (((uint64_t)CompressedKlassPointers::base() & 0xffffffff) == 0 && shift == 0) {
     zero_extend(dst, src, 32);
     return;
   }
@@ -2322,9 +2319,8 @@ void MacroAssembler::encode_klass_not_null(Register dst, Register src, Register 
   assert_different_registers(src, xbase);
   mv(xbase, (uintptr_t)CompressedKlassPointers::base());
   sub(dst, src, xbase);
-  if (CompressedKlassPointers::shift() != 0) {
-    assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift(), "decode alg wrong");
-    srli(dst, dst, LogKlassAlignmentInBytes);
+  if (shift != 0) {
+    srli(dst, dst, shift);
   }
 }
 

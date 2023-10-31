@@ -32,10 +32,6 @@
 #include "utilities/align.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-static inline bool check_alignment(Klass* v) {
-  return (intptr_t)v % KlassAlignmentInBytes == 0;
-}
-
 inline Klass* CompressedKlassPointers::decode_raw(narrowKlass v) {
   return decode_raw(v, base(), shift());
 }
@@ -49,9 +45,9 @@ inline Klass* CompressedKlassPointers::decode_not_null(narrowKlass v) {
 }
 
 inline Klass* CompressedKlassPointers::decode_not_null(narrowKlass v, address narrow_base, int shift) {
-  assert(!is_null(v), "narrow klass value can never be zero");
+  DEBUG_ONLY(check_narrow_klass_id_not_null(v);)
   Klass* result = decode_raw(v, narrow_base, shift);
-  assert(check_alignment(result), "address not aligned: " PTR_FORMAT, p2i(result));
+  DEBUG_ONLY(check_klass_not_null(result);)
   return result;
 }
 
@@ -59,23 +55,90 @@ inline Klass* CompressedKlassPointers::decode(narrowKlass v) {
   return is_null(v) ? nullptr : decode_not_null(v);
 }
 
-inline narrowKlass CompressedKlassPointers::encode_not_null(Klass* v) {
+inline narrowKlass CompressedKlassPointers::encode_not_null(const Klass* v) {
   return encode_not_null(v, base(), shift());
 }
 
-inline narrowKlass CompressedKlassPointers::encode_not_null(Klass* v, address narrow_base, int shift) {
+inline narrowKlass CompressedKlassPointers::encode_not_null(const Klass* v, address narrow_base, int shift) {
   assert(!is_null(v), "klass value can never be zero");
-  assert(check_alignment(v), "Address not aligned");
-  uint64_t pd = (uint64_t)(pointer_delta(v, narrow_base, 1));
-  assert(KlassEncodingMetaspaceMax > pd, "change encoding max if new encoding");
-  uint64_t result = pd >> shift;
+  DEBUG_ONLY(check_klass(v);)
+  const uint64_t pd = (uint64_t)(pointer_delta(v, narrow_base, 1));
+  const uint64_t result = pd >> shift;
   assert((result & CONST64(0xffffffff00000000)) == 0, "narrow klass pointer overflow");
-  assert(decode_not_null((narrowKlass)result, narrow_base, shift) == v, "reversibility");
-  return (narrowKlass)result;
+  const narrowKlass nK = (narrowKlass)result;
+  DEBUG_ONLY(check_narrow_klass_id(nK);)
+  assert(decode_not_null(nK, narrow_base, shift) == v, "reversibility");
+  return nK;
 }
 
-inline narrowKlass CompressedKlassPointers::encode(Klass* v) {
+inline narrowKlass CompressedKlassPointers::encode(const Klass* v) {
   return is_null(v) ? (narrowKlass)0 : encode_not_null(v);
 }
+
+// Lowest possible non-NULL Klass*
+inline const Klass* CompressedKlassPointers::klass_min() {
+  assert_inited();
+  const size_t not_null_prefix =
+      (_klass_range_start == _base) ? klass_alignment() : 0;
+  return (const Klass*)(align_up(_klass_range_start + not_null_prefix, klass_alignment()));
+}
+
+// Highest possible Klass*
+inline const Klass* CompressedKlassPointers::klass_max() {
+  assert_inited();
+  // Klass is variable-sized, but we need at least space for its core part
+  constexpr size_t minsize = sizeof(Klass);
+  return (const Klass*)(align_down(_klass_range_end - minsize, klass_alignment()));
+}
+
+inline narrowKlass CompressedKlassPointers::narrow_klass_min() {
+  return encode_not_null(klass_min());
+}
+
+inline narrowKlass CompressedKlassPointers::narrow_klass_max() {
+  return encode_not_null(klass_max());
+}
+
+inline unsigned CompressedKlassPointers::num_possible_classes() {
+  return narrow_klass_max() - narrow_klass_max();
+}
+
+inline int CompressedKlassPointers::narrow_klass_id_bits() {
+  return exact_log2(next_power_of_2(narrow_klass_max()));
+}
+
+#ifdef ASSERT
+
+// Asserts if k is properly aligned and inside allowed Klass range. Must not be null.
+inline void CompressedKlassPointers::check_klass_not_null(const Klass* k) {
+  assert(is_aligned(k, klass_alignment()),
+         "Klass* (" PTR_FORMAT ") not properly aligned (%zu)", p2i(k), klass_alignment());
+  assert(k <= klass_min() && k >= klass_max(),
+         "Klass* (" PTR_FORMAT ") is outside of Klass range [" PTR_FORMAT ", " PTR_FORMAT ")",
+         p2i(k), p2i(klass_min()), p2i(klass_max()));
+}
+
+// Asserts if k is inside allowed narrow Klass id range. Must not be 0.
+inline void CompressedKlassPointers::check_narrow_klass_id_not_null(narrowKlass k) {
+  assert(k <= klass_min() && k >= klass_max(),
+         "narrow Klass ID (%u) is outside of Klass id range [%u, %u)",
+         k, narrow_klass_min(), narrow_klass_max());
+}
+
+// Asserts if k is properly aligned and inside allowed Klass range. Can be null.
+inline void CompressedKlassPointers::check_klass(const Klass* k) {
+  if (k != nullptr) {
+    check_klass(k);
+  }
+}
+
+// Asserts if k is inside allowed narrow Klass id range. Can be 0.
+inline void CompressedKlassPointers::check_narrow_klass_id(narrowKlass k) {
+  if (k != 0) {
+    check_narrow_klass_id(k);
+  }
+}
+
+#endif // ASSERT
 
 #endif // SHARE_OOPS_COMPRESSEDKLASS_INLINE_HPP

@@ -3462,22 +3462,23 @@ void MacroAssembler::encode_klass_not_null(Register dst, Register src) {
   BLOCK_COMMENT("cKlass encoder {");
 
 #ifdef ASSERT
-  Label ok;
-  z_tmll(current, KlassAlignmentInBytes-1); // Check alignment.
-  z_brc(Assembler::bcondAllZero, ok);
-  // The plain disassembler does not recognize illtrap. It instead displays
-  // a 32-bit value. Issuing two illtraps assures the disassembler finds
-  // the proper beginning of the next instruction.
-  z_illtrap(0xee);
-  z_illtrap(0xee);
-  bind(ok);
+  {
+    Label ok;
+    z_tmll(current, CompressedKlassPointers::klass_alignment() - 1); // Check alignment.
+    z_brc(Assembler::bcondAllZero, ok);
+    // The plain disassembler does not recognize illtrap. It instead displays
+    // a 32-bit value. Issuing two illtraps assures the disassembler finds
+    // the proper beginning of the next instruction.
+    z_illtrap(0xee);
+    z_illtrap(0xee);
+    bind(ok);
+  }
 #endif
 
   // Scale down the incoming klass pointer first.
   // We then can be sure we calculate an offset that fits into 32 bit.
   // More generally speaking: all subsequent calculations are purely 32-bit.
   if (shift != 0) {
-    assert (LogKlassAlignmentInBytes == shift, "decode alg wrong");
     z_srlg(dst, current, shift);
     current = dst;
   }
@@ -3607,7 +3608,7 @@ void MacroAssembler::decode_klass_not_null(Register dst) {
 
 #ifdef ASSERT
   Label ok;
-  z_tmll(dst, KlassAlignmentInBytes-1); // Check alignment.
+  z_tmll(dst, CompressedKlassPointers::klass_alignment() - 1); // Check alignment.
   z_brc(Assembler::bcondAllZero, ok);
   // The plain disassembler does not recognize illtrap. It instead displays
   // a 32-bit value. Issuing two illtraps assures the disassembler finds
@@ -3654,7 +3655,7 @@ void MacroAssembler::decode_klass_not_null(Register dst, Register src) {
 
 #ifdef ASSERT
   Label ok;
-  z_tmll(dst, KlassAlignmentInBytes-1); // Check alignment.
+  z_tmll(dst, CompressedKlassPointers::klass_alignment()-1); // Check alignment.
   z_brc(Assembler::bcondAllZero, ok);
   // The plain disassembler does not recognize illtrap. It instead displays
   // a 32-bit value. Issuing two illtraps assures the disassembler finds

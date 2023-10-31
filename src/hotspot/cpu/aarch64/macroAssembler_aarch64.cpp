@@ -4637,24 +4637,30 @@ MacroAssembler::KlassDecodeMode MacroAssembler::klass_decode_mode() {
     return _klass_decode_mode;
   }
 
-  assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift()
-         || 0 == CompressedKlassPointers::shift(), "decode alg wrong");
+  const uint64_t basei = (uint64_t)CompressedKlassPointers::base();
+  const int shift = CompressedKlassPointers::shift();
 
-  if (CompressedKlassPointers::base() == nullptr) {
+  // For now we only allow 0 or 3 as possible shift values
+  assert(3 == shift || 0 == shift,
+         "decode alg wrong");
+
+  if (basei == 0) {
     return (_klass_decode_mode = KlassDecodeZero);
   }
 
-  if (operand_valid_for_logical_immediate(
-        /*is32*/false, (uint64_t)CompressedKlassPointers::base())) {
+  // XOR if base is a valid EOR immediate and or-able with narrow Klass ID
+  if (operand_valid_for_logical_immediate( /*is32*/ false, basei)) {
     const uint64_t range_mask =
-      (1ULL << log2i(CompressedKlassPointers::range())) - 1;
-    if (((uint64_t)CompressedKlassPointers::base() & range_mask) == 0) {
-      return (_klass_decode_mode = KlassDecodeXor);
+        right_n_bits(CompressedKlassPointers::narrow_klass_id_bits() + shift);
+    if ((basei & range_mask) == 0) {
+      return _klass_decode_mode = KlassDecodeXor;
     }
   }
 
-  const uint64_t shifted_base =
-    (uint64_t)CompressedKlassPointers::base() >> CompressedKlassPointers::shift();
+  // MOVK mode if right-shifted can be combined with unshifted narrow Klass ID.
+  // Note that in traditionally, we either have a zero-shift or a zero-base, but
+  // that may change with Liliput.
+  const uint64_t shifted_base = basei >> shift;
   guarantee((shifted_base & 0xffff0000ffffffff) == 0,
             "compressed class base bad alignment");
 
@@ -4662,27 +4668,28 @@ MacroAssembler::KlassDecodeMode MacroAssembler::klass_decode_mode() {
 }
 
 void MacroAssembler::encode_klass_not_null(Register dst, Register src) {
+  const int shift = CompressedKlassPointers::shift();
   switch (klass_decode_mode()) {
   case KlassDecodeZero:
-    if (CompressedKlassPointers::shift() != 0) {
-      lsr(dst, src, LogKlassAlignmentInBytes);
+    if (shift != 0) {
+      lsr(dst, src, shift);
     } else {
       if (dst != src) mov(dst, src);
     }
     break;
 
   case KlassDecodeXor:
-    if (CompressedKlassPointers::shift() != 0) {
+    if (shift != 0) {
       eor(dst, src, (uint64_t)CompressedKlassPointers::base());
-      lsr(dst, dst, LogKlassAlignmentInBytes);
+      lsr(dst, dst, shift);
     } else {
       eor(dst, src, (uint64_t)CompressedKlassPointers::base());
     }
     break;
 
   case KlassDecodeMovk:
-    if (CompressedKlassPointers::shift() != 0) {
-      ubfx(dst, src, LogKlassAlignmentInBytes, 32);
+    if (shift != 0) {
+      ubfx(dst, src, shift, 32);
     } else {
       movw(dst, src);
     }
@@ -4700,19 +4707,20 @@ void MacroAssembler::encode_klass_not_null(Register r) {
 
 void  MacroAssembler::decode_klass_not_null(Register dst, Register src) {
   assert (UseCompressedClassPointers, "should only be used for compressed headers");
+  const int shift = CompressedKlassPointers::shift();
 
   switch (klass_decode_mode()) {
   case KlassDecodeZero:
-    if (CompressedKlassPointers::shift() != 0) {
-      lsl(dst, src, LogKlassAlignmentInBytes);
+    if (shift != 0) {
+      lsl(dst, src, shift);
     } else {
       if (dst != src) mov(dst, src);
     }
     break;
 
   case KlassDecodeXor:
-    if (CompressedKlassPointers::shift() != 0) {
-      lsl(dst, src, LogKlassAlignmentInBytes);
+    if (shift != 0) {
+      lsl(dst, src, shift);
       eor(dst, dst, (uint64_t)CompressedKlassPointers::base());
     } else {
       eor(dst, src, (uint64_t)CompressedKlassPointers::base());
@@ -4721,13 +4729,13 @@ void  MacroAssembler::decode_klass_not_null(Register dst, Register src) {
 
   case KlassDecodeMovk: {
     const uint64_t shifted_base =
-      (uint64_t)CompressedKlassPointers::base() >> CompressedKlassPointers::shift();
+      (uint64_t)CompressedKlassPointers::base() >> shift;
 
     if (dst != src) movw(dst, src);
     movk(dst, shifted_base >> 32, 32);
 
-    if (CompressedKlassPointers::shift() != 0) {
-      lsl(dst, dst, LogKlassAlignmentInBytes);
+    if (shift != 0) {
+      lsl(dst, dst, shift);
     }
 
     break;

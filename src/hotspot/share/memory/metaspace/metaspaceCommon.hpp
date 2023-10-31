@@ -48,7 +48,6 @@ namespace metaspace {
 // On 64-bit platforms, we align to word size; on 32-bit, we align to two words.
 
 static const size_t AllocationAlignmentByteSize = 8;
-STATIC_ASSERT(AllocationAlignmentByteSize == (size_t)KlassAlignmentInBytes);
 
 static const size_t AllocationAlignmentWordSize = AllocationAlignmentByteSize / BytesPerWord;
 

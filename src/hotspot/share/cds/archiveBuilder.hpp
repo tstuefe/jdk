@@ -45,7 +45,7 @@ class Symbol;
 
 // Metaspace::allocate() requires that all blocks must be aligned with KlassAlignmentInBytes.
 // We enforce the same alignment rule in blocks allocated from the shared space.
-const int SharedSpaceObjectAlignment = KlassAlignmentInBytes;
+const int SharedSpaceObjectAlignment = CompressedKlassPointers::max_klass_alignment();
 
 // Overview of CDS archive creation (for both static and dynamic dump):
 //
