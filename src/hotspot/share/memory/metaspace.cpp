@@ -1016,10 +1016,10 @@ bool Metaspace::contains(const void* ptr) {
   if (MetaspaceShared::is_in_shared_metaspace(ptr)) {
     return true;
   }
-  return contains_non_shared(ptr);
+  return is_in_metaspace_or_class_space(ptr);
 }
 
-bool Metaspace::contains_non_shared(const void* ptr) {
+bool Metaspace::is_in_metaspace_or_class_space(const void* ptr) {
   if (using_class_space() && VirtualSpaceList::vslist_class()->contains((MetaWord*)ptr)) {
      return true;
   }

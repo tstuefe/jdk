@@ -27,6 +27,7 @@
 #define SHARE_MEMORY_METASPACE_METASPACECOMMON_HPP
 
 #include "oops/compressedKlass.hpp"
+#include "logging/log.hpp"
 #include "runtime/globals.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
@@ -84,8 +85,6 @@ void print_percentage(outputStream* st, size_t total, size_t part);
   assert(is_aligned((value), (alignment)),                   \
          SIZE_FORMAT_X " is not aligned to "                 \
          SIZE_FORMAT_X, (size_t)(uintptr_t)value, (size_t)(alignment))
-#define assert_is_aligned_metaspace_pointer(p) \
-  assert_is_aligned((p), metaspace::AllocationAlignmentByteSize);
 #else
 #define assert_is_aligned(value, alignment)
 #define assert_is_aligned_metaspace_pointer(pointer)
@@ -133,9 +132,7 @@ void print_number_of_classes(outputStream* out, uintx classes, uintx classes_sha
 // What we log at which levels:
 
 // "info" : metaspace failed allocation, commit failure, reserve failure, metaspace oom, metaspace gc threshold changed, Arena created, destroyed, metaspace purged
-
 // "debug" : "info" + vslist extended, memory committed/uncommitted, chunk created/split/merged/enlarged, chunk returned
-
 // "trace" : "debug" + every single allocation and deallocation, internals
 
 #define HAVE_UL

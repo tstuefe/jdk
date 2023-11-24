@@ -32,9 +32,12 @@ namespace metaspace {
 
 // Tiny structure to be passed by value
 class MetaBlock {
-  MetaWord* const _base;
-  const size_t _word_size;
+
+  MetaWord* _base;
+  size_t _word_size;
+
 public:
+
   MetaBlock() : _base(nullptr), _word_size(0) {}
   MetaBlock(MetaWord* p, size_t word_size) :
     _base(p), _word_size(0) {}
@@ -44,31 +47,21 @@ public:
   size_t word_size() const { return _word_size; }
   bool is_empty() const { return _base == nullptr; }
 
-  // Return a block at the tail end of this block,
-  // at a given distance from base.
-  MetaBlock tail(size_t head_size) const {
+  MetaBlock split_off_tail(size_t head_size) const {
+    MetaBlock result;
     if (!is_empty()) {
       if (head_size < _word_size) {
-        return MetaBlock(_base + head_size, _word_size - head_size);
+        const size_t tail_size = _word_size - head_size;
+        result = MetaBlock(_base + head_size, tail_size);
+        _word_size -= tail_size;
       }
     }
-    return MetaBlock(); // empty block
+    return result;
   }
-
-  // Return a block with an aligned base. Returns empty block
-  // if that is not possible.
-  MetaBlock aligned_block(size_t word_alignment) const {
-    if (!is_empty()) {
-      MetaWord* const aligned_base = align_up(_base, word_alignment * BytesPerWord);
-      if (aligned_base < end()) {
-        const size_t l = _word_size - (aligned_base - _base);
-        return MetaBlock(aligned_base, l);
-      }
-    }
-    return MetaBlock(); // empty block
-  }
-
 };
+
+#define METABLOCKFORMAT             "block (@" PTR_FORMAT " size " SIZE_FORMAT ")"
+#define METABLOCKFORMATARGS(__block__)  p2i((__block__).base()), (__block__).word_size()
 
 }
 

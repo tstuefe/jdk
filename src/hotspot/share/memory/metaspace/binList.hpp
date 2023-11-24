@@ -28,6 +28,7 @@
 #define SHARE_MEMORY_METASPACE_BINLIST_HPP
 
 #include "memory/metaspace/counters.hpp"
+#include "memory/metaspace/metablock.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
@@ -143,7 +144,9 @@ public:
     }
   }
 
-  void add_block(MetaWord* p, size_t word_size) {
+  void add_block(MetaBlock mb) {
+    const size_t word_size = mb.word_size();
+    MetaWord* const p = mb.base();
     assert(word_size >= MinWordSize &&
            word_size <= MaxWordSize, "bad block size");
     DEBUG_ONLY(write_canary(p, word_size);)
@@ -155,10 +158,11 @@ public:
   }
 
   // Given a word_size, searches and returns a block of at least that size.
-  // Block may be larger. Real block size is returned in *p_real_word_size.
-  MetaWord* remove_block(size_t word_size, size_t* p_real_word_size) {
+  // Block may be larger.
+  MetaBlock remove_block(size_t word_size) {
     assert(word_size >= MinWordSize &&
            word_size <= MaxWordSize, "bad block size " SIZE_FORMAT ".", word_size);
+    MetaBlock result;
     int index = index_for_word_size(word_size);
     index = index_for_next_non_empty_list(index);
     if (index != -1) {
@@ -169,19 +173,16 @@ public:
              "bad block in list[%d] (" BLOCK_FORMAT ")", index, BLOCK_FORMAT_ARGS(b, real_word_size));
       _blocks[index] = b->_next;
       _counter.sub(real_word_size);
-      *p_real_word_size = real_word_size;
-      return (MetaWord*)b;
-    } else {
-      *p_real_word_size = 0;
-      return nullptr;
+      result = MetaBlock((MetaWord*)b, real_word_size);
     }
+    return result;
   }
 
   // Returns number of blocks in this structure
   unsigned count() const { return _counter.count(); }
 
   // Returns total size, in words, of all elements.
-  size_t total_size() const { return _counter.total_size(); }
+  size_t total_word_size() const { return _counter.total_size(); }
 
   bool is_empty() const { return count() == 0; }
 

@@ -29,6 +29,7 @@
 #include "memory/allocation.hpp"
 #include "memory/metaspace/chunklevel.hpp"
 #include "memory/metaspace/counters.hpp"
+#include "memory/metaspace/metablock.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -335,7 +336,7 @@ private:
   }
 
 #ifdef ASSERT
-  void zap_range(MetaWord* p, size_t word_size);
+  void zap_block(MetaBlock block);
   // Helper for verify()
   void verify_node_pointer(const Node* n) const;
 #endif // ASSERT
@@ -345,10 +346,11 @@ public:
   BlockTree() : _root(nullptr) {}
 
   // Add a memory block to the tree. Its content will be overwritten.
-  void add_block(MetaWord* p, size_t word_size) {
-    DEBUG_ONLY(zap_range(p, word_size));
+  void add_block(MetaBlock block) {
+    DEBUG_ONLY(zap_block(block);)
+    const size_t word_size = block.word_size();
     assert(word_size >= MinWordSize, "invalid block size " SIZE_FORMAT, word_size);
-    Node* n = new(p) Node(word_size);
+    Node* n = new(block.base()) Node(word_size);
     if (_root == nullptr) {
       _root = n;
     } else {
@@ -358,12 +360,12 @@ public:
   }
 
   // Given a word_size, search and return the smallest block that is equal or
-  //  larger than that size. Upon return, *p_real_word_size contains the actual
-  //  block size.
-  MetaWord* remove_block(size_t word_size, size_t* p_real_word_size) {
+  //  larger than that size.
+  MetaBlock remove_block(size_t word_size) {
     assert(word_size >= MinWordSize, "invalid block size " SIZE_FORMAT, word_size);
 
-    Node* n = find_closest_fit(word_size);
+    MetaBlock result;
+    Node* const n = find_closest_fit(word_size);
 
     if (n != nullptr) {
       DEBUG_ONLY(check_node(n);)
@@ -379,22 +381,20 @@ public:
         remove_node_from_tree(n);
       }
 
-      MetaWord* p = (MetaWord*)n;
-      *p_real_word_size = n->_word_size;
+      result = MetaBlock((MetaWord*)n, n->_word_size);
 
       _counter.sub(n->_word_size);
 
-      DEBUG_ONLY(zap_range(p, n->_word_size));
-      return p;
+      DEBUG_ONLY(zap_block(result);)
     }
-    return nullptr;
+    return result;
   }
 
   // Returns number of blocks in this structure
   unsigned count() const { return _counter.count(); }
 
   // Returns total size, in words, of all elements.
-  size_t total_size() const { return _counter.total_size(); }
+  size_t total_word_size() const { return _counter.total_size(); }
 
   bool is_empty() const { return _root == nullptr; }
 

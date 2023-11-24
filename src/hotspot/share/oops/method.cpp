@@ -2290,7 +2290,7 @@ bool Method::is_valid_method(const Method* m) {
     return false;
   } else if (m->is_shared()) {
     return CppVtables::is_valid_shared_method(m);
-  } else if (Metaspace::contains_non_shared(m)) {
+  } else if (Metaspace::is_in_metaspace_or_class_space(m)) {
     return has_method_vptr((const void*)m);
   } else {
     return false;

@@ -90,7 +90,7 @@ public:
 
     // Test Metaspace::contains_xxx
     ASSERT_TRUE(Metaspace::contains(p));
-    ASSERT_TRUE(Metaspace::contains_non_shared(p));
+    ASSERT_TRUE(Metaspace::is_in_metaspace_or_class_space(p));
 
     delete _ms;
     _ms = NULL;

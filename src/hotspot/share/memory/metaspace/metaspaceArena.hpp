@@ -27,6 +27,7 @@
 #define SHARE_MEMORY_METASPACE_METASPACEARENA_HPP
 
 #include "memory/allocation.hpp"
+#include "memory/metaspace/metablock.hpp"
 #include "memory/metaspace.hpp"
 #include "memory/metaspace/counters.hpp"
 #include "memory/metaspace/metachunkList.hpp"
@@ -78,6 +79,9 @@ class MetaspaceArena : public CHeapObj<mtClass> {
   // Please note that access to a metaspace arena may be shared
   // between threads and needs to be synchronized in CLMS.
 
+  // Allocation alignment.
+  const size_t _alignment_words;
+
   // Reference to the chunk manager to allocate chunks from.
   ChunkManager* const _chunk_manager;
 
@@ -86,10 +90,6 @@ class MetaspaceArena : public CHeapObj<mtClass> {
 
   // List of chunks. Head of the list is the current chunk.
   MetachunkList _chunks;
-
-  // Structure to take care of leftover/deallocated space in used chunks.
-  // Owned by the Arena. Gets allocated on demand only.
-  FreeBlocks* _fbl;
 
   Metachunk* current_chunk()              { return _chunks.first(); }
   const Metachunk* current_chunk() const  { return _chunks.first(); }
@@ -100,36 +100,11 @@ class MetaspaceArena : public CHeapObj<mtClass> {
   // A name for purely debugging/logging purposes.
   const char* const _name;
 
-#ifdef ASSERT
-  // Allocation guards: When active, arena allocations are interleaved with
-  //  fence allocations. An overwritten fence indicates a buffer overrun in either
-  //  the preceding or the following user block. All fences are linked together;
-  //  validating the fences just means walking that linked list.
-  // Note that for the Arena, fence blocks are just another form of user blocks.
-  class Fence {
-    static const uintx EyeCatcher =
-      NOT_LP64(0x77698465) LP64_ONLY(0x7769846577698465ULL); // "META" resp "METAMETA"
-    // Two eyecatchers to easily spot a corrupted _next pointer
-    const uintx _eye1;
-    const Fence* const _next;
-    NOT_LP64(uintx _dummy;)
-    const uintx _eye2;
-  public:
-    Fence(const Fence* next) : _eye1(EyeCatcher), _next(next), _eye2(EyeCatcher) {}
-    const Fence* next() const { return _next; }
-    void verify() const;
-  };
-  const Fence* _first_fence;
-#endif // ASSERT
-
   ChunkManager* chunk_manager() const           { return _chunk_manager; }
 
-  // free block list
-  FreeBlocks* fbl() const                       { return _fbl; }
-  void add_allocation_to_fbl(MetaWord* p, size_t word_size);
-
-  // Given a chunk, add its remaining free committed space to the free block list.
-  void salvage_chunk(Metachunk* c);
+  // Given a chunk, allocate its remaining free-but-already-committed space and
+  // adjust counters. Return empty block if there is nothing to salvage.
+  MetaBlock salvage_chunk(Metachunk* c);
 
   // Allocate a new chunk from the underlying chunk manager able to hold at least
   // requested word size.
@@ -144,32 +119,23 @@ class MetaspaceArena : public CHeapObj<mtClass> {
   // On success, true is returned, false otherwise.
   bool attempt_enlarge_current_chunk(size_t requested_word_size);
 
-  // Returns true if the area indicated by pointer and size have actually been allocated
-  // from this arena.
-  DEBUG_ONLY(bool is_valid_area(MetaWord* p, size_t word_size) const;)
-
-  // Allocate from the arena proper, once dictionary allocations and fencing are sorted out.
-  MetaWord* allocate_inner(size_t word_size);
-
 public:
 
   MetaspaceArena(ChunkManager* chunk_manager, const ArenaGrowthPolicy* growth_policy,
                  SizeAtomicCounter* total_used_words_counter,
+                 size_t alignment_words,
                  const char* name);
 
   ~MetaspaceArena();
 
   // Allocate memory from Metaspace.
-  // 1) Attempt to allocate from the dictionary of deallocated blocks.
-  // 2) Attempt to allocate from the current chunk.
-  // 3) Attempt to enlarge the current chunk in place if it is too small.
-  // 4) Attempt to get a new chunk and allocate from that chunk.
-  // At any point, if we hit a commit limit, we return null.
-  MetaWord* allocate(size_t word_size);
-
-  // Prematurely returns a metaspace allocation to the _block_freelists because it is not
-  // needed anymore.
-  void deallocate(MetaWord* p, size_t word_size);
+  // 1) Attempt to allocate from the current chunk.
+  // 2) Attempt to enlarge the current chunk in place if it is too small.
+  // 3) Attempt to get a new chunk and allocate from that chunk.
+  // At any point, if we hit a commit limit, we return an empty block.
+  // The wastage block contains any unusable remainder space that was the result
+  // of this allocation - alignment waste or chunk remainder.
+  MetaBlock allocate(size_t word_size, MetaBlock& wastage);
 
   // Update statistics. This walks all in-use chunks.
   void add_to_statistics(ArenaStats* out) const;

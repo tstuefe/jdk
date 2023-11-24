@@ -108,7 +108,6 @@ struct InUseChunkStats {
     _used_words += other._used_words;
     _free_words += other._free_words;
     _waste_words += other._waste_words;
-
   }
 
   void print_on(outputStream* st, size_t scale) const;
@@ -122,14 +121,6 @@ struct  ArenaStats {
 
   // chunk statistics by chunk level
   InUseChunkStats _stats[chunklevel::NUM_CHUNK_LEVELS];
-  uintx _free_blocks_num;
-  size_t _free_blocks_word_size;
-
-  ArenaStats() :
-    _stats(),
-    _free_blocks_num(0),
-    _free_blocks_word_size(0)
-  {}
 
   void add(const ArenaStats& other);
 
@@ -141,17 +132,28 @@ struct  ArenaStats {
 
 };
 
+struct FreeBlocksStat {
+  uintx _num;
+  size_t _word_size;
+  FreeBlocksStat() : _num(0), _word_size(0) {}
+  void add(const FreeBlocksStat& other);
+  void print_on(outputStream* st, size_t scale = K) const;
+  DEBUG_ONLY(void verify() const;)
+};
+
 // Statistics for one or multiple ClassLoaderMetaspace objects
 struct ClmsStats {
 
   ArenaStats _arena_stats_nonclass;
   ArenaStats _arena_stats_class;
-
-  ClmsStats() : _arena_stats_nonclass(), _arena_stats_class() {}
+  FreeBlocksStat _freeblocks_class;
+  FreeBlocksStat _freeblocks_nonclass;
 
   void add(const ClmsStats& other) {
     _arena_stats_nonclass.add(other._arena_stats_nonclass);
     _arena_stats_class.add(other._arena_stats_class);
+    _freeblocks_class.add(other._freeblocks_class);
+    _freeblocks_nonclass.add(other._freeblocks_nonclass);
   }
 
   void print_on(outputStream* st, size_t scale, bool detailed) const;
