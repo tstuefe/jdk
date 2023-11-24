@@ -137,6 +137,8 @@ void ArenaStats::add(const ArenaStats& other) {
   for (chunklevel_t l = chunklevel::LOWEST_CHUNK_LEVEL; l <= chunklevel::HIGHEST_CHUNK_LEVEL; l++) {
     _stats[l].add(other._stats[l]);
   }
+  _free_blocks_num += other._free_blocks_num;
+  _free_blocks_word_size += other._free_blocks_word_size;
 }
 
 // Returns total chunk statistics over all chunk types.
@@ -184,6 +186,7 @@ void ArenaStats::print_on(outputStream* st, size_t scale,  bool detailed) const 
 }
 
 #ifdef ASSERT
+
 void ArenaStats::verify() const {
   size_t total_used = 0;
   for (chunklevel_t l = chunklevel::LOWEST_CHUNK_LEVEL; l <= chunklevel::HIGHEST_CHUNK_LEVEL; l++) {
@@ -193,25 +196,6 @@ void ArenaStats::verify() const {
   // Deallocated allocations still count as used
   assert(total_used >= _free_blocks_word_size,
          "Sanity");
-}
-#endif
-
-void FreeBlocksStat::add(const FreeBlocksStat& other) {
-  _num += other._num;
-  _word_size += other._word_size;
-}
-
-void FreeBlocksStat::print_on(outputStream* st, size_t scale,  bool detailed) const {
-  if (_num > 0) {
-    st->cr_indent();
-    st->print("deallocated: " UINTX_FORMAT " blocks with ", _num);
-    print_scaled_words(st, _word_size, scale);
-  }
-}
-
-#ifdef ASSERT
-void FreeBlocksStat::verify() const {
-  assert(_num == 0 && _word_size == 0 || _num > 0 && _word_size > _num, "Sanity");
 }
 #endif
 
@@ -254,8 +238,6 @@ void ClmsStats::print_on(outputStream* st, size_t scale, bool detailed) const {
 void ClmsStats::verify() const {
   _arena_stats_nonclass.verify();
   _arena_stats_class.verify();
-  _freeblocks_nonclass.verify();
-  _freeblocks_class.verify();
 }
 #endif
 

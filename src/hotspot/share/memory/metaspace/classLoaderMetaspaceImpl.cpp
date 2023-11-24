@@ -32,6 +32,7 @@
 #include "memory/metaspace/internalStats.hpp"
 #include "memory/metaspace/metaspaceArenaGrowthPolicy.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
+#include "memory/metaspace/metaspaceStatistics.hpp"
 #include "memory/metaspace/runningCounters.hpp"
 #include "utilities/ostream.hpp"
 #include "utilities/debug.hpp"
@@ -172,6 +173,12 @@ MetaBlock ClassLoaderMetaspaceImpl::allocate(size_t word_size, bool is_class) {
 
 void ClassLoaderMetaspaceImpl::deallocate(MetaBlock block) {
   deallocate_to_free_blocks(block);
+}
+
+void ClassLoaderMetaspaceImpl::add_to_statistics(ClmsStats* out) const {
+  _arena_c.add_to_statistics(&(out->_arena_stats_class));
+  _arena_nc.add_to_statistics(&(out->_arena_stats_nonclass));
+  out->_arena_stats_class._free_blocks_num += _binlist_nc
 }
 
 } // namespace metaspace

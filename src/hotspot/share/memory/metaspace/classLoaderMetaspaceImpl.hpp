@@ -35,6 +35,7 @@
 #include "memory/metaspace/blockTree.hpp"
 #include "memory/metaspace/metaspaceArena.hpp"
 #include "memory/metaspace/metablock.hpp"
+#include "memory/metaspace/metaspaceStatistics.hpp"
 
 class outputStream;
 class Mutex;
@@ -85,61 +86,9 @@ public:
 
   void deallocate(MetaBlock block);
 
+  void add_to_statistics(ClmsStats* out) const;
+
 };
-
-
-/*
- * // Allocate memory from Metaspace.
-// 1) Attempt to allocate from the free block list.
-// 2) Attempt to allocate from the current chunk.
-// 3) Attempt to enlarge the current chunk in place if it is too small.
-// 4) Attempt to get a new chunk and allocate from that chunk.
-// At any point, if we hit a commit limit, we return null.
-MetaWord* MetaspaceArena::allocate(size_t requested_word_size) {
-  UL2(trace, "requested " SIZE_FORMAT " words.", requested_word_size);
-
-  MetaWord* p = nullptr;
-  const size_t aligned_word_size = get_raw_word_size_for_requested_word_size(requested_word_size);
-
-  // Before bothering the arena proper, attempt to re-use a block from the free blocks list
-  if (_fbl != nullptr && !_fbl->is_empty()) {
-    p = _fbl->remove_block(aligned_word_size);
-    if (p != nullptr) {
-      DEBUG_ONLY(InternalStats::inc_num_allocs_from_deallocated_blocks();)
-      UL2(trace, "returning " PTR_FORMAT " - taken from fbl (now: %d, " SIZE_FORMAT ").",
-          p2i(p), _fbl->count(), _fbl->total_size());
-      assert_is_aligned_metaspace_pointer(p);
-      // Note: free blocks in freeblock dictionary still count as "used" as far as statistics go;
-      // therefore we have no need to adjust any usage counters (see epilogue of allocate_inner())
-      // and can just return here.
-      return p;
-    }
-  }
-
-  // Primary allocation
-  p = allocate_inner(aligned_word_size);
-
-#ifdef ASSERT
-  // Fence allocation
-  if (p != nullptr && Settings::use_allocation_guard()) {
-    STATIC_ASSERT(is_aligned(sizeof(Fence), BytesPerWord));
-    MetaWord* guard = allocate_inner(sizeof(Fence) / BytesPerWord);
-    if (guard != nullptr) {
-      // Ignore allocation errors for the fence to keep coding simple. If this
-      // happens (e.g. because right at this time we hit the Metaspace GC threshold)
-      // we miss adding this one fence. Not a big deal. Note that his would
-      // be pretty rare. Chances are much higher the primary allocation above
-      // would have already failed).
-      Fence* f = new(guard) Fence(_first_fence);
-      _first_fence = f;
-    }
-  }
-#endif // ASSERT
-
-  return p;
-}
- *
- */
 
 } // namespace metaspace
 

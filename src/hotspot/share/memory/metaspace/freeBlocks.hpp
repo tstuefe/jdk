@@ -62,12 +62,15 @@ namespace metaspace {
 
 class FreeBlocks : public CHeapObj<mtMetaspace> {
 
-  // _small_blocks takes care of small to very small blocks.
-  BinList32 _small_blocks;
+  // small blocks that may or may not live in class space
+  BinList32 _small_blocks_nc;
 
-  // A BST for larger blocks, only for blocks which are too large
-  // to fit into _smallblocks.
-  BlockTree _tree;
+  // large blocks that are unaligned and may or may not live in class space.
+  BlockTree _tree_nc;
+
+  // large blocks that are aligned to klass alignment, and live in class space;
+  // usable for Klass
+  BlockTree _tree_c;
 
   // This verifies that blocks too large to go into the binlist can be
   // kept in the blocktree.
@@ -83,33 +86,29 @@ public:
   const static size_t MinWordSize = BinList32::MinWordSize;
 
   // Add a block to the deallocation management.
-  void add_block(MetaWord* p, size_t word_size);
+  void add_block(MetaBlock block);
 
   // Retrieve a block of at least requested_word_size.
-  MetaWord* remove_block(size_t requested_word_size);
+  MetaBlock remove_block(size_t requested_word_size, bool for_klass);
 
 #ifdef ASSERT
   void verify() const {
-    _tree.verify();
-    _small_blocks.verify();
+    _tree_c.verify();
+    _tree_nc.verify();
+    _small_blocks_nc.verify();
   };
 #endif
 
   // Returns number of blocks.
   int count() const {
-    return _small_blocks.count() + _tree.count();
+    return _small_blocks_nc.count() + _tree_nc.count() + _tree_c.count();
   }
 
   // Returns total size, in words, of all elements.
   size_t total_size() const {
-    return _small_blocks.total_size() + _tree.total_size();
+    return _small_blocks_nc.total_word_size() +
+           _tree_nc.total_word_size() + _tree_c.total_word_size();
   }
-
-  // Returns true if empty.
-  bool is_empty() const {
-    return _small_blocks.is_empty() && _tree.is_empty();
-  }
-
 };
 
 } // namespace metaspace

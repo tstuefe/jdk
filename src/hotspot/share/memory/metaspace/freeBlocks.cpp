@@ -25,36 +25,57 @@
 
 #include "precompiled.hpp"
 #include "memory/metaspace/freeBlocks.hpp"
+#include "memory/metaspace.hpp"
+#include "oops/klass.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 namespace metaspace {
 
-void FreeBlocks::add_block(MetaWord* p, size_t word_size) {
-  if (word_size > MaxSmallBlocksWordSize) {
-    _tree.add_block(p, word_size);
+void FreeBlocks::add_block(MetaBlock block) {
+
+  // Book into class block tree iff block can be reused for class space. That
+  // is only true if the block is located in class space, is correctly aligned and
+  // larger than Klass. Otherwise book either into binlist for non-class, or into
+  // blocktree for non-class, depending on the size of the block.
+  const bool is_class_space = Metaspace::is_in_class_space(block.base());
+  const bool aligned_for_klass = is_aligned(block.base(), AllocationAlignmentWordSize);
+  const bool large_enough_for_klass = block.word_size() >= sizeof(Klass);
+
+  if (is_class_space && aligned_for_klass && large_enough_for_klass) {
+    _tree_c.add_block(block);
   } else {
-    _small_blocks.add_block(p, word_size);
+    if (block.word_size() >= MaxSmallBlocksWordSize) {
+      _tree_nc.add_block(block);
+    } else {
+      _small_blocks_nc.add_block(block);
+    }
   }
 }
 
-MetaWord* FreeBlocks::remove_block(size_t requested_word_size) {
-  size_t real_size = 0;
-  MetaWord* p = nullptr;
-  if (requested_word_size > MaxSmallBlocksWordSize) {
-    p = _tree.remove_block(requested_word_size, &real_size);
+MetaBlock FreeBlocks::remove_block(size_t word_size, bool for_class) {
+
+  // If this is a class space allocation (in which case the size should be >= sizeof Klass, so not small)
+  // we look into the class-space blocktree. Otherwise either in the non-class binlist (for small allocation
+  // sizes) or the non-class blocktree.
+  MetaBlock result;
+
+  int from = 0;
+  if (is_class) {
+    assert(word_size >= sizeof(Klass), "Sanity");
+    result = _tree_c.remove_block(word_size);
   } else {
-    p = _small_blocks.remove_block(requested_word_size, &real_size);
-  }
-  if (p != nullptr) {
-    // Blocks which are larger than a certain threshold are split and
-    //  the remainder is handed back to the manager.
-    const size_t waste = real_size - requested_word_size;
-    if (waste >= MinWordSize) {
-      add_block(p + requested_word_size, waste);
+    // Non-class allocation.
+    if (word_size < _small_blocks_nc.MaxWordSize) {
+      result = _small_blocks_nc.remove_block(word_size);
+    }
+    if (result.is_empty()) {
+      result = _small_blocks_nc.remove_block(word_size);
+      from = 2;
     }
   }
-  return p;
+
+  return result;
 }
 
 } // namespace metaspace

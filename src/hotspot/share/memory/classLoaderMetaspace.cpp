@@ -118,23 +118,13 @@ void ClassLoaderMetaspace::deallocate(MetaWord* ptr, size_t word_size, bool is_c
 // Update statistics. This walks all in-use chunks.
 void ClassLoaderMetaspace::add_to_statistics(metaspace::ClmsStats* out) const {
   MutexLocker fcl(lock(), Mutex::_no_safepoint_check_flag);
-  if (non_class_space_arena() != nullptr) {
-    non_class_space_arena()->add_to_statistics(&out->_arena_stats_nonclass);
-  }
-  if (class_space_arena() != nullptr) {
-    class_space_arena()->add_to_statistics(&out->_arena_stats_class);
-  }
+  _impl->add_to_statistics(out);
 }
 
 #ifdef ASSERT
 void ClassLoaderMetaspace::verify() const {
   MutexLocker fcl(lock(), Mutex::_no_safepoint_check_flag);
-  if (non_class_space_arena() != nullptr) {
-    non_class_space_arena()->verify();
-  }
-  if (class_space_arena() != nullptr) {
-    class_space_arena()->verify();
-  }
+  _impl->verify();
 }
 #endif // ASSERT
 
