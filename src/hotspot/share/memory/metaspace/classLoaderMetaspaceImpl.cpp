@@ -101,7 +101,7 @@ MetaBlock ClassLoaderMetaspaceImpl::allocate_from_freeblocks(size_t word_size, b
     // The result block may be larger than what the caller wanted. Return the reminder
     // back to free blocks.
     MetaBlock remainder = result.split_off_tail(word_size);
-    if (remainder.word_size() > minimum_allocation_words) {
+    if (remainder.word_size() >= minimum_allocation_word_size) {
       deallocate_to_free_blocks(remainder);
     }
 
@@ -121,7 +121,7 @@ MetaBlock ClassLoaderMetaspaceImpl::allocate_from_freeblocks(size_t word_size, b
 }
 
 void ClassLoaderMetaspaceImpl::deallocate_to_free_blocks(MetaBlock block) {
-  if (block.word_size() >= minimum_allocation_words) {
+  if (block.word_size() >= minimum_allocation_word_size) {
 
     // Book into class block tree iff block can be reused for class space. That
     // is only true if the block is located in class space, is correctly aligned and
@@ -178,7 +178,10 @@ void ClassLoaderMetaspaceImpl::deallocate(MetaBlock block) {
 void ClassLoaderMetaspaceImpl::add_to_statistics(ClmsStats* out) const {
   _arena_c.add_to_statistics(&(out->_arena_stats_class));
   _arena_nc.add_to_statistics(&(out->_arena_stats_nonclass));
-  out->_arena_stats_class._free_blocks_num += _binlist_nc
+  out->_arena_stats_class._free_blocks_num += _blocktree_c.count();
+  out->_arena_stats_class._free_blocks_word_size += _blocktree_c.total_word_size();
+  out->_arena_stats_nonclass._free_blocks_num += _binlist_nc.count() + _blocktree_c.count();
+  out->_arena_stats_nonclass._free_blocks_word_size += _binlist_nc.total_word_size() + _blocktree_nc.total_word_size();
 }
 
 } // namespace metaspace
