@@ -91,11 +91,6 @@ public:
 
   DEBUG_ONLY(void verify() const;)
 
-  // Convenience method to get the most important usage statistics for either class
-  // or non-class space. For more detailed statistics, use add_to_statistics().
-  void usage_numbers(Metaspace::MetadataType mdType, size_t* p_used_words,
-                     size_t* p_committed_words, size_t* p_capacity_words) const;
-
   // Convenience method to get the most important usage statistics (totals; both class- and non-class spaces)
   // For more detailed statistics, use add_to_statistics().
   void usage_numbers(size_t* p_used_words, size_t* p_committed_words,

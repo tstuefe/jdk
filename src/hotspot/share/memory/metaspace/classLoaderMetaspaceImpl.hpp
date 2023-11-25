@@ -28,19 +28,16 @@
 
 #include "memory/allocation.hpp"
 #include "memory/metaspace.hpp"
-#include "memory/metaspace/counters.hpp"
-#include "memory/metaspace/metachunkList.hpp"
-
 #include "memory/metaspace/binList.hpp"
 #include "memory/metaspace/blockTree.hpp"
-#include "memory/metaspace/metaspaceArena.hpp"
 #include "memory/metaspace/metablock.hpp"
-#include "memory/metaspace/metaspaceStatistics.hpp"
+#include "memory/metaspace/metaspaceArena.hpp"
 
 class outputStream;
-class Mutex;
 
 namespace metaspace {
+
+class ClmsStats;
 
 class ClassLoaderMetaspaceImpl: public CHeapObj<mtMetaspace> {
 
@@ -70,12 +67,12 @@ class ClassLoaderMetaspaceImpl: public CHeapObj<mtMetaspace> {
   // Same as global Klass alignment, but separated for easier unit testing.
   const size_t _klass_alignment;
 
-  MetaBlock allocate_from_freeblocks(size_t word_size, bool is_class);
+  MetaBlock allocate_from_free_blocks(size_t word_size, bool is_class);
 
   void deallocate_to_free_blocks(MetaBlock block);
 
   // Print state of free blocks
-  void print_freeblocks_state(outputStream* st) const;
+  void print_free_blocks_state(outputStream* st) const;
 
 public:
 
@@ -88,6 +85,12 @@ public:
 
   void add_to_statistics(ClmsStats* out) const;
 
+  void usage_numbers(bool for_class,
+                     size_t* p_used_words,
+                     size_t* p_committed_words,
+                     size_t* p_capacity_words) const;
+
+  DEBUG_ONLY(void verify() const;)
 };
 
 } // namespace metaspace

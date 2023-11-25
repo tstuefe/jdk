@@ -28,7 +28,6 @@
 #include "logging/logStream.hpp"
 #include "memory/metaspace/chunkManager.hpp"
 #include "memory/metaspace/counters.hpp"
-#include "memory/metaspace/freeBlocks.hpp"
 #include "memory/metaspace/internalStats.hpp"
 #include "memory/metaspace/metachunk.hpp"
 #include "memory/metaspace/metaspaceArena.hpp"
@@ -37,7 +36,6 @@
 #include "memory/metaspace/metaspaceSettings.hpp"
 #include "memory/metaspace/metaspaceStatistics.hpp"
 #include "memory/metaspace/virtualSpaceList.hpp"
-#include "runtime/atomic.hpp"
 #include "runtime/init.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "services/memoryService.hpp"
@@ -119,12 +117,6 @@ MetaspaceArena::MetaspaceArena(ChunkManager* chunk_manager, const ArenaGrowthPol
 }
 
 MetaspaceArena::~MetaspaceArena() {
-#ifdef ASSERT
-  SOMETIMES(verify();)
-  if (Settings::use_allocation_guard()) {
-    verify_allocation_guards();
-  }
-#endif
   MemRangeCounter return_counter;
 
   Metachunk* c = _chunks.first();

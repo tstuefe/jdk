@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2020 SAP SE. All rights reserved.
+ * Copyright (c) 2023 Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,17 +28,10 @@
 #include "logging/log.hpp"
 #include "memory/classLoaderMetaspace.hpp"
 #include "memory/metaspace.hpp"
-#include "memory/metaspaceUtils.hpp"
-#include "memory/metaspace/chunkManager.hpp"
 #include "memory/metaspace/metablock.hpp"
 #include "memory/metaspace/classLoaderMetaspaceImpl.hpp"
-#include "memory/metaspace/internalStats.hpp"
-#include "memory/metaspace/metaspaceArena.hpp"
-#include "memory/metaspace/metaspaceArenaGrowthPolicy.hpp"
-#include "memory/metaspace/metaspaceSettings.hpp"
-#include "memory/metaspace/metaspaceStatistics.hpp"
-#include "memory/metaspace/runningCounters.hpp"
 #include "memory/metaspaceTracer.hpp"
+#include "memory/metaspaceUtils.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "utilities/debug.hpp"
 
@@ -55,11 +49,7 @@ ClassLoaderMetaspace::ClassLoaderMetaspace(Mutex* lock, Metaspace::MetaspaceType
   _impl(nullptr),
   _space_type(space_type)
 {
-  ChunkManager* const non_class_cm =
-          ChunkManager::chunkmanager_nonclass();
-
   _impl = new ClassLoaderMetaspaceImpl(space_type, KlassAlignmentInBytes / BytesPerWord);
-
   UL2(debug, "born (impl @" PTR_FORMAT ")", p2i(_impl));
 }
 
@@ -112,7 +102,6 @@ MetaWord* ClassLoaderMetaspace::expand_and_allocate(size_t word_size, Metaspace:
 void ClassLoaderMetaspace::deallocate(MetaWord* ptr, size_t word_size, bool is_class) {
   MutexLocker fcl(lock(), Mutex::_no_safepoint_check_flag);
   _impl->deallocate(MetaBlock(ptr, word_size));
-  DEBUG_ONLY(InternalStats::inc_num_deallocs();)
 }
 
 // Update statistics. This walks all in-use chunks.
@@ -128,14 +117,6 @@ void ClassLoaderMetaspace::verify() const {
 }
 #endif // ASSERT
 
-// Convenience method to get the most important usage statistics.
-void ClassLoaderMetaspace::usage_numbers(Metaspace::MetadataType mdType, size_t* p_used_words,
-                                         size_t* p_committed_words, size_t* p_capacity_words) const {
-  const MetaspaceArena* arena = (mdType == Metaspace::MetadataType::ClassType) ?
-      class_space_arena() : non_class_space_arena();
-  arena->usage_numbers(p_used_words, p_committed_words, p_capacity_words);
-}
-
 // Convenience method to get total usage numbers
 void ClassLoaderMetaspace::usage_numbers(size_t* p_used_words, size_t* p_committed_words,
                                          size_t* p_capacity_words) const {
@@ -143,9 +124,9 @@ void ClassLoaderMetaspace::usage_numbers(size_t* p_used_words, size_t* p_committ
   size_t used_c = 0, comm_c = 0, cap_c = 0;
   {
     MutexLocker fcl(lock(), Mutex::_no_safepoint_check_flag);
-    usage_numbers(Metaspace::MetadataType::NonClassType, &used_nc, &comm_nc, &cap_nc);
+    _impl->usage_numbers(false, &used_nc, &comm_nc, &cap_nc);
     if (Metaspace::using_class_space()) {
-      usage_numbers(Metaspace::MetadataType::ClassType, &used_c, &comm_c, &cap_c);
+      _impl->usage_numbers(true, &used_c, &comm_c, &cap_c);
     }
   }
   if (p_used_words != nullptr) {

@@ -37,8 +37,7 @@
 namespace metaspace {
 
 // BinList is a data structure to manage small to very small memory blocks
-// (only a few words). It is used to manage deallocated blocks - see
-// class FreeBlocks.
+// (only a few words). It is used to manage deallocated small blocks.
 
 // Memory blocks are kept in a vector of linked lists of equi-sized blocks:
 //

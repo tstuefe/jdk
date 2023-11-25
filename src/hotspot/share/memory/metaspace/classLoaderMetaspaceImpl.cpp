@@ -30,6 +30,7 @@
 #include "memory/metaspace/chunkManager.hpp"
 #include "memory/metaspace/classLoaderMetaspaceImpl.hpp"
 #include "memory/metaspace/internalStats.hpp"
+#include "memory/metaspace/metaspaceArena.hpp"
 #include "memory/metaspace/metaspaceArenaGrowthPolicy.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "memory/metaspace/metaspaceStatistics.hpp"
@@ -42,6 +43,8 @@
 #define LOGFMT_ARGS    p2i(this)
 
 namespace metaspace {
+
+constexpr size_t minimum_allocation_word_size = AllocationAlignmentWordSize;
 
 ClassLoaderMetaspaceImpl::ClassLoaderMetaspaceImpl(Metaspace::MetaspaceType space_type, size_t klass_alignment)
 : _binlist_nc(), _blocktree_nc(), _blocktree_c(),
@@ -61,7 +64,7 @@ ClassLoaderMetaspaceImpl::ClassLoaderMetaspaceImpl(Metaspace::MetaspaceType spac
   )
 {}
 
-void ClassLoaderMetaspaceImpl::print_freeblocks_state(outputStream* st) const {
+void ClassLoaderMetaspaceImpl::print_free_blocks_state(outputStream* st) const {
   st->print("class block tree: %d, %zu words;"
             " non-class block tree: %d, %zu words;"
             " non-class bin list: %d, %zu words)",
@@ -70,7 +73,7 @@ void ClassLoaderMetaspaceImpl::print_freeblocks_state(outputStream* st) const {
             _binlist_nc.count(), _binlist_nc.total_word_size());
 }
 
-MetaBlock ClassLoaderMetaspaceImpl::allocate_from_freeblocks(size_t word_size, bool is_class) {
+MetaBlock ClassLoaderMetaspaceImpl::allocate_from_free_blocks(size_t word_size, bool is_class) {
 
   // If this is a class space allocation (in which case the size should be >= sizeof Klass, so not small)
   // we look into the class-space blocktree. Otherwise either in the non-class binlist (for small allocation
@@ -112,7 +115,7 @@ MetaBlock ClassLoaderMetaspaceImpl::allocate_from_freeblocks(size_t word_size, b
       LogStream ls(lt);
       ls.print("returning " METABLOCKFORMAT ", taken from %s (state now: ",
                METABLOCKFORMATARGS(result), from_s[from]);
-      print_freeblocks_state(&ls);
+      print_free_blocks_state(&ls);
       ls.print(")");
     }
   }
@@ -149,7 +152,7 @@ MetaBlock ClassLoaderMetaspaceImpl::allocate(size_t word_size, bool is_class) {
   MetaBlock result;
 
   // try free blocks first
-  result = allocate_from_freeblocks(word_size, is_class);
+  result = allocate_from_free_blocks(word_size, is_class);
 
   // Otherwise, relegate to arenas
   if (result.is_empty()) {
@@ -173,6 +176,7 @@ MetaBlock ClassLoaderMetaspaceImpl::allocate(size_t word_size, bool is_class) {
 
 void ClassLoaderMetaspaceImpl::deallocate(MetaBlock block) {
   deallocate_to_free_blocks(block);
+  DEBUG_ONLY(InternalStats::inc_num_deallocs();)
 }
 
 void ClassLoaderMetaspaceImpl::add_to_statistics(ClmsStats* out) const {
@@ -183,5 +187,22 @@ void ClassLoaderMetaspaceImpl::add_to_statistics(ClmsStats* out) const {
   out->_arena_stats_nonclass._free_blocks_num += _binlist_nc.count() + _blocktree_c.count();
   out->_arena_stats_nonclass._free_blocks_word_size += _binlist_nc.total_word_size() + _blocktree_nc.total_word_size();
 }
+
+// Convenience method to get the most important usage statistics.
+void ClassLoaderMetaspaceImpl::usage_numbers(bool for_class, size_t* p_used_words,
+                                            size_t* p_committed_words, size_t* p_capacity_words) const {
+  const MetaspaceArena& arena = for_class ? _arena_c : _arena_nc;
+  arena.usage_numbers(p_used_words, p_committed_words, p_capacity_words);
+}
+
+#ifdef ASSERT
+void ClassLoaderMetaspaceImpl::verify() const {
+  _arena_c.verify();
+  _arena_nc.verify();
+  _blocktree_c.verify();
+  _binlist_nc.verify();
+  _blocktree_nc.verify();
+}
+#endif
 
 } // namespace metaspace

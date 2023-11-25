@@ -36,7 +36,7 @@
 namespace metaspace {
 
 // BlockTree is a rather simple binary search tree. It is used to
-//  manage small to medium free memory blocks (see class FreeBlocks).
+//  manage medium to large free memory blocks.
 //
 // There is no separation between payload (managed blocks) and nodes: the
 //  memory blocks themselves are the nodes, with the block size being the key.
@@ -81,8 +81,7 @@ class BlockTree: public CHeapObj<mtMetaspace> {
         NOT_LP64(0x4e4f4445) LP64_ONLY(0x4e4f44454e4f4445ULL); // "NODE" resp "NODENODE"
 
     // Note: we afford us the luxury of an always-there canary value.
-    //  The space for that is there (these nodes are only used to manage larger blocks,
-    //  see FreeBlocks::MaxSmallBlocksWordSize).
+    //  The space for that is there (these nodes are only used to manage larger blocks).
     //  It is initialized in debug and release, but only automatically tested
     //  in debug.
     const intptr_t _canary;

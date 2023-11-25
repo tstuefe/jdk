@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2020 SAP SE. All rights reserved.
+ * Copyright (c) 2023, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -40,7 +41,6 @@ namespace metaspace {
 class ArenaGrowthPolicy;
 class ChunkManager;
 class Metachunk;
-class FreeBlocks;
 
 struct ArenaStats;
 
@@ -61,17 +61,9 @@ struct ArenaStats;
 //                                                                  ^
 //                                                                  used top
 //
-//        +------------+
-//        | FreeBlocks | --> O -> O -> O -> O
-//        +------------+
-//
-//
 
 // When the current chunk is used up, MetaspaceArena requests a new chunk from
 //  the associated ChunkManager.
-//
-// MetaspaceArena also keeps a FreeBlocks structure to manage memory blocks which
-//  had been deallocated prematurely.
 //
 
 class MetaspaceArena : public CHeapObj<mtClass> {
