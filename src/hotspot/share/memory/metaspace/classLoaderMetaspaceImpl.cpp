@@ -33,6 +33,7 @@
 #include "memory/metaspace/metaspaceArena.hpp"
 #include "memory/metaspace/metaspaceArenaGrowthPolicy.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
+#include "memory/metaspace/metaspaceContext.hpp"
 #include "memory/metaspace/metaspaceStatistics.hpp"
 #include "memory/metaspace/runningCounters.hpp"
 #include "utilities/ostream.hpp"
@@ -46,22 +47,34 @@ namespace metaspace {
 
 constexpr size_t minimum_allocation_word_size = AllocationAlignmentWordSize;
 
-ClassLoaderMetaspaceImpl::ClassLoaderMetaspaceImpl(Metaspace::MetaspaceType space_type, size_t klass_alignment)
+// Constructor is used only for unit tests. It allows handing in test metaspace contexts and
+// a different alignment.
+ClassLoaderMetaspaceImpl::ClassLoaderMetaspaceImpl(MetaspaceContext* class_context,
+                                                   MetaspaceContext* non_class_context,
+                                                   Metaspace::MetaspaceType space_type, size_t klass_alignment)
 : _binlist_nc(), _blocktree_nc(), _blocktree_c(),
   _arena_nc(
-      ChunkManager::chunkmanager_nonclass(),
+      class_context,
       ArenaGrowthPolicy::policy_for_space_type(space_type, false),
-      RunningCounters::used_nonclass_counter(),
       AllocationAlignmentWordSize,
       "non-class arena"
   ),
   _arena_c(
-      ChunkManager::chunkmanager_class(),
+      non_class_context,
       ArenaGrowthPolicy::policy_for_space_type(space_type, true),
-      RunningCounters::used_class_counter(),
       klass_alignment,
       "class arena"
   )
+{}
+
+// This is the official constructor used for normal operations. It uses the global Metaspace contexts
+// for class space and non-class metaspace.
+ClassLoaderMetaspaceImpl::ClassLoaderMetaspaceImpl(Metaspace::MetaspaceType space_type)
+: ClassLoaderMetaspaceImpl(
+    MetaspaceContext::context_class(),
+    MetaspaceContext::context_nonclass(),
+    space_type,
+    KlassAlignmentInBytes / BytesPerWord)
 {}
 
 void ClassLoaderMetaspaceImpl::print_free_blocks_state(outputStream* st) const {

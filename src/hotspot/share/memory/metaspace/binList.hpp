@@ -144,6 +144,7 @@ public:
   }
 
   void add_block(MetaBlock mb) {
+    assert(!mb.is_empty(), "Don't add empty blocks");
     const size_t word_size = mb.word_size();
     MetaWord* const p = mb.base();
     assert(word_size >= MinWordSize &&

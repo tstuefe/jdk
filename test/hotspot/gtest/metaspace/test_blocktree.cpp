@@ -26,12 +26,14 @@
 #include "precompiled.hpp"
 #include "memory/metaspace/blockTree.hpp"
 #include "memory/metaspace/counters.hpp"
+#include "memory/metaspace/metablock.hpp"
 #include "memory/resourceArea.hpp"
 // #define LOG_PLEASE
 #include "metaspaceGtestCommon.hpp"
 
 using metaspace::BlockTree;
 using metaspace::MemRangeCounter;
+using metaspace::MetaBlock;
 
 // Small helper. Given a 0-terminated array of sizes, a feeder buffer and a tree,
 //  add blocks of these sizes to the tree in the order they appear in the array.
@@ -45,7 +47,7 @@ static void create_nodes(const size_t sizes[], FeederBuffer& fb, BlockTree& bt) 
 
 #define CHECK_BT_CONTENT(bt, expected_num, expected_size) { \
   EXPECT_EQ(bt.count(), (unsigned)expected_num); \
-  EXPECT_EQ(bt.total_size(), (size_t)expected_size); \
+  EXPECT_EQ(bt.total_word_size(), (size_t)expected_size); \
   if (expected_num == 0) { \
     EXPECT_TRUE(bt.is_empty()); \
   } else { \
@@ -53,9 +55,21 @@ static void create_nodes(const size_t sizes[], FeederBuffer& fb, BlockTree& bt) 
   } \
 }
 
+struct TestedBlockTree: public BlockTree {
+  void add_block(MetaWord* p, size_t word_size) {
+    add_block(MetaBlock(p, word_size));
+  }
+  MetaWord* remove_block(size_t size, size_t* real_size) {
+    MetaBlock bk = remove_block(size);
+    DEBUG_ONLY(bk.verify();)
+    (*real_size) = bk.word_size();
+    return bk.base();
+  }
+};
+
 TEST_VM(metaspace, BlockTree_basic) {
 
-  BlockTree bt;
+  TestedBlockTree bt;
   CHECK_BT_CONTENT(bt, 0, 0);
 
   size_t real_size = 0;
@@ -112,7 +126,7 @@ static size_t helper_find_nearest_fit(const size_t sizes[], size_t request_size)
 // for a request size and check that it is the expected result.
 static void test_find_nearest_fit_with_tree(const size_t sizes[], size_t request_size) {
 
-  BlockTree bt;
+  TestedBlockTree bt;
   FeederBuffer fb(4 * K);
 
   create_nodes(sizes, fb, bt);
@@ -170,7 +184,7 @@ TEST_VM(metaspace, BlockTree_find_nearest_fit) {
 // should exercise the list-part of the tree.
 TEST_VM(metaspace, BlockTree_basic_siblings)
 {
-  BlockTree bt;
+  TestedBlockTree bt;
   FeederBuffer fb(4 * K);
 
   CHECK_BT_CONTENT(bt, 0, 0);
@@ -204,7 +218,7 @@ TEST_VM(metaspace, BlockTree_print_test) {
     0 // stop
   };
 
-  BlockTree bt;
+  TestedBlockTree bt;
   FeederBuffer fb(4 * K);
 
   create_nodes(sizes, fb, bt);
@@ -222,7 +236,7 @@ TEST_VM_ASSERT_MSG(metaspace, BlockTree_overwriter_test, ".*failed: Invalid node
   static const size_t sizes1[] = { 30, 17, 0 };
   static const size_t sizes2[] = { 12, 12, 0 };
 
-  BlockTree bt;
+  TestedBlockTree bt;
   FeederBuffer fb(4 * K);
 
   // some nodes...
@@ -249,7 +263,7 @@ class BlockTreeTest {
 
   FeederBuffer _fb;
 
-  BlockTree _bt[2];
+  TestedBlockTree _bt[2];
   MemRangeCounter _cnt[2];
 
   RandSizeGenerator _rgen;
@@ -356,7 +370,7 @@ class BlockTreeTest {
   void drain_all() {
 
     for (int which = 0; which < 2; which++) {
-      BlockTree* bt = _bt + which;
+      TestedBlockTree* bt = _bt + which;
       size_t last_size = 0;
       while (!bt->is_empty()) {
 

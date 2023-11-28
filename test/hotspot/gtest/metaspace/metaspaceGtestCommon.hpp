@@ -205,6 +205,11 @@ public:
     return p;
   }
 
+  metaspace::MetaBlock get_block(size_t word_size) {
+    MetaWord* p = get(word_size);
+    return p != nullptr ? MetaBlock(p, word_size) : MetaBlock();
+  }
+
   bool is_valid_pointer(MetaWord* p) const {
     return p >= _buf && p < _buf + _used;
   }
@@ -214,6 +219,22 @@ public:
            word_size > 0 ? is_valid_pointer(p + word_size - 1) : true;
   }
 
+  bool is_valid_range(metaspace::MetaBlock bk) const {
+    return bk.is_nonempty() && is_valid_range(bk.base(), bk.word_size());
+  }
 };
+
+// MetaBlock handling
+
+#define CHECK_BLOCK_EMPTY(block) { \
+  EXPECT_TRUE(block.is_empty()); \
+  block.verify(); \
+}
+
+#define CHECK_BLOCK(block, expected_base, expected_size) { \
+    EXPECT_EQ(block.base(), expected_base); \
+    EXPECT_EQ((size_t)expected_size, b.word_size()); \
+    block.verify(); \
+}
 
 #endif // GTEST_METASPACE_METASPACEGTESTCOMMON_HPP

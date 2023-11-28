@@ -49,7 +49,7 @@ ClassLoaderMetaspace::ClassLoaderMetaspace(Mutex* lock, Metaspace::MetaspaceType
   _impl(nullptr),
   _space_type(space_type)
 {
-  _impl = new ClassLoaderMetaspaceImpl(space_type, KlassAlignmentInBytes / BytesPerWord);
+  _impl = new ClassLoaderMetaspaceImpl(space_type);
   UL2(debug, "born (impl @" PTR_FORMAT ")", p2i(_impl));
 }
 

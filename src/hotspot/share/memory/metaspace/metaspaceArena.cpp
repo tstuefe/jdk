@@ -33,6 +33,7 @@
 #include "memory/metaspace/metaspaceArena.hpp"
 #include "memory/metaspace/metaspaceArenaGrowthPolicy.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
+#include "memory/metaspace/metaspaceContext.hpp"
 #include "memory/metaspace/metaspaceSettings.hpp"
 #include "memory/metaspace/metaspaceStatistics.hpp"
 #include "memory/metaspace/virtualSpaceList.hpp"
@@ -100,14 +101,15 @@ Metachunk* MetaspaceArena::allocate_new_chunk(size_t requested_word_size) {
   return c;
 }
 
-MetaspaceArena::MetaspaceArena(ChunkManager* chunk_manager, const ArenaGrowthPolicy* growth_policy,
-                               SizeAtomicCounter* total_used_words_counter, size_t alignment_words,
+MetaspaceArena::MetaspaceArena(MetaspaceContext* context,
+                               const ArenaGrowthPolicy* growth_policy,
+                               size_t alignment_words,
                                const char* name) :
   _alignment_words(alignment_words),
-  _chunk_manager(chunk_manager),
+  _chunk_manager(context->cm()),
   _growth_policy(growth_policy),
   _chunks(),
-  _total_used_words_counter(total_used_words_counter),
+  _total_used_words_counter(context->used_counter()),
   _name(name)
 {
   UL(debug, ": born.");

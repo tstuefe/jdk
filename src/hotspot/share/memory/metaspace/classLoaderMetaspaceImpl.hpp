@@ -38,8 +38,10 @@ class outputStream;
 namespace metaspace {
 
 class ClmsStats;
+class MetaspaceContext;
 
 class ClassLoaderMetaspaceImpl: public CHeapObj<mtMetaspace> {
+  friend class ClassLoaderMetaspaceImplTest;
 
   //////// Free block management:
 
@@ -74,9 +76,14 @@ class ClassLoaderMetaspaceImpl: public CHeapObj<mtMetaspace> {
   // Print state of free blocks
   void print_free_blocks_state(outputStream* st) const;
 
+  // Constructor is used only for unit tests
+  ClassLoaderMetaspaceImpl(MetaspaceContext* class_context,
+                           MetaspaceContext* non_class_context,
+                           Metaspace::MetaspaceType space_type, size_t klass_alignment);
+
 public:
 
-  ClassLoaderMetaspaceImpl(Metaspace::MetaspaceType space_type, size_t klass_alignment);
+  ClassLoaderMetaspaceImpl(Metaspace::MetaspaceType space_type);
   ~ClassLoaderMetaspaceImpl();
 
   MetaBlock allocate(size_t word_size, bool is_class);

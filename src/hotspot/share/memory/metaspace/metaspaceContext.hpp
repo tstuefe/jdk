@@ -27,6 +27,7 @@
 #define SHARE_MEMORY_METASPACE_METASPACECONTEXT_HPP
 
 #include "memory/allocation.hpp"
+#include "memory/metaspaceCounters.hpp"
 #include "memory/virtualspace.hpp"
 #include "utilities/debug.hpp"
 
@@ -61,11 +62,13 @@ class MetaspaceContext : public CHeapObj<mtMetaspace> {
   const char* const _name;
   VirtualSpaceList* const _vslist;
   ChunkManager* const _cm;
+  SizeAtomicCounter _used_words_counter;
 
   MetaspaceContext(const char* name, VirtualSpaceList* vslist, ChunkManager* cm) :
     _name(name),
     _vslist(vslist),
-    _cm(cm)
+    _cm(cm),
+    _used_words_counter()
   {}
 
   static MetaspaceContext* _nonclass_space_context;
@@ -80,6 +83,7 @@ public:
 
   VirtualSpaceList* vslist() { return _vslist; }
   ChunkManager* cm() { return _cm; }
+  SizeAtomicCounter* used_counter() { return &_used_words_counter; }
 
   // Create a new, empty, expandable metaspace context.
   static MetaspaceContext* create_expandable_context(const char* name, CommitLimiter* commit_limiter);

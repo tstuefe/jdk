@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2020 SAP SE. All rights reserved.
+ * Copyright (c) 2023 Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -46,6 +46,12 @@ public:
   const MetaWord* end() const { return _base + _word_size; }
   size_t word_size() const { return _word_size; }
   bool is_empty() const { return _base == nullptr; }
+  bool is_nonempty() const { return _base != nullptr; }
+
+  bool operator==(const MetaBlock& rhs) const {
+    return base() == rhs.base() &&
+           word_size() == rhs.word_size();
+  }
 
   MetaBlock split_off_tail(size_t head_size) const {
     MetaBlock result;
@@ -58,9 +64,11 @@ public:
     }
     return result;
   }
+
+  DEBUG_ONLY(void verify() const;)
 };
 
-#define METABLOCKFORMAT             "block (@" PTR_FORMAT " size " SIZE_FORMAT ")"
+#define METABLOCKFORMAT                 "block (@" PTR_FORMAT " size " SIZE_FORMAT ")"
 #define METABLOCKFORMATARGS(__block__)  p2i((__block__).base()), (__block__).word_size()
 
 }

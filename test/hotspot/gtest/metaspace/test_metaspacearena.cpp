@@ -89,7 +89,6 @@ public:
   }
 
   const CommitLimiter& limiter() const { return _context.commit_limiter(); }
-  MetaspaceArena* arena() const { return _arena; }
   SizeAtomicCounter& used_words_counter() { return _used_words_counter; }
 
   // Note: all test functions return void due to gtests limitation that we cannot use ASSERT

@@ -29,8 +29,8 @@
 
 #include "memory/allocation.hpp"
 #include "memory/metaspace/metablock.hpp"
-#include "memory/metaspace.hpp"
 #include "memory/metaspace/counters.hpp"
+#include "memory/metaspace.hpp"
 #include "memory/metaspace/metachunkList.hpp"
 
 class outputStream;
@@ -39,10 +39,10 @@ class Mutex;
 namespace metaspace {
 
 class ArenaGrowthPolicy;
+struct ArenaStats;
 class ChunkManager;
 class Metachunk;
-
-struct ArenaStats;
+class MetaspaceContext;
 
 // The MetaspaceArena is a growable metaspace memory pool belonging to a CLD;
 //  internally it consists of a list of metaspace chunks, of which the head chunk
@@ -113,8 +113,8 @@ class MetaspaceArena : public CHeapObj<mtClass> {
 
 public:
 
-  MetaspaceArena(ChunkManager* chunk_manager, const ArenaGrowthPolicy* growth_policy,
-                 SizeAtomicCounter* total_used_words_counter,
+  MetaspaceArena(MetaspaceContext* context,
+                 const ArenaGrowthPolicy* growth_policy,
                  size_t alignment_words,
                  const char* name);
 

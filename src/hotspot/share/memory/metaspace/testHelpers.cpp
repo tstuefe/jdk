@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 #include "memory/metaspace/chunkManager.hpp"
+#include "memory/metaspace/metablock.hpp"
 #include "memory/metaspace/metaspaceArena.hpp"
 #include "memory/metaspace/metaspaceArenaGrowthPolicy.hpp"
 #include "memory/metaspace/metaspaceContext.hpp"
@@ -54,7 +55,7 @@ MetaspaceTestArena::~MetaspaceTestArena() {
 
 MetaWord* MetaspaceTestArena::allocate(size_t word_size) {
   MutexLocker fcl(_lock, Mutex::_no_safepoint_check_flag);
-  return _arena->allocate(word_size);
+  return _arena->allocate(word_size).base();
 }
 
 void MetaspaceTestArena::deallocate(MetaWord* p, size_t word_size) {
@@ -70,7 +71,6 @@ MetaspaceTestContext::MetaspaceTestContext(const char* name, size_t commit_limit
   _commit_limit(commit_limit),
   _context(nullptr),
   _commit_limiter(commit_limit == 0 ? max_uintx : commit_limit), // commit_limit == 0 -> no limit
-  _used_words_counter(),
   _rs()
 {
   assert(is_aligned(reserve_limit, Metaspace::reserve_alignment_words()), "reserve_limit (" SIZE_FORMAT ") "
