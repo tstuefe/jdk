@@ -233,7 +233,8 @@ public:
 
 #define CHECK_BLOCK(block, expected_base, expected_size) { \
     EXPECT_EQ(block.base(), expected_base); \
-    EXPECT_EQ((size_t)expected_size, b.word_size()); \
+    EXPECT_EQ((size_t)expected_size, block.word_size()); \
+    EXPECT_EQ(block.end(), expected_base + expected_size); \
     block.verify(); \
 }
 
