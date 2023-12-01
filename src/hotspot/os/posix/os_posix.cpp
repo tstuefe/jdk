@@ -28,6 +28,7 @@
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
 #include "nmt/memTracker.hpp"
+#include "nmt/nmt_interposition.hpp"
 #include "os_posix.inline.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
@@ -275,7 +276,7 @@ static char* reserve_mmapped_memory(size_t bytes, char* requested_addr) {
   // Map reserved/uncommitted pages PROT_NONE so we fail early if we
   // touch an uncommitted page. Otherwise, the read/write might
   // succeed if we have enough swap space to back the physical page.
-  addr = (char*)::mmap(requested_addr, bytes, PROT_NONE,
+  addr = (char*)raw_mmap(requested_addr, bytes, PROT_NONE,
                        flags, -1, 0);
 
   if (addr != MAP_FAILED) {
@@ -320,7 +321,7 @@ char* os::map_memory_to_file(char* base, size_t size, int fd) {
   if (base != nullptr) {
     flags |= MAP_FIXED;
   }
-  char* addr = (char*)mmap(base, size, prot, flags, fd, 0);
+  char* addr = (char*)raw_mmap(base, size, prot, flags, fd, 0);
 
   if (addr == MAP_FAILED) {
     warning("Failed mmap to file. (%s)", os::strerror(errno));

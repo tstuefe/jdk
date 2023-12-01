@@ -30,6 +30,7 @@
 #include "memory/allocation.inline.hpp"
 #include "memory/resourceArea.hpp"
 #include "nmt/memTracker.hpp"
+#include "nmt/nmt_interposition.hpp"
 #include "oops/oop.inline.hpp"
 #include "os_posix.inline.hpp"
 #include "runtime/globals_extension.hpp"
@@ -1053,7 +1054,7 @@ static char* mmap_create_shared(size_t size) {
     return nullptr;
   }
 
-  mapAddress = (char*)::mmap((char*)0, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  mapAddress = (char*)raw_mmap((char*)0, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 
   result = ::close(fd);
   assert(result != OS_ERR, "could not close file");
@@ -1088,12 +1089,12 @@ static void unmap_shared(char* addr, size_t bytes) {
   if (MemTracker::enabled()) {
     // Note: Tracker contains a ThreadCritical.
     Tracker tkr(Tracker::release);
-    res = ::munmap(addr, bytes);
+    res = raw_munmap(addr, bytes);
     if (res == 0) {
       tkr.record((address)addr, bytes);
     }
   } else {
-    res = ::munmap(addr, bytes);
+    res = raw_munmap(addr, bytes);
   }
   if (res != 0) {
     log_info(os)("os::release_memory failed (" PTR_FORMAT ", " SIZE_FORMAT ")", p2i(addr), bytes);
@@ -1209,7 +1210,7 @@ static void mmap_attach_shared(int vmid, char** addr, size_t* sizep, TRAPS) {
 
   assert(size > 0, "unexpected size <= 0");
 
-  char* mapAddress = (char*)::mmap((char*)0, size, mmap_prot, MAP_SHARED, fd, 0);
+  char* mapAddress = (char*)raw_mmap((char*)0, size, mmap_prot, MAP_SHARED, fd, 0);
 
   int result = ::close(fd);
   assert(result != OS_ERR, "could not close file");

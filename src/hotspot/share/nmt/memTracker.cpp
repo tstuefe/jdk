@@ -31,6 +31,7 @@
 #include "nmt/memBaseline.hpp"
 #include "nmt/memReporter.hpp"
 #include "nmt/memTracker.hpp"
+#include "nmt/nmt_interposition.hpp"
 #include "nmt/nmtCommon.hpp"
 #include "nmt/nmtPreInit.hpp"
 #include "nmt/threadStackTracker.hpp"
@@ -93,6 +94,12 @@ void MemTracker::initialize() {
     NMTPreInit::print_state(&ls);
     MallocLimitHandler::print_on(&ls);
   }
+
+  // Initialize interposition lib if needed
+  if (enabled()) {
+    NMTInterposition::initialize();
+  }
+
 }
 
 void Tracker::record(address addr, size_t size) {

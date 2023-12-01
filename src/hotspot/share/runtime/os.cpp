@@ -43,6 +43,7 @@
 #include "nmt/mallocHeader.inline.hpp"
 #include "nmt/mallocTracker.hpp"
 #include "nmt/memTracker.inline.hpp"
+#include "nmt/nmt_interposition.hpp"
 #include "nmt/nmtCommon.hpp"
 #include "nmt/nmtPreInit.hpp"
 #include "oops/compressedKlass.inline.hpp"
@@ -655,7 +656,14 @@ void* os::malloc(size_t size, MEMFLAGS memflags, const NativeCallStack& stack) {
     return nullptr;
   }
 
-  ALLOW_C_FUNCTION(::malloc, void* const outer_ptr = ::malloc(outer_size);)
+  void* outer_ptr = nullptr;
+
+  if (NMTInterposition::enabled()) {
+    outer_ptr = NMTInterposition::libjvm_callback_malloc(outer_size);
+  } else {
+    ALLOW_C_FUNCTION(::malloc, outer_ptr = ::malloc(outer_size);)
+  }
+
   if (outer_ptr == nullptr) {
     return nullptr;
   }
@@ -722,7 +730,14 @@ void* os::realloc(void *memblock, size_t size, MEMFLAGS memflags, const NativeCa
     header->mark_block_as_dead();
 
     // the real realloc
-    ALLOW_C_FUNCTION(::realloc, void* const new_outer_ptr = ::realloc(header, new_outer_size);)
+
+    void* new_outer_ptr = nullptr;
+
+    if (NMTInterposition::enabled()) {
+      new_outer_ptr = NMTInterposition::libjvm_callback_realloc(header, new_outer_size);
+    } else {
+      ALLOW_C_FUNCTION(::realloc, new_outer_ptr = ::realloc(header, new_outer_size);)
+    }
 
     if (new_outer_ptr == nullptr) {
       // realloc(3) failed and the block still exists.
@@ -778,7 +793,12 @@ void  os::free(void *memblock) {
   // When NMT is enabled this checks for heap overwrites, then deaccounts the old block.
   void* const old_outer_ptr = MemTracker::record_free(memblock);
 
-  ALLOW_C_FUNCTION(::free, ::free(old_outer_ptr);)
+  if (NMTInterposition::enabled()) {
+    NMTInterposition::libjvm_callback_free(old_outer_ptr);
+  } else {
+    ALLOW_C_FUNCTION(::free, ::free(old_outer_ptr);)
+  }
+
 }
 
 void os::init_random(unsigned int initval) {

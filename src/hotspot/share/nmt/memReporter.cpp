@@ -468,8 +468,16 @@ void MemSummaryDiffReporter::report_diff() {
   print_virtual_memory_diff(_current_baseline.total_reserved_memory(),
     _current_baseline.total_committed_memory(), _early_baseline.total_reserved_memory(),
     _early_baseline.total_committed_memory());
-
-  out->print_cr("\n");
+  out->cr();
+  out->print("       malloc: ");
+  print_malloc_diff(_current_baseline.total_malloced_memory(), _current_baseline.total_malloced_count(),
+                    _early_baseline.total_malloced_memory(), _early_baseline.total_malloced_count(), mtNone);
+  out->cr();
+  out->print("       mmap:   ");
+  print_virtual_memory_diff(_current_baseline.total_reserved_mmapped_memory(),
+    _current_baseline.total_committed_mmapped_memory(), _early_baseline.total_reserved_mmapped_memory(),
+    _early_baseline.total_committed_mmapped_memory());
+  out->cr();
 
   // Summary diff by memory type
   for (int index = 0; index < mt_number_of_types; index ++) {
@@ -490,7 +498,7 @@ void MemSummaryDiffReporter::print_malloc_diff(size_t current_amount, size_t cur
     size_t early_amount, size_t early_count, MEMFLAGS flags) const {
   const char* scale = current_scale();
   outputStream* out = output();
-  const char* alloc_type = (flags == mtThread) ? "" : "malloc=";
+  const char* alloc_type = (flags == mtThread || flags == mtNone) ? "" : "malloc=";
 
   out->print("%s" SIZE_FORMAT "%s", alloc_type, amount_in_current_scale(current_amount), scale);
   // Report type only if it is valid and not under "thread" category

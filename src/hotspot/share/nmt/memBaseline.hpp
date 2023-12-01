@@ -115,22 +115,34 @@ class MemBaseline {
     return VirtualMemoryAllocationIterator(_virtual_memory_allocations.head());
   }
 
+  size_t total_malloced_memory() const {
+    return _malloc_memory_snapshot.total();
+  }
+
+  size_t total_malloced_count() const {
+    return _malloc_memory_snapshot.total_count();
+  }
+
+  size_t total_reserved_mmapped_memory() const {
+    return _virtual_memory_snapshot.total_reserved();
+  }
+
+  size_t total_committed_mmapped_memory() const {
+    return _virtual_memory_snapshot.total_committed();
+  }
+
   // Total reserved memory = total malloc'd memory + total reserved virtual
   // memory
   size_t total_reserved_memory() const {
     assert(baseline_type() != Not_baselined, "Not yet baselined");
-    size_t amount = _malloc_memory_snapshot.total() +
-           _virtual_memory_snapshot.total_reserved();
-    return amount;
+    return total_malloced_memory() + total_reserved_mmapped_memory();
   }
 
   // Total committed memory = total malloc'd memory + total committed
   // virtual memory
   size_t total_committed_memory() const {
     assert(baseline_type() != Not_baselined, "Not yet baselined");
-    size_t amount = _malloc_memory_snapshot.total() +
-           _virtual_memory_snapshot.total_committed();
-    return amount;
+    return total_malloced_memory() + total_committed_mmapped_memory();
   }
 
   size_t total_arena_memory() const {

@@ -37,6 +37,7 @@
 #include "logging/logStream.hpp"
 #include "memory/allocation.inline.hpp"
 #include "nmt/memTracker.hpp"
+#include "nmt/nmt_interposition.hpp"
 #include "oops/oop.inline.hpp"
 #include "osContainer_linux.hpp"
 #include "os_linux.inline.hpp"
@@ -2820,7 +2821,7 @@ static void warn_fail_commit_memory(char* addr, size_t size,
 //       problem.
 int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
   int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
-  uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
+  uintptr_t res = (uintptr_t) raw_mmap(addr, size, prot,
                                      MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
   if (res != (uintptr_t) MAP_FAILED) {
     if (UseNUMAInterleaving) {
@@ -3323,7 +3324,7 @@ struct bitmask* os::Linux::_numa_interleave_bitmask;
 struct bitmask* os::Linux::_numa_membind_bitmask;
 
 bool os::pd_uncommit_memory(char* addr, size_t size, bool exec) {
-  uintptr_t res = (uintptr_t) ::mmap(addr, size, PROT_NONE,
+  uintptr_t res = (uintptr_t) raw_mmap(addr, size, PROT_NONE,
                                      MAP_PRIVATE|MAP_FIXED|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   return res  != (uintptr_t) MAP_FAILED;
 }
@@ -3495,7 +3496,7 @@ bool os::pd_create_stack_guard_pages(char* addr, size_t size) {
     }
 
     if (stack_extent < (uintptr_t)addr) {
-      ::munmap((void*)stack_extent, (uintptr_t)(addr - stack_extent));
+      raw_munmap((void*)stack_extent, (uintptr_t)(addr - stack_extent));
     }
   }
 
@@ -3543,7 +3544,7 @@ static char* anon_mmap(char* requested_addr, size_t bytes) {
   // Map reserved/uncommitted pages PROT_NONE so we fail early if we
   // touch an uncommitted page. Otherwise, the read/write might
   // succeed if we have enough swap space to back the physical page.
-  char* addr = (char*)::mmap(requested_addr, bytes, PROT_NONE, flags, -1, 0);
+  char* addr = (char*)raw_mmap(requested_addr, bytes, PROT_NONE, flags, -1, 0);
 
   return addr == MAP_FAILED ? nullptr : addr;
 }
@@ -3566,7 +3567,7 @@ static char* anon_mmap_aligned(char* req_addr, size_t bytes, size_t alignment) {
   if (start != nullptr) {
     if (req_addr != nullptr) {
       if (start != req_addr) {
-        ::munmap(start, extra_size);
+        raw_munmap(start, extra_size);
         start = nullptr;
       }
     } else {
@@ -3574,10 +3575,10 @@ static char* anon_mmap_aligned(char* req_addr, size_t bytes, size_t alignment) {
       char* const end_aligned = start_aligned + bytes;
       char* const end = start + extra_size;
       if (start_aligned > start) {
-        ::munmap(start, start_aligned - start);
+        raw_munmap(start, start_aligned - start);
       }
       if (end_aligned < end) {
-        ::munmap(end_aligned, end - end_aligned);
+        raw_munmap(end_aligned, end - end_aligned);
       }
       start = start_aligned;
     }
@@ -3586,7 +3587,7 @@ static char* anon_mmap_aligned(char* req_addr, size_t bytes, size_t alignment) {
 }
 
 static int anon_munmap(char * addr, size_t size) {
-  return ::munmap(addr, size) == 0;
+  return raw_munmap(addr, size) == 0;
 }
 
 char* os::pd_reserve_memory(size_t bytes, bool exec) {
@@ -3903,7 +3904,7 @@ static bool commit_memory_special(size_t bytes,
   if (page_size > os::vm_page_size()) {
     flags |= MAP_HUGETLB | hugetlbfs_page_size_flag(page_size);
   }
-  char* addr = (char*)::mmap(req_addr, bytes, prot, flags, -1, 0);
+  char* addr = (char*)raw_mmap(req_addr, bytes, prot, flags, -1, 0);
 
   if (addr == MAP_FAILED) {
     log_on_commit_special_failure(req_addr, bytes, page_size, errno);
@@ -3964,7 +3965,7 @@ static char* reserve_memory_special_huge_tlbfs(size_t bytes,
   if (!large_committed) {
     // Failed to commit large pages, so we need to unmap the
     // reminder of the orinal reservation.
-    ::munmap(small_start, small_size);
+    raw_munmap(small_start, small_size);
     return nullptr;
   }
 
@@ -3973,7 +3974,7 @@ static char* reserve_memory_special_huge_tlbfs(size_t bytes,
   if (!small_committed) {
     // Failed to commit the remaining size, need to unmap
     // the large pages part of the reservation.
-    ::munmap(aligned_start, large_bytes);
+    raw_munmap(aligned_start, large_bytes);
     return nullptr;
   }
   return aligned_start;
@@ -4943,7 +4944,7 @@ char* os::pd_map_memory(int fd, const char* file_name, size_t file_offset,
     flags |= MAP_FIXED;
   }
 
-  char* mapped_address = (char*)mmap(addr, (size_t)bytes, prot, flags,
+  char* mapped_address = (char*)raw_mmap(addr, (size_t)bytes, prot, flags,
                                      fd, file_offset);
   if (mapped_address == MAP_FAILED) {
     return nullptr;
@@ -4964,7 +4965,7 @@ char* os::pd_remap_memory(int fd, const char* file_name, size_t file_offset,
 
 // Unmap a block of memory.
 bool os::pd_unmap_memory(char* addr, size_t bytes) {
-  return munmap(addr, bytes) == 0;
+  return raw_munmap(addr, bytes) == 0;
 }
 
 static jlong slow_thread_cpu_time(Thread *thread, bool user_sys_cpu_time);
