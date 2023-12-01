@@ -165,6 +165,49 @@ ifeq ($(call isTargetOsType, unix), true)
 endif
 
 ################################################################################
+# Create the libjnmt library
+
+ifeq ($(call isTargetOsType, unix), true)
+  ifeq ($(STATIC_BUILD), false)
+    LIBJNMT_CXXFLAGS += -DHOTSPOT_VM_DISTRO='"$(HOTSPOT_VM_DISTRO)"'
+    $(eval $(call SetupJdkLibrary, BUILD_LIBJNMT, \
+        TOOLCHAIN := TOOLCHAIN_LINK_CXX, \
+        NAME := jnmt, \
+        OPTIMIZATION := LOW, \
+        CXXFLAGS := $(CXXFLAGS_JDKLIB) $(LIBJNMT_CXXFLAGS), \
+        LDFLAGS := --shared -fPIC -rdynamic -O0 -g \
+            $(call SET_SHARED_LIBRARY_ORIGIN), \
+        LIBS := $(LIBCXX) -lpthread, \
+    ))
+
+    TARGETS += $(BUILD_LIBJNMT)
+
+    ############################################################################
+    # Create symlinks to libjnmt in each JVM variant sub dir
+    ifneq ($(STATIC_LIBS), true)
+      LIB_OUTPUTDIR := $(call FindLibDirForModule, java.base)
+
+      # $1 variant subdir
+      define CreateSymlinks
+        # Always symlink from libdir/variant/libjnmt.so -> ../libjnmt.so.
+        $(LIB_OUTPUTDIR)/$1/$(call SHARED_LIBRARY,jnmt): \
+            $(LIB_OUTPUTDIR)/$(call SHARED_LIBRARY,jnmt)
+		$$(call MakeDir, $$(@D))
+		$(RM) $$@
+		$(LN) -s ../$$(@F) $$@
+
+        TARGETS += $(LIB_OUTPUTDIR)/$1/$(call SHARED_LIBRARY,jnmt)
+      endef
+
+      # The subdir is the same as the variant
+      $(foreach v, $(JVM_VARIANTS), $(eval $(call CreateSymlinks,$v)))
+    endif
+    ############################################################################
+
+  endif
+endif
+
+################################################################################
 # Create the symbols file for static builds.
 
 ifeq ($(STATIC_BUILD), true)
