@@ -9,6 +9,8 @@
 #include <limits.h>
 #include <errno.h>
 
+#define EXPORTED extern "C" __attribute__((visibility("default")))
+
 enum State {
     state_newborn = 0,  // before/during earliest initialization
     state_init_0 = 1,   // after init_0
@@ -469,7 +471,9 @@ static void init_1(const functions_t* libjvm_functions, functions_t* libjvm_call
 
 }
 
-extern "C" void NMTInterposeInitialize(const functions_t* libjvm_functions, functions_t* libjvm_callback_functions) {
+
+EXPORTED
+void NMTInterposeInitialize(const functions_t* libjvm_functions, functions_t* libjvm_callback_functions) {
     CriticalSection cs;
     init_1(libjvm_functions, libjvm_callback_functions);
 }
@@ -655,26 +659,26 @@ static int the_munmap(void *addr, size_t length) {
 
 ////////////////////////////////////////////////////////////////////////////
 
-extern "C" void* malloc(size_t len)             { return the_malloc(len); }
-extern "C" void  free(void* old)                { return the_free(old); }
-extern "C" void* realloc(void* old, size_t len) { return the_realloc(old, len); }
-extern "C" void* calloc(size_t num, size_t len) { return the_calloc(num, len); }
+EXPORTED void* malloc(size_t len)             { return the_malloc(len); }
+EXPORTED void  free(void* old)                { return the_free(old); }
+EXPORTED void* realloc(void* old, size_t len) { return the_realloc(old, len); }
+EXPORTED void* calloc(size_t num, size_t len) { return the_calloc(num, len); }
 
-extern "C" void* mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)     { 
+EXPORTED void* mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)     { 
     g_tracer.begin_mmap("mmap entry", addr, length, prot, flags, fd, offset);
     void* const rc = the_mmap(addr, length, prot, flags, fd, offset);
     g_tracer.end_mmap("mmap entry", rc, errno);
     return rc;
 }
 
-extern "C" void* mmap64(void *addr, size_t length, int prot, int flags, int fd, off64_t offset)     { 
+EXPORTED void* mmap64(void *addr, size_t length, int prot, int flags, int fd, off64_t offset)     { 
     g_tracer.begin_mmap("mmap64 entry", addr, length, prot, flags, fd, offset);
     void* const rc = the_mmap(addr, length, prot, flags, fd, offset);
     g_tracer.end_mmap("mmap64 entry", rc, errno);
     return rc;
 }
 
-extern "C" int   munmap(void *addr, size_t length) {
+EXPORTED int   munmap(void *addr, size_t length) {
     g_tracer.begin_munmap("munmap entry", addr, length);
     const int rc = the_munmap(addr, length);
     g_tracer.end_munmap("munmap entry", rc, errno);
