@@ -673,7 +673,7 @@ AC_DEFUN([JDKOPT_ENABLE_DISABLE_CDS_ARCHIVE],
 #
 AC_DEFUN([JDKOPT_ENABLE_DISABLE_CDS_ARCHIVE_COH],
 [
-  UTIL_ARG_ENABLE(NAME: cds-archive-coh, DEFAULT: false, RESULT: BUILD_CDS_ARCHIVE_COH,
+  UTIL_ARG_ENABLE(NAME: cds-archive-coh, DEFAULT: auto, RESULT: BUILD_CDS_ARCHIVE_COH,
       DESC: [enable generation of default CDS archives for compact object headers (Lilliput) in the product image (requires --enable-cds-archive)],
       DEFAULT_DESC: [disabled],
       CHECKING_MSG: [if default CDS archives supporting compact object headers (Lilliput) should be generated],
