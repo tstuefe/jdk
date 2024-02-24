@@ -31,7 +31,7 @@
 
 enum class VMAState : uint8_t { none = 0, reserved = 1, committed = 2 };
 
-class VMATree : public AllStatic {
+class VMADictionary : public AllStatic {
 
   static void register_mapping_change(address from, address to, MEMFLAGS f, VMAState state);
 

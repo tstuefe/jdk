@@ -25,7 +25,7 @@
 #include "logging/log.hpp"
 #include "nmt/vmaTree.hpp"
 #include "utilities/ostream.hpp"
-#include "libdict/include/rb_tree.h"
+#include "nmt/libdict/rb_tree.h"
 
 class MappingInfo {
   union {
@@ -61,11 +61,11 @@ class VMATree {
   rb_tree* _tree;
 public:
   VMATree() {
-
+    _tree = rb_tree_new(key_compare_func);
   }
 
   ~VMATree() {
-
+    rb_tree_free(_tree, (dict_delete_func)nullptr);
   }
 
 };

@@ -52,8 +52,8 @@ typedef struct tree_base {
 } tree_base;
 
 #define TREE_ITERATOR_FIELDS(tree_type, node_type) \
-    tree_type*		tree; \
-    node_type*		node
+    tree_type*		_tree; \
+    node_type*		_node
 
 /* Rotate |node| left.
  * |node| and |node->rlink| must not be NULL. */

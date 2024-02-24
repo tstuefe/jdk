@@ -567,8 +567,8 @@ rb_itor_new(rb_tree* tree)
 {
     rb_itor* itor = MALLOC(rb_itor, sizeof(*itor));
     if (itor) {
-	itor->tree = tree;
-	itor->node = NULL;
+	itor->_tree = tree;
+	itor->_node = NULL;
     }
     return itor;
 }
@@ -594,17 +594,17 @@ void rb_itor_invalidate(rb_itor* itor) { tree_iterator_invalidate(itor); }
 bool
 rb_itor_next(rb_itor* itor)
 {
-    if (itor->node)
-	itor->node = node_next(itor->node);
-    return itor->node != NULL;
+    if (itor->_node)
+	itor->_node = node_next(itor->_node);
+    return itor->_node != NULL;
 }
 
 bool
 rb_itor_prev(rb_itor* itor)
 {
-    if (itor->node)
-	itor->node = node_prev(itor->node);
-    return itor->node != NULL;
+    if (itor->_node)
+	itor->_node = node_prev(itor->_node);
+    return itor->_node != NULL;
 }
 
 bool
@@ -613,7 +613,7 @@ rb_itor_nextn(rb_itor* itor, size_t count)
     while (count--)
 	if (!rb_itor_next(itor))
 	    return false;
-    return itor->node != NULL;
+    return itor->_node != NULL;
 }
 
 bool
@@ -622,7 +622,7 @@ rb_itor_prevn(rb_itor* itor, size_t count)
     while (count--)
 	if (!rb_itor_prev(itor))
 	    return false;
-    return itor->node != NULL;
+    return itor->_node != NULL;
 }
 
 bool rb_itor_first(rb_itor* itor) { return tree_iterator_first(itor); }
@@ -639,9 +639,9 @@ int rb_itor_compare(const rb_itor* i1, const rb_itor* i2) { return tree_iterator
 bool
 rb_itor_remove(rb_itor* it)
 {
-    if (!it->node)
+    if (!it->_node)
 	return false;
-    remove_node(it->tree, it->node);
-    it->node = NULL;
+    remove_node(it->_tree, it->_node);
+    it->_node = NULL;
     return true;
 }
