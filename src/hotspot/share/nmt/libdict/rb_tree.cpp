@@ -114,7 +114,7 @@ rb_tree_new(dict_compare_func cmp_func)
 {
     ASSERT(cmp_func != NULL);
 
-    rb_tree* tree = MALLOC(sizeof(*tree));
+    rb_tree* tree = MALLOC(rb_tree, sizeof(*tree));
     if (tree) {
 	tree->root = NULL;
 	tree->count = 0;
@@ -127,7 +127,7 @@ rb_tree_new(dict_compare_func cmp_func)
 dict*
 rb_dict_new(dict_compare_func cmp_func)
 {
-    dict* dct = MALLOC(sizeof(*dct));
+    dict* dct = MALLOC(dict, sizeof(*dct));
     if (dct) {
 	if (!(dct->_object = rb_tree_new(cmp_func))) {
 	    FREE(dct);
@@ -457,7 +457,7 @@ rot_right(rb_tree* tree, rb_node* node)
 static rb_node*
 node_new(void* key)
 {
-    rb_node* node = MALLOC(sizeof(*node));
+    rb_node* node = MALLOC(rb_node, sizeof(*node));
     if (node) {
 	ASSERT((((intptr_t)node) & 1) == 0); /* Ensure malloc returns aligned result. */
 	node->key = key;
@@ -565,7 +565,7 @@ rb_tree_verify(const rb_tree* tree)
 rb_itor*
 rb_itor_new(rb_tree* tree)
 {
-    rb_itor* itor = MALLOC(sizeof(*itor));
+    rb_itor* itor = MALLOC(rb_itor, sizeof(*itor));
     if (itor) {
 	itor->tree = tree;
 	itor->node = NULL;
@@ -576,7 +576,7 @@ rb_itor_new(rb_tree* tree)
 dict_itor*
 rb_dict_itor_new(rb_tree* tree)
 {
-    dict_itor* itor = MALLOC(sizeof(*itor));
+    dict_itor* itor = MALLOC(rb_node, sizeof(*itor));
     if (itor) {
 	if (!(itor->_itor = rb_itor_new(tree))) {
 	    FREE(itor);
