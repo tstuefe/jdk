@@ -28,7 +28,7 @@
 #ifndef LIBDICT_RB_TREE_H__
 #define LIBDICT_RB_TREE_H__
 
-#include "dict.h"
+#include "nmt/libdict/dict.h"
 
 BEGIN_DECL
 

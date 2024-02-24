@@ -29,7 +29,7 @@
  * cf. [Cormen, Leiserson, and Rivest 1990], [Guibas and Sedgewick, 1978]
  */
 
-#include "rb_tree.h"
+#include "nmt/libdict/rb_tree.h"
 
 #include <string.h>
 #include "nmt/libdict/dict_private.h"

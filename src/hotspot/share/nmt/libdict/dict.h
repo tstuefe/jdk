@@ -41,6 +41,7 @@ BEGIN_DECL
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 #define DICT_VERSION_MAJOR	0
 #define DICT_VERSION_MINOR	3

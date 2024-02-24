@@ -25,7 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "dict_private.h"
+#include "nmt/libdict/dict_private.h"
 
 #define XSTRINGIFY(x)	STRINGIFY(x)
 #define STRINGIFY(x)	#x

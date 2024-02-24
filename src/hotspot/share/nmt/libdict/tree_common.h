@@ -28,7 +28,7 @@
 #ifndef LIBDICT_TREE_COMMON_H__
 #define LIBDICT_TREE_COMMON_H__
 
-#include "dict.h"
+#include "nmt/libdict/dict.h"
 
 #define TREE_NODE_FIELDS(node_type) \
     void*		key; \

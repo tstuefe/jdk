@@ -26,6 +26,7 @@
 #include "nmt/vmaTree.hpp"
 #include "utilities/ostream.hpp"
 #include "nmt/libdict/rb_tree.h"
+#include "nmt/libdict/tree_common.h"
 
 class MappingInfo {
   union {
@@ -59,6 +60,7 @@ static int key_compare_func(const void* a, const void* b) {
 
 class VMATree {
   rb_tree* _tree;
+
 public:
   VMATree() {
     _tree = rb_tree_new(key_compare_func);
@@ -66,6 +68,16 @@ public:
 
   ~VMATree() {
     rb_tree_free(_tree, (dict_delete_func)nullptr);
+  }
+
+  void register_mapping(address from, address to, MEMFLAGS f, VMAState s) {
+
+    // Find nearest lowest pointer
+    void* node = tree_search_le_node(_tree, from);
+    if (node != nullptr) {
+
+    }
+
   }
 
 };

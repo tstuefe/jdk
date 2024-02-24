@@ -25,7 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "tree_common.h"
+#include "nmt/libdict/tree_common.h"
 
 #include <string.h>
 #include "dict_private.h"
