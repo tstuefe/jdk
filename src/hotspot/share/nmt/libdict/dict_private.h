@@ -85,7 +85,7 @@
     } while (0)
 #endif
 
-#define MALLOC(n)	(*dict_malloc_func)(n)
+#define MALLOC(type,n)	(type*)(*dict_malloc_func)(n)
 #define FREE(p)		(*dict_free_func)(p)
 
 #define ABS(a)		((a) < 0 ? -(a) : (a))

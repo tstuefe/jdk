@@ -32,8 +32,8 @@
 #include "rb_tree.h"
 
 #include <string.h>
-#include "dict_private.h"
-#include "tree_common.h"
+#include "nmt/libdict/dict_private.h"
+#include "nmt/libdict/tree_common.h"
 
 typedef struct rb_node rb_node;
 struct rb_node {
