@@ -274,7 +274,7 @@ remove_node(rb_tree* tree, rb_node* node)
     if (!node->llink || !node->rlink) {
 	out = node;
     } else {
-	out = tree_node_min(node->rlink);
+	out = (rb_node*) tree_node_min(node->rlink);
 	void *tmp;
 	SWAP(node->key, out->key, tmp);
 	SWAP(node->datum, out->datum, tmp);
@@ -296,7 +296,7 @@ remove_node(rb_tree* tree, rb_node* node)
 dict_remove_result
 rb_tree_remove(rb_tree* tree, const void* key)
 {
-    rb_node* node = tree_search_node(tree, key);
+    rb_node* node = (rb_node*) tree_search_node(tree, key);
     if (!node)
 	return (dict_remove_result) { NULL, NULL, false };
     dict_remove_result result = { node->key, node->datum, true };
@@ -391,7 +391,7 @@ rb_tree_traverse(rb_tree* tree, dict_visit_func visit, void* user_data)
 	return 0;
 
     size_t count = 0;
-    rb_node* node = tree_node_min(tree->root);
+    rb_node* node = (rb_node*) tree_node_min(tree->root);
     for (; node != NULL; node = node_next(node)) {
 	++count;
 	if (!visit(node->key, node->datum, user_data))
@@ -412,12 +412,12 @@ rb_tree_select(rb_tree *tree, size_t n, const void **key, void **datum)
     }
     rb_node *node;
     if (n >= tree->count / 2) {
-	node = tree_node_max(tree->root);
+	node = (rb_node*) tree_node_max(tree->root);
 	n = tree->count - 1 - n;
 	while (n--)
 	    node = node_prev(node);
     } else {
-	node = tree_node_min(tree->root);
+	node = (rb_node*) tree_node_min(tree->root);
 	while (n--)
 	    node = node_next(node);
     }
@@ -576,7 +576,7 @@ rb_itor_new(rb_tree* tree)
 dict_itor*
 rb_dict_itor_new(rb_tree* tree)
 {
-    dict_itor* itor = MALLOC(rb_node, sizeof(*itor));
+    dict_itor* itor = MALLOC(dict_itor, sizeof(*itor));
     if (itor) {
 	if (!(itor->_itor = rb_itor_new(tree))) {
 	    FREE(itor);
