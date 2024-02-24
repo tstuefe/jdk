@@ -55,6 +55,10 @@ typedef struct tree_base {
     tree_type*		_tree; \
     node_type*		_node
 
+typedef struct tree_node {
+    TREE_NODE_FIELDS(struct tree_node);
+} tree_node;
+
 /* Rotate |node| left.
  * |node| and |node->rlink| must not be NULL. */
 void	    tree_node_rot_left(void *tree, void *node);
@@ -80,19 +84,20 @@ void*	    tree_search_node(void *tree, const void *key);
 /* Return the data/node associated with the first key less than or
  * equal to the specified key, or NULL if not found. */
 void**	    tree_search_le(void *tree, const void *key);
-void*	    tree_search_le_node(void *tree, const void *key);
+tree_node*	    tree_search_le_node(void *tree, const void *key);
 /* Return the data/node associated with the first key less than the
  * specified key, or NULL if not found. */
 void**	    tree_search_lt(void *tree, const void *key);
-void*	    tree_search_lt_node(void *tree, const void *key);
+tree_node*	    tree_search_lt_node(void *tree, const void *key);
+
 /* Return the data/node associated with the first key greater than or
  * equal to the specified key, or NULL if not found. */
 void**	    tree_search_ge(void *tree, const void *key);
-void*	    tree_search_ge_node(void *tree, const void *key);
+tree_node*	    tree_search_ge_node(void *tree, const void *key);
 /* Return the data/node associated with the first key greater than the
  * specified key, or NULL if not found. */
 void**	    tree_search_gt(void *tree, const void *key);
-void*	    tree_search_gt_node(void *tree, const void *key);
+tree_node*	    tree_search_gt_node(void *tree, const void *key);
 /* Traverses the tree in order, calling |visit| with each key and value pair,
  * stopping if |visit| returns false. Returns the number of times |visit| was
  * called. */

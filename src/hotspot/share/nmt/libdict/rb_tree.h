@@ -29,10 +29,21 @@
 #define LIBDICT_RB_TREE_H__
 
 #include "nmt/libdict/dict.h"
+#include "nmt/libdict/tree_common.h"
 
 BEGIN_DECL
 
-typedef struct rb_tree rb_tree;
+struct rb_node {
+    void*     key;
+    void*     datum;
+    intptr_t      color;
+    rb_node*      llink;
+    rb_node*      rlink;
+};
+
+struct rb_tree {
+    TREE_FIELDS(rb_node);
+};
 
 rb_tree*	rb_tree_new(dict_compare_func cmp_func);
 dict*		rb_dict_new(dict_compare_func cmp_func);

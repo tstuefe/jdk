@@ -28,7 +28,7 @@
 #include "nmt/libdict/rb_tree.h"
 #include "nmt/libdict/tree_common.h"
 
-class MappingInfo {
+class Data {
   union {
     void* raw;
     struct {
@@ -38,17 +38,21 @@ class MappingInfo {
   } _v;
   STATIC_ASSERT(sizeof(_v) == sizeof(void*));
 public:
-  MappingInfo(void* v) {
+  Data(void* v) {
     _v.raw = v;
   }
-  MappingInfo(MEMFLAGS f, VMAState s) {
+  Data(MEMFLAGS f, VMAState s) {
     _v.data.s = s;
     _v.data.f = f;
   }
   VMAState state() const { return _v.data.s; }
   MEMFLAGS f() const { return _v.data.f; }
   void* raw() const { return _v.raw; }
+
+  static constexpr Data hole_data = Data(mtNone, VMAState::none);
 };
+
+
 
 static int key_compare_func(const void* a, const void* b) {
   if (a == b) {
@@ -64,6 +68,9 @@ class VMATree {
 public:
   VMATree() {
     _tree = rb_tree_new(key_compare_func);
+    // we seed the tree with a hole-node starting at the lowest possible address.
+    dict_insert_result res = rb_tree_insert(_tree, 4 * K);
+
   }
 
   ~VMATree() {
@@ -72,9 +79,31 @@ public:
 
   void register_mapping(address from, address to, MEMFLAGS f, VMAState s) {
 
+    // prepare Data for new range starting at from address
+    const Data data_from = Data(f, s);
+
+
     // Find nearest lowest pointer
-    void* node = tree_search_le_node(_tree, from);
-    if (node != nullptr) {
+    tree_node* next_lowest = tree_search_le_node(_tree, from);
+    if (next_lowest) { // found one (very likely)
+      const address address_next_lowest = (address)next_lowest->key;
+      assert(address_next_lowest <= from, "Sanity");
+
+      // If it exist, we distinguish three cases:
+      // 1) it is at our address. Then we replace the properties with the new ones.
+      // 2) it is lower than us. Then:
+      // 2.1) if it is a hole-marker, we start a new range at from address
+      // 2.2) if it is not a hole-marker, it marks the beginning of a range. Then:
+      // 2.2.1) if the properties match, we don't do anything (e.g. reserving with the from address inside an already reserved range)
+      // 2.2.2) if the properties don't match, we start a new range at from
+      bool add_new_from_node = false;
+      if (address_next_lowest == from) {
+        // (1)
+        next_lowest->datum =
+
+      } else {
+        add_new_from_node = true;
+      }
 
     }
 

@@ -35,15 +35,6 @@
 #include "nmt/libdict/dict_private.h"
 #include "nmt/libdict/tree_common.h"
 
-typedef struct rb_node rb_node;
-struct rb_node {
-    void*	    key;
-    void*	    datum;
-    intptr_t	    color;
-    rb_node*	    llink;
-    rb_node*	    rlink;
-};
-
 #define RB_RED		    0
 #define RB_BLACK	    1
 
@@ -54,9 +45,6 @@ struct rb_node {
 #define SET_BLACK(node)	    (node)->color |= ((intptr_t)RB_BLACK)
 #define SET_PARENT(node,p)  (node)->color = COLOR(node) | (intptr_t)(p)
 
-struct rb_tree {
-    TREE_FIELDS(rb_node);
-};
 
 struct rb_itor {
     TREE_ITERATOR_FIELDS(rb_tree, rb_node);

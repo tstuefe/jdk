@@ -30,9 +30,6 @@
 #include <string.h>
 #include "dict_private.h"
 
-typedef struct tree_node {
-    TREE_NODE_FIELDS(struct tree_node);
-} tree_node;
 
 typedef struct {
     TREE_FIELDS(tree_node);
@@ -147,7 +144,7 @@ tree_search(void* Tree, const void* key)
     return node ? &node->datum : NULL;
 }
 
-void*
+tree_node*
 tree_search_le_node(void* Tree, const void* key)
 {
     tree* t = (tree*) Tree;
@@ -173,7 +170,7 @@ tree_search_le(void* Tree, const void* key)
     return node ? &node->datum : NULL;
 }
 
-void*
+tree_node*
 tree_search_lt_node(void* Tree, const void* key)
 {
     tree* t = (tree*) Tree;
@@ -197,7 +194,7 @@ tree_search_lt(void* Tree, const void* key)
     return node ? &node->datum : NULL;
 }
 
-void*
+tree_node*
 tree_search_ge_node(void* Tree, const void* key)
 {
     tree* t = (tree*) Tree;
@@ -224,7 +221,7 @@ tree_search_ge(void* Tree, const void* key)
     return node ? &node->datum : NULL;
 }
 
-void*
+tree_node*
 tree_search_gt_node(void* Tree, const void* key)
 {
     tree* t = (tree*) Tree;
