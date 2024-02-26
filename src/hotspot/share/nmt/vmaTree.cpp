@@ -66,8 +66,8 @@ static const char* const vmastate_text[3] = { "000?", "reserved", "committed" };
 class VMANode {
   rb_node* const _node;
 public:
-  VMANode(rb_node* node) : _node(node)      { DEBUG_ONLY(verify();) }
-  VMANode(rb_itor* it) : _node(it->_node)   { DEBUG_ONLY(verify();) }
+  VMANode(rb_node* node) : _node(node)      {}
+  VMANode(rb_itor* it) : _node(it->_node)   {}
 
   address addr() const { return (address)_node->key; }
 
@@ -97,12 +97,6 @@ public:
   bool is_noop() const {
     return state_change().is_noop();
   }
-
-#ifdef ASSERT
-  void verify() const {
-    assert(!is_noop(), "node is a noop?");
-  }
-#endif
 };
 
 class VMAMappingState {
@@ -142,6 +136,8 @@ class VMATree {
   // Note: could also a unmapped region, if state_now is "NONE_STATE"
   void register_mapping(address A, address B, MappingState state_now) {
 
+    log_trace(nmtvma)("Adding " PTR_FORMAT " .. " PTR_FORMAT " (%.4x)", p2i(A), p2i(B), state_now);
+
     assert(B > A, "no empty ranges");
     rb_itor* it = rb_itor_new(_tree);
     assert(it != nullptr, "new");
@@ -151,16 +147,25 @@ class VMATree {
     ///////////////////////////
     // First, handle A.
     MappingStateChange sc_A;
+    sc_A.set_state_in(NONE_STATE);
     sc_A.set_state_out(state_now);    // A is begin of the range, so "state_now" is the outgoing state
+
+    // This will be the state active at B.out
+    MappingStateChange sc_B;
+    sc_B.set_state_in(state_now);     // B is begin of the range, so "state_now" is the incoming state
+    sc_B.set_state_out(NONE_STATE);
 
     // We search for the node preceding A:
     if (rb_itor_search_le(it, A)) {
       VMANode n(it);
 
+      // Unless we know better, let B's outgoing state be the outgoing state of the node at or preceding A.
+      sc_B.set_state_out(n.state_out());
+
       // Direct address match.
       if (n.addr() == A) {
 
-        // Update the existing node's new state with our new state.
+        // Take over in state from old address.
         sc_A.set_state_in(n.state_in());
 
         // But we may now be able to merge two regions:
@@ -194,7 +199,6 @@ class VMATree {
     } else {
       // There was no entry with a lower address. That means that A is inserted
       // with incoming state=none.
-      sc_A.set_state_in(NONE_STATE);
       if (sc_A.is_noop()) {
         // Nothing to do.
       } else {
@@ -208,40 +212,48 @@ class VMATree {
     // The last node before B determines B's outgoing state. If there is no node between A and B,
     // its A's incoming state.
 
-    // Construct the State change for B first.
-    MappingStateChange sc_B;
-    sc_B.set_state_in(state_now); // B is end of range, so "state_now" is its incoming state
-
-    // For now we assume the state to be what was active before A, but see below.
-    sc_B.set_state_out(sc_A.state_in());
-
     ResourceMark rm;
     GrowableArray<address> to_be_deleted(16);
+    bool B_needs_insert = true;
 
-    // Find all nodes between (A, B) and record their addresses.
-    // Also find the last valid state that is active at address B.
-    MappingState state_at_B = sc_A.state_in(); // first assumption: its what is active at A.
+    // Find all nodes between (A, B] and record their addresses. Also update B's outgoing
+    // state.
     for (rc = rb_itor_search_gt(it, A);
-         rc && VMANode(it).addr() < B;
+         rc && VMANode(it).addr() <= B;
          rc = rb_itor_next(it))
     {
       VMANode n(it);
-      assert(n.addr() < B && n.addr() > A, "Sanity");
-      to_be_deleted.push(n.addr());
       sc_B.set_state_out(n.state_out());
-      DEBUG_ONLY(n.set_state_change(MappingStateChange((void*)-1));) // visual mark
+      if (n.addr() < B) {
+        // Delete all nodes preceding B.
+        to_be_deleted.push(n.addr());
+      } else {
+        assert(n.addr() == B, "Sanity");
+        // Re-purpose B node, unless it would result in a noop node, in which case
+        // delete old node at B.
+        if (sc_B.is_noop()) {
+          to_be_deleted.push(B);
+        } else {
+          n.set_state_change(sc_B);
+        }
+        B_needs_insert = false;
+      }
     }
 
-    // Now insert or update (don't care) the B node.
-    insert_or_update_node(B, sc_B);
+    // Insert B node if needed
+    if (B_needs_insert && !sc_B.is_noop()) {
+      insert_new_node(B, sc_B);
+    }
 
-    // Finally, if needed, delete all nodes inbetween.
+    // Finally, if needed, delete all nodes between (A, B)
     while (to_be_deleted.length() > 0) {
       const address delete_me = to_be_deleted.pop();
       rb_tree_remove(_tree, delete_me);
     }
 
     rb_itor_free(it);
+
+    DEBUG_ONLY(verify();) // possibly expensive
   }
 
 public:
@@ -294,27 +306,91 @@ public:
   }
 
 #ifdef ASSERT
-  void verify() const {
-    rb_tree_verify(_tree);
+  bool is_valid(address* bad, const char** what) const {
+#define ASSERT_HERE(cond, text) \
+    if (!(cond)) { \
+      (*what) = text; \
+      (*bad) = addr; \
+      return false; \
+    }
+    address addr = nullptr;
+    ASSERT_HERE(rb_tree_verify(_tree), "Sanity");
     // Iterate through all entries. Check:
     // - addresses rising, no duplicates
     // - incoming and outgoing states must match
+    rb_node* last_node = nullptr;
     rb_itor* it = rb_itor_new(_tree);
-    address last_addr = nullptr;
-    MappingState last_state = NONE_STATE;
     for (bool rc = rb_itor_first(it); rc; rc = rb_itor_next(it)) {
       VMANode n(it);
-      if (last_addr != nullptr) {
-        assert(n.addr() > last_addr, "Sanity");
-        assert(last_state == n.state_in(), "Sanity");
-        last_addr = n.addr();
-        last_state = n.state_out();
+      addr = n.addr();
+      if (last_node == nullptr) {
+        ASSERT_HERE(addr != nullptr, "Null addr");
+        ASSERT_HERE(n.state_in() == NONE_STATE, "very first address must start in NONE state");
+      } else {
+        VMANode n0(last_node);
+        ASSERT_HERE(addr > n0.addr(), "addresses not rising?");
+        ASSERT_HERE(n.state_in() == n0.state_out(), "Last node out does not match this node in");
       }
-      rb_itor_free(it);
+      ASSERT_HERE(!n.is_noop(), "Noop node found");
+      last_node = it->_node;
+    }
+    if (last_node != nullptr) {
+      ASSERT_HERE(VMANode(last_node).state_out() == NONE_STATE, "very last address must end in NONE state");
+    }
+    rb_itor_free(it);
+    return true;
+#undef ASSERT_HERE
+  }
+
+  void verify() const {
+    const char* err = nullptr;
+    address bad = nullptr;
+    if (!is_valid(&bad, &err)) {
+      tty->print_cr("Tree invalid (@" PTR_FORMAT ", %s)", p2i(bad), err);
+      print_tree_raw(tty);
+      assert(false, "Invalid tree (%s)", err);
     }
   }
 #endif
 
+  void report_summary(outputStream* st) const {
+print_tree_raw(st);
+    st->print_cr("VMA Summary");
+    size_t reserved[(int)MEMFLAGS::mt_number_of_types] = { 0 };
+    size_t committed[(int)MEMFLAGS::mt_number_of_types] = { 0 };
+    rb_itor* it = rb_itor_new(_tree);
+    bool rc;
+    address last_addr = nullptr;
+    for (rc = rb_itor_first(it); rc; rc = rb_itor_next(it)) {
+      VMANode n(it);
+      if (n.state_in() != NONE_STATE) {
+        assert(last_addr != nullptr, "Sanity");
+        const MappingState region_state = n.state_in();
+        const VMAState s = VMAMappingState(region_state).s();
+        assert(s == VMAState::reserved || s == VMAState::committed, "Sanity");
+        const MEMFLAGS f = VMAMappingState(region_state).f();
+        const int fi = NMTUtil::flag_to_index(f);
+        assert(NMTUtil::flag_index_is_valid(fi), "Sanity");
+        const size_t region_size = n.addr() - last_addr;
+        reserved[fi] += region_size;
+        if (s == VMAState::committed) {
+          committed[fi] += region_size;
+        }
+        st->print_cr(PTR_FORMAT "-" PTR_FORMAT ": committed=%d, flag=%d",
+                     p2i(last_addr), p2i(n.addr()), (int)s, (int)f);
+
+      }
+      last_addr = n.addr();
+    }
+    rb_itor_free(it);
+    for (int i = 0; i < (int)mt_number_of_types; i++) {
+      if (reserved[i] > 0) {
+        st->print_cr("%s : reserved " SIZE_FORMAT ", committed " SIZE_FORMAT,
+                     NMTUtil::flag_to_enum_name(NMTUtil::index_to_flag(i)), reserved[i], committed[i]);
+      }
+    }
+    st->print_cr("/VMA Summary");
+  }
 };
 
 static VMATree _g_vma_tree;
@@ -333,6 +409,10 @@ void VMADictionary::print_all_mappings(outputStream* st) {
 
 void VMADictionary::print_tree_raw(outputStream* st) {
   _g_vma_tree.print_tree_raw(st);
+}
+
+void VMADictionary::report_summary(outputStream* st) {
+  _g_vma_tree.report_summary(st);
 }
 
 #ifdef ASSERT

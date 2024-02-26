@@ -132,6 +132,7 @@ class outputStream;
   LOG_TAG(nestmates) \
   LOG_TAG(nmethod) \
   LOG_TAG(nmt) \
+  LOG_TAG(nmtvma) \
   LOG_TAG(normalize) \
   LOG_TAG(numa) \
   LOG_TAG(objecttagging) \

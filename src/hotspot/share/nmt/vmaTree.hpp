@@ -32,15 +32,18 @@
 enum class VMAState : uint8_t { reserved = 1, committed = 2 };
 
 class outputStream;
+class VMATree;
+class VirtualMemoryWalker;
 
 struct VMADictionary : public AllStatic {
-
   static void register_create_mapping(address from, address to, MEMFLAGS f, VMAState state);
   static void register_release_mapping(address from, address to);
   static void print_all_mappings(outputStream* st);
   static void print_tree_raw(outputStream* st);
+  static void report_summary(outputStream* st);
   DEBUG_ONLY(static void verify();)
 
+  static void walk_all_regions(VirtualMemoryWalker* walker);
 };
 
 #endif // SHARE_NMT_VMATREE_HPP
