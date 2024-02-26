@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "memory/allocation.hpp"
 #include "nmt/vmaTree.hpp"
+#include "nmt/memTracker.hpp"
 #include "runtime/os.hpp"
 #include "utilities/ostream.hpp"
 #include "unittest.hpp"
@@ -121,4 +122,81 @@ TEST_VM(NMTVMADict, random) {
   VMADictionary::report_summary(tty);
 
 }
+
+static void do_test_speed(const bool new_impl) {
+  // prepare:
+  // We create X reserved regions with Y committed regions in them.
+  constexpr int num_reserved = 100;
+  constexpr int num_committed = 10000;
+  constexpr int num_regions = num_reserved * num_committed;
+
+  constexpr size_t region_size = 4 * K;
+  constexpr size_t step_size = region_size * 2;
+
+  constexpr size_t reserved_size = num_committed * step_size;
+
+  constexpr uintptr_t base_i = 0xFFFF000000000000ULL;
+  const address base = (address)base_i;
+
+  double d1 = os::elapsedTime();
+
+  // Now, establish regions
+  for (int i = 0; i < num_reserved; i++) {
+    const address addr = base + (i * reserved_size);
+    const MEMFLAGS f = ((i % 2) == 0) ? mtNMT : mtInternal;
+    if (new_impl) {
+      VMADictionary::register_create_mapping(addr, addr + reserved_size, f, VMAState::reserved);
+    } else {
+      MemTracker::record_virtual_memory_reserve(addr, reserved_size, CALLER_PC, f);
+    }
+
+    // Establish committed regions
+    for (int i2 = 0; i2 < num_committed; i2++) {
+      const address addr2 = addr + (i2 * step_size);
+      if (new_impl) {
+        VMADictionary::register_create_mapping(addr2, addr2 + region_size, f, VMAState::committed);
+      } else {
+        MemTracker::record_virtual_memory_commit(addr2, region_size, CALLER_PC);
+      }
+    }
+  }
+
+  double d2 = os::elapsedTime();
+  tty->print_cr("Setup: %f seconds", d2 - d1);
+
+  // Now: randomly commit and uncommit regions.
+  const double d3 = d2 + 5.0f;
+  uintx num_recommits = 0;
+  int r = os::random();
+  while (os::elapsedTime() < d3) {
+    r = os::next_random(r);
+    const int res_i = r % num_reserved;
+    r = os::next_random(r);
+    const int com_i = r % num_committed;
+    const MEMFLAGS f = ((res_i % 2) == 0) ? mtNMT : mtInternal;
+    const address addr = base + (res_i * reserved_size) + (com_i * step_size);
+    if (new_impl) {
+      VMADictionary::register_create_mapping(addr, addr + region_size, f, VMAState::reserved); // uncommit
+      VMADictionary::register_create_mapping(addr, addr + region_size, f, VMAState::committed); // re-commit
+    } else {
+      Tracker(Tracker::uncommit).record(addr, region_size); // uncommit
+      MemTracker::record_virtual_memory_commit(addr, region_size, CALLER_PC); // re-commit
+    }
+    num_recommits ++;
+  }
+
+  tty->print_cr("Result: " UINTX_FORMAT, num_recommits);
+
+  {
+    double d = os::elapsedTime();
+    if (new_impl) {
+      VMADictionary::report_summary(tty);
+      double d2 = os::elapsedTime();
+      tty->print_cr("Summary took %f seconds.", d2 - d);
+    }
+  }
+}
+
+TEST_OTHER_VM(NMTVMADict, test_speed_old_1)  {  do_test_speed(false); }
+TEST_OTHER_VM(NMTVMADict, test_speed_new_1)  {  do_test_speed(true); }
 

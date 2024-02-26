@@ -24,6 +24,10 @@
 #include "precompiled.hpp"
 #include "logging/log.hpp"
 #include "nmt/vmaTree.hpp"
+#include "nmt/nmtCommon.hpp"
+#include "memory/resourceArea.hpp"
+#include "runtime/threadCritical.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/ostream.hpp"
 #include "nmt/libdict/rb_tree.h"
 #include "nmt/libdict/tree_common.h"
@@ -213,7 +217,8 @@ class VMATree {
     // its A's incoming state.
 
     ResourceMark rm;
-    GrowableArray<address> to_be_deleted(16);
+    GrowableArray<address> to_be_deleted(64);
+
     bool B_needs_insert = true;
 
     // Find all nodes between (A, B] and record their addresses. Also update B's outgoing
@@ -354,13 +359,13 @@ public:
 #endif
 
   void report_summary(outputStream* st) const {
-print_tree_raw(st);
     st->print_cr("VMA Summary");
     size_t reserved[(int)MEMFLAGS::mt_number_of_types] = { 0 };
     size_t committed[(int)MEMFLAGS::mt_number_of_types] = { 0 };
     rb_itor* it = rb_itor_new(_tree);
     bool rc;
     address last_addr = nullptr;
+    uintx num_mappings = 0;
     for (rc = rb_itor_first(it); rc; rc = rb_itor_next(it)) {
       VMANode n(it);
       if (n.state_in() != NONE_STATE) {
@@ -376,11 +381,9 @@ print_tree_raw(st);
         if (s == VMAState::committed) {
           committed[fi] += region_size;
         }
-        st->print_cr(PTR_FORMAT "-" PTR_FORMAT ": committed=%d, flag=%d",
-                     p2i(last_addr), p2i(n.addr()), (int)s, (int)f);
-
       }
       last_addr = n.addr();
+      num_mappings++;
     }
     rb_itor_free(it);
     for (int i = 0; i < (int)mt_number_of_types; i++) {
@@ -389,6 +392,7 @@ print_tree_raw(st);
                      NMTUtil::flag_to_enum_name(NMTUtil::index_to_flag(i)), reserved[i], committed[i]);
       }
     }
+    st->print_cr("(total: " UINTX_FORMAT " VMAs).", num_mappings);
     st->print_cr("/VMA Summary");
   }
 };
@@ -396,27 +400,33 @@ print_tree_raw(st);
 static VMATree _g_vma_tree;
 
 void VMADictionary::register_create_mapping(address from, address to, MEMFLAGS f, VMAState s) {
+  ThreadCritical tc;
   _g_vma_tree.register_new_memory_mapping(from, to, VMAMappingState(f, s).state());
 }
 
 void VMADictionary::register_release_mapping(address from, address to) {
+  ThreadCritical tc;
   _g_vma_tree.register_unmapping(from, to);
 }
 
 void VMADictionary::print_all_mappings(outputStream* st) {
+  ThreadCritical tc;
   _g_vma_tree.print_all_mappings(st);
 }
 
 void VMADictionary::print_tree_raw(outputStream* st) {
+  ThreadCritical tc;
   _g_vma_tree.print_tree_raw(st);
 }
 
 void VMADictionary::report_summary(outputStream* st) {
+  ThreadCritical tc;
   _g_vma_tree.report_summary(st);
 }
 
 #ifdef ASSERT
 void VMADictionary::verify() {
+  ThreadCritical tc;
   _g_vma_tree.verify();
 }
 #endif
