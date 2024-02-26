@@ -123,46 +123,87 @@ TEST_VM(NMTVMADict, random) {
 
 }
 
-template <bool new_impl>
+template <bool new_impl, bool dolock>
 struct Implementation {
 
   static void register_reservation(address addr, size_t size, MEMFLAGS f) {
     if (new_impl) {
-      VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+      if (dolock) {
+        ThreadCritical tc;
+        VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+      } else {
+        VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+      }
     } else {
-      MemTracker::record_virtual_memory_reserve(addr, size, CALLER_PC, f);
+      if (dolock) {
+        ThreadCritical tc;
+        VirtualMemoryTracker::add_reserved_region(addr, size, CALLER_PC, f);
+      } else {
+        VirtualMemoryTracker::add_reserved_region(addr, size, CALLER_PC, f);
+      }
     }
   }
 
   static void register_commit(address addr, size_t size, MEMFLAGS f) {
     if (new_impl) {
-      VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::committed);
+      if (dolock) {
+        ThreadCritical tc;
+        VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::committed);
+      } else {
+        VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::committed);
+      }
     } else {
-      MemTracker::record_virtual_memory_commit(addr, size, CALLER_PC);
+      if (dolock) {
+        ThreadCritical tc;
+        VirtualMemoryTracker::add_committed_region(addr, size, CALLER_PC);
+      } else {
+        VirtualMemoryTracker::add_committed_region(addr, size, CALLER_PC);
+      }
     }
   }
 
   static void register_uncommit(address addr, size_t size, MEMFLAGS f) {
     if (new_impl) {
-      VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+      if (dolock) {
+        ThreadCritical tc;
+        VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+      } else {
+        VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+      }
     } else {
-      Tracker(Tracker::uncommit).record(addr, size); // uncommit
+      if (dolock) {
+        ThreadCritical tc;
+        VirtualMemoryTracker::remove_uncommitted_region(addr, size);
+      } else {
+        VirtualMemoryTracker::remove_uncommitted_region(addr, size);
+      }
     }
   }
 
   static void print_summary() {
     if (new_impl) {
-      tty->print_cr("report new");
-      VMADictionary::report_summary(tty);
+      if (dolock) {
+        ThreadCritical tc;
+        VMADictionary::report_summary(tty);
+      } else {
+        VMADictionary::report_summary(tty);
+      }
     } else {
-      tty->print_cr("report old");
-      MemTracker::final_report(tty);
+      if (dolock) {
+        ThreadCritical tc;
+        MemTracker::final_report(tty);
+      } else {
+        MemTracker::final_report(tty);
+      }
     }
   }
 };
 
-template <bool new_impl>
+template <bool new_impl, bool with_locking>
 static void do_test_speed_1() {
+
+  typedef Implementation<new_impl, with_locking> Impl;
+
   // prepare:
   // We create X reserved regions with Y committed regions in them.
   constexpr int num_reserved = 100;
@@ -183,12 +224,12 @@ static void do_test_speed_1() {
   for (int i = 0; i < num_reserved; i++) {
     const address addr = base + (i * reserved_size);
     const MEMFLAGS f = ((i % 2) == 0) ? mtReserved1 : mtReserved2;
-    Implementation<new_impl>::register_reservation(addr, reserved_size, f);
+    Impl::register_reservation(addr, reserved_size, f);
 
     // Establish committed regions
     for (int i2 = 0; i2 < num_committed; i2++) {
       const address addr2 = addr + (i2 * step_size);
-      Implementation<new_impl>::register_commit(addr2, region_size, f);
+      Impl::register_commit(addr2, region_size, f);
     }
   }
 
@@ -206,8 +247,8 @@ static void do_test_speed_1() {
     const int com_i = r % num_committed;
     const MEMFLAGS f = ((res_i % 2) == 0) ? mtReserved1 : mtReserved2;
     const address addr = base + (res_i * reserved_size) + (com_i * step_size);
-    Implementation<new_impl>::register_uncommit(addr, region_size, f);
-    Implementation<new_impl>::register_commit(addr, region_size, f);
+    Impl::register_uncommit(addr, region_size, f);
+    Impl::register_commit(addr, region_size, f);
     num_recommits ++;
   }
 
@@ -215,11 +256,13 @@ static void do_test_speed_1() {
 
   {
     double d = os::elapsedTime();
-    Implementation<new_impl>::print_summary();
+    Impl::print_summary();
     double d2 = os::elapsedTime();
     tty->print_cr("Summary took %f seconds.", d2 - d);
   }
 }
 
-TEST_OTHER_VM(NMTVMADict, test_speed_old_1)  {  do_test_speed_1<false>(); }
-TEST_OTHER_VM(NMTVMADict, test_speed_new_1)  {  do_test_speed_1<true>(); }
+TEST_OTHER_VM(NMTVMADict, test_speed_old_locked_1)  {  do_test_speed_1<false, true>(); }
+TEST_OTHER_VM(NMTVMADict, test_speed_new_locked_1)  {  do_test_speed_1<true, true>(); }
+TEST_OTHER_VM(NMTVMADict, test_speed_old_nolock_1)  {  do_test_speed_1<false, false>(); }
+TEST_OTHER_VM(NMTVMADict, test_speed_new_nolock_1)  {  do_test_speed_1<true, false>(); }
