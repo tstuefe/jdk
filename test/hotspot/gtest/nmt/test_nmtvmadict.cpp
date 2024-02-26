@@ -237,10 +237,9 @@ static void do_test_speed_1() {
   tty->print_cr("Setup: %f seconds", d2 - d1);
 
   // Now: randomly commit and uncommit regions.
-  const double d3 = d2 + 5.0f;
-  uintx num_recommits = 0;
+  int num_operations = 1000000;
   int r = os::random();
-  while (os::elapsedTime() < d3) {
+  while (num_operations-- > 0) {
     r = os::next_random(r);
     const int res_i = r % num_reserved;
     r = os::next_random(r);
@@ -249,10 +248,10 @@ static void do_test_speed_1() {
     const address addr = base + (res_i * reserved_size) + (com_i * step_size);
     Impl::register_uncommit(addr, region_size, f);
     Impl::register_commit(addr, region_size, f);
-    num_recommits ++;
   }
 
-  tty->print_cr("Result: " UINTX_FORMAT, num_recommits);
+  double d3 = os::elapsedTime();
+  tty->print_cr("Test: %f seconds", d3 - d2);
 
   {
     double d = os::elapsedTime();
