@@ -29,12 +29,17 @@
 #include "memory/allStatic.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-enum class VMAState : uint8_t { none = 0, reserved = 1, committed = 2 };
+enum class VMAState : uint8_t { reserved = 1, committed = 2 };
 
-class VMADictionary : public AllStatic {
+class outputStream;
 
-  static void register_mapping_change(address from, address to, MEMFLAGS f, VMAState state);
+struct VMADictionary : public AllStatic {
 
+  static void register_create_mapping(address from, address to, MEMFLAGS f, VMAState state);
+  static void register_release_mapping(address from, address to);
+  static void print_all_mappings(outputStream* st);
+  static void print_tree_raw(outputStream* st);
+  DEBUG_ONLY(static void verify();)
 
 };
 

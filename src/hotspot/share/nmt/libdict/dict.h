@@ -206,6 +206,6 @@ unsigned dict_str_hash(const void* str);
 
 END_DECL
 
-#include "nmt/libdict/rb_tree.h"
+//#include "nmt/libdict/rb_tree.h"
 
 #endif /* !LIBDICT_DICT_H__ */

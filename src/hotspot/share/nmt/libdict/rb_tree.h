@@ -67,7 +67,9 @@ size_t		rb_tree_max_path_length(const rb_tree* tree);
 size_t		rb_tree_total_path_length(const rb_tree* tree);
 bool		rb_tree_verify(const rb_tree* tree);
 
-typedef struct rb_itor rb_itor;
+struct rb_itor {
+    TREE_ITERATOR_FIELDS(rb_tree, rb_node);
+};
 
 rb_itor*	rb_itor_new(rb_tree* tree);
 dict_itor*	rb_dict_itor_new(rb_tree* tree);
@@ -81,11 +83,14 @@ bool		rb_itor_nextn(rb_itor* itor, size_t count);
 bool		rb_itor_prevn(rb_itor* itor, size_t count);
 bool		rb_itor_first(rb_itor* itor);
 bool		rb_itor_last(rb_itor* itor);
+
+// The "search" operations start at root
 bool		rb_itor_search(rb_itor* itor, const void* key);
 bool		rb_itor_search_le(rb_itor* itor, const void* key);
 bool		rb_itor_search_lt(rb_itor* itor, const void* key);
 bool		rb_itor_search_ge(rb_itor* itor, const void* key);
 bool		rb_itor_search_gt(rb_itor* itor, const void* key);
+
 const void*	rb_itor_key(const rb_itor* itor);
 void**		rb_itor_datum(rb_itor* itor);
 int             rb_itor_compare(const rb_itor* i1, const rb_itor* i2);
