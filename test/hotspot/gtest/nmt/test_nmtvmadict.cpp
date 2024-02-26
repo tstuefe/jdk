@@ -123,7 +123,46 @@ TEST_VM(NMTVMADict, random) {
 
 }
 
-static void do_test_speed(const bool new_impl) {
+template <bool new_impl>
+struct Implementation {
+
+  static void register_reservation(address addr, size_t size, MEMFLAGS f) {
+    if (new_impl) {
+      VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+    } else {
+      MemTracker::record_virtual_memory_reserve(addr, size, CALLER_PC, f);
+    }
+  }
+
+  static void register_commit(address addr, size_t size, MEMFLAGS f) {
+    if (new_impl) {
+      VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::committed);
+    } else {
+      MemTracker::record_virtual_memory_commit(addr, size, CALLER_PC);
+    }
+  }
+
+  static void register_uncommit(address addr, size_t size, MEMFLAGS f) {
+    if (new_impl) {
+      VMADictionary::register_create_mapping(addr, addr + size, f, VMAState::reserved);
+    } else {
+      Tracker(Tracker::uncommit).record(addr, size); // uncommit
+    }
+  }
+
+  static void print_summary() {
+    if (new_impl) {
+      tty->print_cr("report new");
+      VMADictionary::report_summary(tty);
+    } else {
+      tty->print_cr("report old");
+      MemTracker::final_report(tty);
+    }
+  }
+};
+
+template <bool new_impl>
+static void do_test_speed_1() {
   // prepare:
   // We create X reserved regions with Y committed regions in them.
   constexpr int num_reserved = 100;
@@ -143,21 +182,13 @@ static void do_test_speed(const bool new_impl) {
   // Now, establish regions
   for (int i = 0; i < num_reserved; i++) {
     const address addr = base + (i * reserved_size);
-    const MEMFLAGS f = ((i % 2) == 0) ? mtNMT : mtInternal;
-    if (new_impl) {
-      VMADictionary::register_create_mapping(addr, addr + reserved_size, f, VMAState::reserved);
-    } else {
-      MemTracker::record_virtual_memory_reserve(addr, reserved_size, CALLER_PC, f);
-    }
+    const MEMFLAGS f = ((i % 2) == 0) ? mtReserved1 : mtReserved2;
+    Implementation<new_impl>::register_reservation(addr, reserved_size, f);
 
     // Establish committed regions
     for (int i2 = 0; i2 < num_committed; i2++) {
       const address addr2 = addr + (i2 * step_size);
-      if (new_impl) {
-        VMADictionary::register_create_mapping(addr2, addr2 + region_size, f, VMAState::committed);
-      } else {
-        MemTracker::record_virtual_memory_commit(addr2, region_size, CALLER_PC);
-      }
+      Implementation<new_impl>::register_commit(addr2, region_size, f);
     }
   }
 
@@ -173,15 +204,10 @@ static void do_test_speed(const bool new_impl) {
     const int res_i = r % num_reserved;
     r = os::next_random(r);
     const int com_i = r % num_committed;
-    const MEMFLAGS f = ((res_i % 2) == 0) ? mtNMT : mtInternal;
+    const MEMFLAGS f = ((res_i % 2) == 0) ? mtReserved1 : mtReserved2;
     const address addr = base + (res_i * reserved_size) + (com_i * step_size);
-    if (new_impl) {
-      VMADictionary::register_create_mapping(addr, addr + region_size, f, VMAState::reserved); // uncommit
-      VMADictionary::register_create_mapping(addr, addr + region_size, f, VMAState::committed); // re-commit
-    } else {
-      Tracker(Tracker::uncommit).record(addr, region_size); // uncommit
-      MemTracker::record_virtual_memory_commit(addr, region_size, CALLER_PC); // re-commit
-    }
+    Implementation<new_impl>::register_uncommit(addr, region_size, f);
+    Implementation<new_impl>::register_commit(addr, region_size, f);
     num_recommits ++;
   }
 
@@ -189,14 +215,11 @@ static void do_test_speed(const bool new_impl) {
 
   {
     double d = os::elapsedTime();
-    if (new_impl) {
-      VMADictionary::report_summary(tty);
-      double d2 = os::elapsedTime();
-      tty->print_cr("Summary took %f seconds.", d2 - d);
-    }
+    Implementation<new_impl>::print_summary();
+    double d2 = os::elapsedTime();
+    tty->print_cr("Summary took %f seconds.", d2 - d);
   }
 }
 
-TEST_OTHER_VM(NMTVMADict, test_speed_old_1)  {  do_test_speed(false); }
-TEST_OTHER_VM(NMTVMADict, test_speed_new_1)  {  do_test_speed(true); }
-
+TEST_OTHER_VM(NMTVMADict, test_speed_old_1)  {  do_test_speed_1<false>(); }
+TEST_OTHER_VM(NMTVMADict, test_speed_new_1)  {  do_test_speed_1<true>(); }
