@@ -259,6 +259,10 @@ class NMTPreInit : public AllStatic {
 
 public:
 
+  // *** Attention ***
+  // This coding, and the reasoning behind it, is a lot more intricate
+  // than it appears. Please only modify it if you know what you do.
+
   // Switches from NMT pre-init state to NMT post-init state;
   //  in post-init, no modifications to the lookup table are possible.
   static void pre_to_post(bool nmt_off);
@@ -288,45 +292,39 @@ public:
       return handle_malloc(rc, new_size);
     }
     new_size = MAX2((size_t)1, new_size); // realloc(.., 0)
-    switch (MemTracker::tracking_level()) {
-      case NMT_unknown: {
-        // pre-NMT-init:
-        // - the address must already be in the lookup table
-        // - find the old entry, remove from table, reallocate, add to table
-        NMTPreInitAllocation* a = find_and_remove_in_map(old_p);
-        a = NMTPreInitAllocation::do_reallocate(a, new_size);
-        add_to_map(a);
-        (*rc) = a->payload;
-        _num_reallocs_pre++;
+    if (!MemTracker::is_initialized()) {
+      // pre-NMT-init:
+      // - the address must already be in the lookup table
+      // - find the old entry, remove from table, reallocate, re-add to table
+      NMTPreInitAllocation* a = find_and_remove_in_map(old_p);
+      a = NMTPreInitAllocation::do_reallocate(a, new_size);
+      add_to_map(a);
+      (*rc) = a->payload;
+      _num_reallocs_pre++;
+      return true;
+    } else {
+      // post-NMT-init:
+      // If the original allocation had been done in pre-init, transfer the preinit
+      // allocation over to os::malloc-allocated memory manually. We do this regardless
+      // of whether NMT is enabled, so whether post-init uses malloc headers, since the
+      // storage for pre-init allocations may have come from another pool than post-init
+      // allocations (used in os::malloc). One such example is Windows, where we may
+      // want to use a separate heap for the JVM.
+      //
+      // We do this by:
+      // - look up (but **don't remove!** lu table is read-only here.) the old entry
+      // - allocate new memory via os::malloc()
+      // - manually copy the old content over
+      // - return the new memory
+      // - The lu table is readonly, so we keep the old address in the table. And we leave
+      //   the old block allocated too, to prevent the libc from returning the same address
+      //   and confusing us.
+      const NMTPreInitAllocation* a = find_in_map(old_p);
+      if (a != nullptr) { // this was originally a pre-init allocation
+        void* p_new = do_os_malloc(new_size, memflags);
+        ::memcpy(p_new, a->payload, MIN2(a->size, new_size));
+        (*rc) = p_new;
         return true;
-      }
-      break;
-      case NMT_off: {
-        // post-NMT-init, NMT *disabled*:
-        // Neither pre- nor post-init-allocation use malloc headers, therefore we can just
-        // relegate the realloc to os::realloc.
-        return false;
-      }
-      break;
-      default: {
-        // post-NMT-init, NMT *enabled*:
-        // Pre-init allocation does not use malloc header, but from here on we need malloc headers.
-        // Therefore, the new block must be allocated with os::malloc.
-        // We do this by:
-        // - look up (but don't remove! lu table is read-only here.) the old entry
-        // - allocate new memory via os::malloc()
-        // - manually copy the old content over
-        // - return the new memory
-        // - The lu table is readonly, so we keep the old address in the table. And we leave
-        //   the old block allocated too, to prevent the libc from returning the same address
-        //   and confusing us.
-        const NMTPreInitAllocation* a = find_in_map(old_p);
-        if (a != nullptr) { // this was originally a pre-init allocation
-          void* p_new = do_os_malloc(new_size, memflags);
-          ::memcpy(p_new, a->payload, MIN2(a->size, new_size));
-          (*rc) = p_new;
-          return true;
-        }
       }
     }
     return false;
@@ -338,35 +336,24 @@ public:
     if (p == nullptr) { // free(null)
       return true;
     }
-    switch (MemTracker::tracking_level()) {
-      case NMT_unknown: {
-        // pre-NMT-init:
-        // - the allocation must be in the hash map, since all allocations went through
-        //   NMTPreInit::handle_malloc()
-        // - find the old entry, unhang from map, free it
-        NMTPreInitAllocation* a = find_and_remove_in_map(p);
-        NMTPreInitAllocation::do_free(a);
-        _num_frees_pre++;
+    if (!MemTracker::is_initialized()) {
+      // pre-NMT-init:
+      // - the allocation must be in the hash map, since all allocations went through
+      //   NMTPreInit::handle_malloc()
+      // - find the old entry, unhang from map, free it
+      NMTPreInitAllocation* a = find_and_remove_in_map(p);
+      NMTPreInitAllocation::do_free(a);
+      _num_frees_pre++;
+      return true;
+    } else {
+      // post-NMT-init (whether or not NMT is enabled, see remarks in handle_realloc):
+      // - look up (but don't remove! lu table is read-only here.) the entry
+      // - if found, we do nothing: the lu table is readonly, so we keep the old address
+      //   in the table. We leave the block allocated to prevent the libc from returning
+      //   the same address and confusing us.
+      // - if not found, we let regular os::free() handle this pointer
+      if (find_in_map(p) != nullptr) {
         return true;
-      }
-      break;
-      case NMT_off: {
-        // post-NMT-init, NMT *disabled*:
-        // Neither pre- nor post-init-allocation use malloc headers, therefore we can just
-        // relegate the realloc to os::realloc.
-        return false;
-      }
-      break;
-      default: {
-        // post-NMT-init, NMT *enabled*:
-        // - look up (but don't remove! lu table is read-only here.) the entry
-        // - if found, we do nothing: the lu table is readonly, so we keep the old address
-        //   in the table. We leave the block allocated to prevent the libc from returning
-        //   the same address and confusing us.
-        // - if not found, we let regular os::free() handle this pointer
-        if (find_in_map(p) != nullptr) {
-          return true;
-        }
       }
     }
     return false;

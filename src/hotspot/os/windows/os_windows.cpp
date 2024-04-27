@@ -6114,3 +6114,17 @@ void os::print_user_info(outputStream* st) {
 void os::print_active_locale(outputStream* st) {
   // not implemented yet
 }
+
+HANDLE os::win32::_native_heap = INVALID_HANDLE_VALUE;
+
+static void os::win32::initialize_native_heap() {
+  assert(_native_heap == INVALID_HANDLE_VALUE, "Only initialize once");
+  _native_heap = HeapCreate (0, 0, 0);
+  if (_native_heap == nullptr) {
+    log_warning(os)("CreateHeap failed");
+  }
+}
+
+void* malloc_native_heap(size_t size);
+void* realloc_native_heap(void* p, size_t size);
+void* free_native_heap(void* p);

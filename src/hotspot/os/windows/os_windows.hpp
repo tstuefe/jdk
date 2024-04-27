@@ -73,6 +73,9 @@ class os::win32 {
 
   static void initialize_performance_counter();
 
+  static HANDLE _native_heap;
+  static void initialize_native_heap();
+
  public:
   // Generic interface:
 
@@ -123,6 +126,12 @@ public:
   // signal support
   static void* install_signal_handler(int sig, signal_handler_t handler);
   static void* user_handler();
+
+  // For UseSeparateNativeHeap
+  static void* malloc_native_heap(size_t size);
+  static void* realloc_native_heap(void* p, size_t size);
+  static void* free_native_heap(void* p);
+
 };
 
 #endif // OS_WINDOWS_OS_WINDOWS_HPP
