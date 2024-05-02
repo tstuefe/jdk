@@ -595,6 +595,16 @@ static void report_vm_version(outputStream* st, char* buf, int buflen) {
                );
 }
 
+static void print_current_directory(outputStream* st, char* buffer, size_t buflen) {
+  st->print("Current working directory: ");
+  if (os::get_current_directory(buffer, buflen) == buffer) {
+    st->print_raw(buffer);
+  } else {
+    st->print("failed to get current working directory");
+  }
+  st->cr();
+}
+
 // Returns true if at least one thread reported a fatal error and fatal error handling is in process.
 bool VMError::is_error_reported() {
   return _first_error_tid != -1;
@@ -1304,6 +1314,10 @@ void VMError::report(outputStream* st, bool _verbose) {
     os::print_environment_variables(st, env_list);
     st->cr();
 
+  STEP_IF("printing cwd", _verbose)
+    print_current_directory(st, buf, sizeof(buf));
+    st->cr();
+
   STEP_IF("printing locale settings", _verbose)
     os::print_active_locale(st);
     st->cr();
@@ -1473,6 +1487,11 @@ void VMError::print_vm_info(outputStream* st) {
   // STEP("printing all environment variables")
 
   os::print_environment_variables(st, env_list);
+  st->cr();
+
+
+  // STEP("printing cwd")
+  print_current_directory(st, buf, sizeof(buf));
   st->cr();
 
   // STEP("printing locale settings")
