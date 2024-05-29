@@ -31,6 +31,9 @@
 #include "unittest.hpp"
 #include "testutils.hpp"
 
+#include "runtime/atomic.hpp"
+#include "concurrentTestRunner.inline.hpp"
+
 #define ASSERT_CONTAINS(ar, p) ASSERT_TRUE(ar.contains(p))
 
 // Note:
@@ -382,3 +385,24 @@ TEST_VM(Arena, different_chunk_sizes) {
     Arena ar7(mtTest, Arena::Tag::tag_other, random_arena_chunk_size());
   }
 }
+
+struct X : public TestRunnable {
+  static volatile unsigned result;
+  void runUnitTest() const override {
+    ResourceMark rm;
+    for (int i = 0; i < 1024; i ++) {
+      NEW_RESOURCE_ARRAY(char, 256);
+    }
+    Atomic::inc(&result);
+  }
+};
+ volatile unsigned X::result = 0;
+
+TEST_VM(Arena, speed) {
+  X x;
+  ConcurrentTestRunner runner(&x, 100, 5000);
+  runner.run();
+  tty->print_cr("%u", x.result);
+}
+
+
