@@ -23,6 +23,8 @@
  *
  */
 
+// hallo
+
 // no precompiled headers
 
 #include "memory/allocation.inline.hpp"
@@ -52,3 +54,4 @@ void OSThread::pd_initialize() {
 void OSThread::pd_destroy() {
   delete _startThread_lock;
 }
+//hallo 
