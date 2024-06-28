@@ -204,7 +204,7 @@ protected:
   void* operator new(size_t size, ClassLoaderData* loader_data, size_t word_size, TRAPS) throw();
 
  public:
-  int kind() { return _kind; }
+  int kind() const { return _kind; }
 
   enum class DefaultsLookupMode { find, skip };
   enum class OverpassLookupMode { find, skip };
