@@ -3477,6 +3477,11 @@ void InstanceKlass::print_on(outputStream* st) const {
 
   st->print(BULLET"instance size:     %d", size_helper());                        st->cr();
   st->print(BULLET"klass size:        %d", size());                               st->cr();
+  st->print(BULLET"klass header size: %d", header_size());                        st->cr();
+  st->print(BULLET"vtable size:       %d", itable_length());                      st->cr();
+  st->print(BULLET"itable size:       %d", vtable_length());                      st->cr();
+  st->print(BULLET"nonstatic_oopmap size: %d", nonstatic_oop_map_size());         st->cr();
+
   st->print(BULLET"access:            "); access_flags().print_on(st);            st->cr();
   st->print(BULLET"flags:             "); _misc_flags.print_on(st);               st->cr();
   st->print(BULLET"state:             "); st->print_cr("%s", init_state_name());
@@ -3600,7 +3605,7 @@ void InstanceKlass::print_on(outputStream* st) const {
   InstanceKlass* ik = const_cast<InstanceKlass*>(this);
   ik->print_nonstatic_fields(&print_nonstatic_field);
 
-  st->print(BULLET"non-static oop maps: ");
+  st->print(BULLET"%u non-static oop maps: ", nonstatic_oop_map_count());
   OopMapBlock* map     = start_of_nonstatic_oop_maps();
   OopMapBlock* end_map = map + nonstatic_oop_map_count();
   while (map < end_map) {
