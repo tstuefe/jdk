@@ -404,13 +404,12 @@ size_t oopDesc::oop_iterate_size(OopClosureType* cl, MemRegion mr) {
 
 template <typename OopClosureType>
 void oopDesc::oop_iterate_backwards(OopClosureType* cl) {
-  print_my_info<OopClosureType>("oop_iterate_bw", this);
   oop_iterate_backwards(cl, klass());
 }
 
 template <typename OopClosureType>
 void oopDesc::oop_iterate_backwards(OopClosureType* cl, Klass* k) {
-  print_my_info<OopClosureType>("oop_iterate_bw_given_klass", this);
+  print_my_info<OopClosureType>("oop_iterate_bw", this);
   assert(k == klass(), "wrong klass");
   OopIteratorClosureDispatch::oop_oop_iterate_backwards(cl, this, k);
 }
