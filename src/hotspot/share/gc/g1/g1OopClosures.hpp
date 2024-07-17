@@ -179,10 +179,12 @@ class G1CMOopClosure : public ClaimMetadataVisitingOopIterateClosure {
   G1CollectedHeap*   _g1h;
   G1CMTask*          _task;
 public:
+  static constexpr int type = 4;
   G1CMOopClosure(G1CollectedHeap* g1h,G1CMTask* task);
   template <class T> void do_oop_work(T* p);
   virtual void do_oop(      oop* p) { do_oop_work(p); }
   virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+
 };
 
 // Closure to scan the root regions during concurrent marking

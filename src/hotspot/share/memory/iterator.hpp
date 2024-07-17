@@ -54,12 +54,15 @@ class OopClosure : public Closure {
  public:
   virtual void do_oop(oop* o) = 0;
   virtual void do_oop(narrowOop* o) = 0;
+  static constexpr int type = -1;
 };
 
 class DoNothingClosure : public OopClosure {
  public:
   virtual void do_oop(oop* p)       {}
   virtual void do_oop(narrowOop* p) {}
+  static constexpr int type = -2;
+
 };
 extern DoNothingClosure do_nothing_cl;
 
@@ -78,6 +81,10 @@ class OopIterateClosure : public OopClosure {
   void set_ref_discoverer_internal(ReferenceDiscoverer* rd) { _ref_discoverer = rd; }
 
  public:
+
+  static constexpr int type = -3;
+
+
   ReferenceDiscoverer* ref_discoverer() const { return _ref_discoverer; }
 
   // Iteration of InstanceRefKlasses differ depending on the closure,
@@ -185,6 +192,8 @@ class ClaimMetadataVisitingOopIterateClosure : public OopIterateClosure {
   virtual void do_cld(ClassLoaderData* cld);
   virtual void do_method(Method* m);
   virtual void do_nmethod(nmethod* nm);
+
+  static constexpr int type = 0;
 };
 
 // The base class for all concurrent marking closures,
@@ -192,6 +201,7 @@ class ClaimMetadataVisitingOopIterateClosure : public OopIterateClosure {
 // It's used to proxy through the metadata to the oops defined in them.
 class MetadataVisitingOopIterateClosure: public ClaimMetadataVisitingOopIterateClosure {
  public:
+  static constexpr int type = 6;
   MetadataVisitingOopIterateClosure(ReferenceDiscoverer* rd = nullptr);
 };
 

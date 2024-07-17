@@ -63,6 +63,7 @@ class G1MarkAndPushClosure : public ClaimMetadataVisitingOopIterateClosure {
   uint _worker_id;
 
 public:
+  static constexpr int type = 3;
   G1MarkAndPushClosure(uint worker_id, G1FullGCMarker* marker, int claim, ReferenceDiscoverer* ref) :
     ClaimMetadataVisitingOopIterateClosure(claim, ref),
     _marker(marker),

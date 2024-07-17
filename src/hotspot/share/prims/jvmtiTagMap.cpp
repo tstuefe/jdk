@@ -2190,6 +2190,7 @@ class SimpleRootsClosure : public OopClosure {
 
   }
   virtual void do_oop(narrowOop* obj_p) { ShouldNotReachHere(); }
+  static constexpr int type = 21;
 };
 
 // A supporting closure used to process JNI locals

@@ -155,6 +155,7 @@ protected:
   PSPromotionManager* _promotion_manager;
 
 public:
+  static constexpr int type = 12;
   PSKeepAliveClosure(PSPromotionManager* pm) : _promotion_manager(pm) {
     ParallelScavengeHeap* heap = ParallelScavengeHeap::heap();
     _to_space = heap->young_gen()->to_space();

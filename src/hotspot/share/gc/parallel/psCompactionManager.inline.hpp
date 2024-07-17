@@ -45,6 +45,7 @@ class PCMarkAndPushClosure: public OopClosure {
 private:
   ParCompactionManager* _compaction_manager;
 public:
+  static constexpr int type = 10;
   PCMarkAndPushClosure(ParCompactionManager* cm) : _compaction_manager(cm) { }
 
   template <typename T> void do_oop_work(T* p)      { _compaction_manager->mark_and_push(p); }
@@ -56,6 +57,7 @@ class PCIterateMarkAndPushClosure: public ClaimMetadataVisitingOopIterateClosure
 private:
   ParCompactionManager* _compaction_manager;
 public:
+  static constexpr int type = 7;
   PCIterateMarkAndPushClosure(ParCompactionManager* cm, ReferenceProcessor* rp) :
     ClaimMetadataVisitingOopIterateClosure(ClassLoaderData::_claim_stw_fullgc_mark, rp),
     _compaction_manager(cm) { }

@@ -73,6 +73,8 @@ class SerialFullGC : AllStatic {
   };
 
   class KeepAliveClosure: public OopClosure {
+  public:
+    static constexpr int type = 20;
    protected:
     template <class T> void do_oop_work(T* p);
    public:
@@ -158,6 +160,7 @@ class SerialFullGC : AllStatic {
 
 class MarkAndPushClosure: public ClaimMetadataVisitingOopIterateClosure {
 public:
+  static constexpr int type = 5;
   MarkAndPushClosure(int claim) : ClaimMetadataVisitingOopIterateClosure(claim) {}
 
   template <typename T> void do_oop_work(T* p);
