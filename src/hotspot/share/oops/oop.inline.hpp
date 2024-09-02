@@ -348,14 +348,9 @@ static void print_my_info(const char* fun, oopDesc* obj, Klass* k = nullptr) {
     ss.print_cr("klass %s", kname_s);
     ss.print_cr("cld %p", cld);
     ss.print_cr("clname %s", clname_s);
+    ss.print_cr("objsz %zu", obj->size_given_klass(k));
 
     if (k->is_instance_klass()) {
-      const int lh = k->layout_helper();
-      if (Klass::layout_helper_needs_slow_path(lh)) {
-        ss.print_cr("objsz ??");
-      } else {
-        ss.print_cr("objsz %u", Klass::layout_helper_to_size_helper(lh));
-      }
       const InstanceKlass* const ik = InstanceKlass::cast(k);
       const unsigned ombcount = ik->nonstatic_oop_map_count();
       ss.print_cr("oopmapcount %u", ombcount);

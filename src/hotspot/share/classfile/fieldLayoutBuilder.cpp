@@ -639,7 +639,7 @@ void FieldLayoutBuilder::compute_regular_layout() {
   // these fields being merged with those of the super class(es) to one OopMapBlock.
   // Otherwise, we place them at the end, for the same reason - to make it more likely
   // child classes will merge their omb's with our trailing one.
-  if (should_lead_with_oops(_super_klass)) {
+  if (UseNewCode2 && should_lead_with_oops(_super_klass)) {
     _layout->add(_root_group->oop_fields());
     _layout->add(_root_group->primitive_fields());
   } else {
