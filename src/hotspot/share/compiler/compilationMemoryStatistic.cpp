@@ -79,7 +79,7 @@ void ArenaStatCounter::end() {
   _active = false;
 }
 
-void ArenaStatCounter::update_c2_node_count() {
+void ArenaStatCounter::update_c2_info() {
   assert(_active, "compilaton has not yet started");
 #ifdef COMPILER2
   CompilerThread* const th = Thread::current()->as_Compiler_thread();
@@ -90,6 +90,10 @@ void ArenaStatCounter::update_c2_node_count() {
     const Compile* const comp = Compile::current();
     if (comp != nullptr) {
       _live_nodes_at_peak = comp->live_nodes();
+      stringStream ss(_phase_trail_at_peak, sizeof(_phase_trail_at_peak));
+      if (comp->current_phase_info() != nullptr) {
+        comp->current_phase_info()->print_trail_on(&ss);
+      }
     }
   }
 #endif
@@ -113,7 +117,7 @@ bool ArenaStatCounter::account(ssize_t delta, int tag) {
   if (_current > _peak) {
     _peak = _current;
     assert(delta > 0, "Sanity (%zu %zu)", _current, _peak);
-    update_c2_node_count();
+    update_c2_info();
     _peak_by_tag = _current_by_tag;
     rc = true;
     // Did we hit the memory limit?
@@ -197,6 +201,9 @@ class MemStatEntry : public CHeapObj<mtInternal> {
   ArenaCountersByTag _peak_by_tag;
   // number of nodes (c2 only) when total peaked
   unsigned _live_nodes_at_peak;
+  // phase trail at peak
+  char _phase_trail_at_peak[PHASE_TRAIL_MAX_LEN];
+
   const char* _result;
 
 public:
@@ -206,6 +213,7 @@ public:
       _time(0), _num_recomp(0), _thread(nullptr), _limit(0),
       _total(0), _live_nodes_at_peak(0),
       _result(nullptr) {
+    _phase_trail_at_peak[0] = '\0';
     _peak_by_tag.clear();
   }
 
@@ -218,6 +226,9 @@ public:
   void set_total(size_t n) { _total = n; }
   void set_peak_by_tag(ArenaCountersByTag peak_by_tag) { _peak_by_tag = peak_by_tag; }
   void set_live_nodes_at_peak(unsigned n) { _live_nodes_at_peak = n; }
+  void set_phase_trail_at_peak(const char* s) {
+    os::snprintf(_phase_trail_at_peak, sizeof(_phase_trail_at_peak), "%s", s);
+  }
 
   void set_result(const char* s) { _result = s; }
 
@@ -237,6 +248,7 @@ public:
     st->print_cr("  " LEGEND_KEY_FMT ": %s", "type", "compiler type");
     st->print_cr("  " LEGEND_KEY_FMT ": %s", "#rc", "how often recompiled");
     st->print_cr("  " LEGEND_KEY_FMT ": %s", "thread", "compiler thread");
+    st->print_cr("  " LEGEND_KEY_FMT ": %s", "phase", "compile phase info (c2 only)");
 #undef LEGEND_KEY_FMT
   }
 
@@ -247,10 +259,10 @@ public:
       st->print(SIZE_FMT, Arena::tag_name[tag]);
     }
 #define HDR_FMT1 "%-8s%-8s%-8s%-8s"
-#define HDR_FMT2 "%-6s%-4s%-19s%s"
+#define HDR_FMT2 "%-6s%-4s%-19s%-32s%s"
 
     st->print(HDR_FMT1, "result", "#nodes", "limit", "time");
-    st->print(HDR_FMT2, "type", "#rc", "thread", "method");
+    st->print(HDR_FMT2, "type", "#rc", "thread", "phase", "method");
     st->print_cr("");
   }
 
@@ -308,11 +320,18 @@ public:
 
     // Thread
     st->print(PTR_FORMAT " ", p2i(_thread));
+    col += 19;
+
+    // Phase trail
+    st->print("%s ", _phase_trail_at_peak);
+    col += 32; st->fill_to(col);
 
     // MethodName
     char buf[1024];
     st->print("%s ", _method.as_C_string(buf, sizeof(buf)));
+
     st->cr();
+
   }
 
   int compare_by_size(const MemStatEntry* b) const {
@@ -353,7 +372,8 @@ public:
 
   void add(const FullMethodName& fmn, CompilerType comptype,
            size_t total, ArenaCountersByTag peak_by_tag,
-           unsigned live_nodes_at_peak, size_t limit, const char* result) {
+           unsigned live_nodes_at_peak, const char* phase_trail_at_peak,
+           size_t limit, const char* result) {
     assert_lock_strong(NMTCompilationCostHistory_lock);
     MemStatTableKey key(fmn, comptype);
     MemStatEntry** pe = get(key);
@@ -373,6 +393,7 @@ public:
     e->set_total(total);
     e->set_peak_by_tag(peak_by_tag);
     e->set_live_nodes_at_peak(live_nodes_at_peak);
+    e->set_phase_trail_at_peak(phase_trail_at_peak);
     e->set_limit(limit);
     e->set_result(result);
   }
@@ -460,6 +481,7 @@ void CompilationMemoryStatistic::on_end_compilation() {
                     arena_stat->peak(), // total
                     arena_stat->peak_by_tag(),
                     arena_stat->live_nodes_at_peak(),
+                    arena_stat->phase_trail_at_peak(),
                     arena_stat->limit(),
                     result);
   }

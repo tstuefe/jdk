@@ -50,8 +50,10 @@ class TraceTime: public StackObj {
   bool          _verbose;   // report every timing
   elapsedTimer  _t;         // timer
   elapsedTimer* _accum;     // accumulator
-  const char*   _title;     // name of timer
   TraceTimerLogPrintFunc _print;
+
+ protected:
+  const char*   _title;     // name of timer
 
  public:
   // Constructors

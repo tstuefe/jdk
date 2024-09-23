@@ -241,9 +241,11 @@ class Compile : public Phase {
     CompileLog* _log;
     const char* _phase_name;
     bool _dolog;
+    const TracePhase* _outer;
    public:
     TracePhase(const char* name, elapsedTimer* accumulator);
     ~TracePhase();
+    void print_trail_on(outputStream* st) const;
   };
 
   // Information per category of alias (memory slice)
@@ -562,6 +564,7 @@ private:
   int                   _interpreter_frame_size;
 
   PhaseOutput*          _output;
+  const TracePhase*     _current_phase_info;
 
  public:
   // Accessors
@@ -1313,6 +1316,9 @@ private:
                             BasicType out_bt, BasicType in_bt);
 
   static Node* narrow_value(BasicType bt, Node* value, const Type* type, PhaseGVN* phase, bool transform_res);
+
+  const TracePhase* current_phase_info() const { return _current_phase_info; }
+  const TracePhase* set_current_phase_info(const TracePhase* tp);
 };
 
 #endif // SHARE_OPTO_COMPILE_HPP

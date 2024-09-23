@@ -679,7 +679,8 @@ Compile::Compile( ciEnv* ci_env, ciMethod* target, int osr_bci,
                   _java_calls(0),
                   _inner_loops(0),
                   _interpreter_frame_size(0),
-                  _output(nullptr)
+                  _output(nullptr),
+                  _current_phase_info(nullptr)
 #ifndef PRODUCT
                   , _in_dump_cnt(0)
 #endif
@@ -948,6 +949,7 @@ Compile::Compile( ciEnv* ci_env,
     _inner_loops(0),
     _interpreter_frame_size(0),
     _output(nullptr),
+    _current_phase_info(nullptr),
 #ifndef PRODUCT
     _in_dump_cnt(0),
 #endif
@@ -4352,7 +4354,8 @@ Compile::TracePhase::TracePhase(const char* name, elapsedTimer* accumulator)
     _compile(Compile::current()),
     _log(nullptr),
     _phase_name(name),
-    _dolog(CITimeVerbose)
+    _dolog(CITimeVerbose),
+    _outer(nullptr)
 {
   assert(_compile != nullptr, "sanity check");
   if (_dolog) {
@@ -4363,9 +4366,13 @@ Compile::TracePhase::TracePhase(const char* name, elapsedTimer* accumulator)
     _log->stamp();
     _log->end_head();
   }
+  _outer = _compile->set_current_phase_info(this);
 }
 
 Compile::TracePhase::~TracePhase() {
+  assert(_compile != nullptr, "sanity check");
+
+  _compile->set_current_phase_info(_outer);
   if (_compile->failing()) return;
 #ifdef ASSERT
   if (PrintIdealNodeCount) {
@@ -4381,6 +4388,15 @@ Compile::TracePhase::~TracePhase() {
   if (_log != nullptr) {
     _log->done("phase name='%s' nodes='%d' live='%d'", _phase_name, _compile->unique(), _compile->live_nodes());
   }
+}
+
+void Compile::TracePhase::print_trail_on(outputStream* st) const {
+  if (_outer != nullptr) {
+    assert(_outer != this, "Sanity");
+    _outer->print_trail_on(st);
+    st->print(",");
+  }
+  st->print_raw(_title != nullptr ? _title : "<null>");
 }
 
 //----------------------------static_subtype_check-----------------------------
@@ -5334,4 +5350,10 @@ Node* Compile::narrow_value(BasicType bt, Node* value, const Type* type, PhaseGV
 
 void Compile::record_method_not_compilable_oom() {
   record_method_not_compilable(CompilationMemoryStatistic::failure_reason_memlimit());
+}
+
+const Compile::TracePhase* Compile::set_current_phase_info(const TracePhase* tp) {
+  const TracePhase* old = _current_phase_info;
+  _current_phase_info = tp;
+  return old;
 }

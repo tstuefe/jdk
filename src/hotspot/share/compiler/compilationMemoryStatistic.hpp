@@ -60,6 +60,8 @@ public:
   }
 };
 
+#define PHASE_TRAIL_MAX_LEN 48
+
 // Counters for allocations from arenas during compilation
 class ArenaStatCounter : public CHeapObj<mtCompiler> {
   // Current bytes, total
@@ -81,7 +83,10 @@ class ArenaStatCounter : public CHeapObj<mtCompiler> {
   // Number of live nodes when total peaked (c2 only)
   unsigned _live_nodes_at_peak;
 
-  void update_c2_node_count();
+  // Phase trail at peak (c2 only)
+  char _phase_trail_at_peak[PHASE_TRAIL_MAX_LEN];
+
+  void update_c2_info();
 
   void reset();
 
@@ -94,6 +99,7 @@ public:
   // Peak details
   ArenaCountersByTag peak_by_tag() const { return _peak_by_tag; }
   unsigned live_nodes_at_peak() const { return _live_nodes_at_peak; }
+  const char* phase_trail_at_peak() const { return _phase_trail_at_peak; }
 
   // Mark the start and end of a compilation.
   void start(size_t limit);
@@ -102,8 +108,6 @@ public:
   // Account an arena allocation or de-allocation.
   // Returns true if new peak reached
   bool account(ssize_t delta, int tag);
-
-  void set_live_nodes_at_peak(unsigned i) { _live_nodes_at_peak = i; }
 
   void print_on(outputStream* st) const;
 
