@@ -114,6 +114,10 @@ public:
     return _stack[index];
   }
 
+  inline void copy_from(const NativeCallStack& other) {
+    memcpy(_stack, other._stack, sizeof(_stack));
+  }
+
   // Helper; calculates a hash value over the stack frames in this stack
   unsigned int calculate_hash() const {
     DEBUG_ONLY(assert_not_fake();)

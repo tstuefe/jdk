@@ -120,6 +120,11 @@ bool ArenaStatCounter::account(ssize_t delta, int tag) {
     if (!_hit_limit && _limit > 0 && _peak > _limit) {
       _hit_limit = true;
     }
+    if (UseNewCode) {
+      // Account stack at peak
+      NativeCallStack stack_here(3);
+      _stack_at_peak.copy_from(stack_here);
+    }
   }
   return rc;
 }
@@ -197,6 +202,7 @@ class MemStatEntry : public CHeapObj<mtInternal> {
   ArenaCountersByTag _peak_by_tag;
   // number of nodes (c2 only) when total peaked
   unsigned _live_nodes_at_peak;
+  NativeCallStack _stack_at_peak;
   const char* _result;
 
 public:
@@ -218,6 +224,7 @@ public:
   void set_total(size_t n) { _total = n; }
   void set_peak_by_tag(ArenaCountersByTag peak_by_tag) { _peak_by_tag = peak_by_tag; }
   void set_live_nodes_at_peak(unsigned n) { _live_nodes_at_peak = n; }
+  void set_stack_at_peak(const NativeCallStack& other) { _stack_at_peak.copy_from(other); }
 
   void set_result(const char* s) { _result = s; }
 
@@ -313,6 +320,15 @@ public:
     char buf[1024];
     st->print("%s ", _method.as_C_string(buf, sizeof(buf)));
     st->cr();
+
+    if (UseNewCode) {
+      streamIndentor si(st, 6);
+      if (_stack_at_peak.is_empty()) {
+        st->print_cr("(no stack)");
+      } else {
+        _stack_at_peak.print_on(st);
+      }
+    }
   }
 
   int compare_by_size(const MemStatEntry* b) const {
@@ -353,7 +369,8 @@ public:
 
   void add(const FullMethodName& fmn, CompilerType comptype,
            size_t total, ArenaCountersByTag peak_by_tag,
-           unsigned live_nodes_at_peak, size_t limit, const char* result) {
+           unsigned live_nodes_at_peak, const NativeCallStack& stack_at_peak,
+           size_t limit, const char* result) {
     assert_lock_strong(NMTCompilationCostHistory_lock);
     MemStatTableKey key(fmn, comptype);
     MemStatEntry** pe = get(key);
@@ -373,6 +390,7 @@ public:
     e->set_total(total);
     e->set_peak_by_tag(peak_by_tag);
     e->set_live_nodes_at_peak(live_nodes_at_peak);
+    e->set_stack_at_peak(stack_at_peak);
     e->set_limit(limit);
     e->set_result(result);
   }
@@ -460,6 +478,7 @@ void CompilationMemoryStatistic::on_end_compilation() {
                     arena_stat->peak(), // total
                     arena_stat->peak_by_tag(),
                     arena_stat->live_nodes_at_peak(),
+                    arena_stat->stack_at_peak(),
                     arena_stat->limit(),
                     result);
   }
@@ -580,6 +599,8 @@ static inline ssize_t diff_entries_by_size(const MemStatEntry* e1, const MemStat
 }
 
 void CompilationMemoryStatistic::print_all_by_size(outputStream* st, bool human_readable, size_t min_size) {
+
+  StreamAutoIndentor autoindent(st);
 
   MutexLocker ml(NMTCompilationCostHistory_lock, Mutex::_no_safepoint_check_flag);
 

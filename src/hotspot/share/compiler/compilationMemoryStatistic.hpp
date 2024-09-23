@@ -31,6 +31,7 @@
 #include "memory/allStatic.hpp"
 #include "memory/arena.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/nativeCallStack.hpp"
 
 class outputStream;
 class Symbol;
@@ -81,6 +82,8 @@ class ArenaStatCounter : public CHeapObj<mtCompiler> {
   // Number of live nodes when total peaked (c2 only)
   unsigned _live_nodes_at_peak;
 
+  NativeCallStack _stack_at_peak;
+
   void update_c2_node_count();
 
   void reset();
@@ -94,7 +97,7 @@ public:
   // Peak details
   ArenaCountersByTag peak_by_tag() const { return _peak_by_tag; }
   unsigned live_nodes_at_peak() const { return _live_nodes_at_peak; }
-
+  const NativeCallStack& stack_at_peak() const { return _stack_at_peak; }
   // Mark the start and end of a compilation.
   void start(size_t limit);
   void end();

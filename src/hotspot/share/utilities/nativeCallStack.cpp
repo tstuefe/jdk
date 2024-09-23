@@ -114,6 +114,6 @@ void NativeCallStack::print_on(outputStream* out) const {
   DEBUG_ONLY(assert_not_fake();)
   for (int i = 0; i < NMT_TrackingStackDepth && _stack[i] != nullptr; i++) {
     print_frame(out, _stack[i]);
+    out->cr();
   }
-  out->cr();
 }
