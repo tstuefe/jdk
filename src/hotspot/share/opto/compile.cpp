@@ -4321,7 +4321,8 @@ Compile::TracePhase::TracePhase(const char* name, PhaseTraceId id)
   : TraceTime(name, &Phase::timers[id], CITime, CITimeVerbose),
     _compile(Compile::current()),
     _log(nullptr),
-    _dolog(CITimeVerbose)
+    _dolog(CITimeVerbose),
+    _id(id)
 {
   assert(_compile != nullptr, "sanity check");
   if (_dolog) {
@@ -4334,7 +4335,7 @@ Compile::TracePhase::TracePhase(const char* name, PhaseTraceId id)
   }
 
   // Inform memory statistic, if enabled
-  CompilationMemoryStatistic::on_c2_phase_start(_phase_name);
+  CompilationMemoryStatistic::on_c2_phase_start(_id);
 }
 
 Compile::TracePhase::TracePhase(PhaseTraceId id)
@@ -4343,7 +4344,7 @@ Compile::TracePhase::TracePhase(PhaseTraceId id)
 Compile::TracePhase::~TracePhase() {
 
   // Inform memory statistic, if enabled
-  CompilationMemoryStatistic::on_c2_phase_end(_phase_name);
+  CompilationMemoryStatistic::on_c2_phase_end();
 
   if (_compile->failing_internal()) {
     if (_log != nullptr) {

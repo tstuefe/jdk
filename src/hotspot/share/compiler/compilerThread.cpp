@@ -41,7 +41,7 @@ CompilerThread::CompilerThread(CompileQueue* queue,
   _buffer_blob = nullptr;
   _can_call_java = false;
   _compiler = nullptr;
-  _arena_stat = CompilationMemoryStatistic::enabled() ? new ArenaStatCounter : nullptr;
+  _arena_stat = CompilationMemoryStatistic::enabled() ? new ArenaState : nullptr;
 
 #ifndef PRODUCT
   _ideal_graph_printer = nullptr;
