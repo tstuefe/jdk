@@ -387,6 +387,7 @@ inline T byte_size_in_proper_unit(T s) {
 }
 
 #define PROPERFMT             SIZE_FORMAT "%s"
+#define PROPERFMT_W(width)    SIZE_FORMAT_W(width) "%s"
 #define PROPERFMTARGS(s)      byte_size_in_proper_unit(s), proper_unit_for_byte_size(s)
 
 // Printing a range, with start and bytes given
