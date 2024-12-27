@@ -396,7 +396,7 @@ struct DetailStats {
 };
 
 class DetailStatsBackingStore {
-  static constexpr int max = 32;
+  static constexpr int max = 4;
   DetailStats _table[max];
   size_t _sizes[max];
   DetailStats** _referees[max];
@@ -475,7 +475,8 @@ public:
 
   ~MemStatEntry() {
     if (_detail_stats != nullptr) {
-      FREE_C_HEAP_ARRAY(DetailStats, _detail_stats);
+      // TODO!
+ //      FREE_C_HEAP_ARRAY(DetailStats, _detail_stats);
     }
   }
 
@@ -494,7 +495,7 @@ public:
     _live_nodes_at_global_peak = state->live_nodes_at_global_peak();
     state->counters_at_global_peak().summarize(_peak_composition_per_arena_tag);
 #ifdef COMPILER2
-    if (_comp_type == CompilerType::compiler_c2 && state->collect_details()) {
+    if (_comp_type == CompilerType::compiler_c2 /* && state->collect_details() */) {
       if (detail_store.try_alloc_slot(_peak, &_detail_stats)) {
         _detail_stats->counters_at_global_peak.copy_from(state->counters_at_global_peak());
         _detail_stats->timeline.copy_from(state->timeline());
@@ -660,7 +661,7 @@ public:
 
 class MemStatTable :
     public ResourceHashtable<MemStatTableKey, MemStatEntry*, 7919, AnyObj::C_HEAP,
-                             mtInternal, MemStatTableKey::compute_hash>
+                             mtCompiler, MemStatTableKey::compute_hash>
 {
   DetailStatsBackingStore _detail_backing_store;
 
@@ -676,9 +677,6 @@ public:
       put(key, e);
     } else {
       // Update existing entry
-      if (UseNewCode) {
-        tty->print_cr("Update after recompilation");
-      }
       e = *pe;
       assert(e != nullptr, "Sanity");
     }
@@ -697,7 +695,7 @@ public:
     assert_lock_strong(NMTCompilationCostHistory_lock);
 
     const int num_all = number_of_entries();
-    MemStatEntry** flat = NEW_C_HEAP_ARRAY(MemStatEntry*, num_all, mtInternal);
+    MemStatEntry** flat = NEW_C_HEAP_ARRAY(MemStatEntry*, num_all, mtCompiler);
     int i = 0;
     auto do_f = [&] (const MemStatTableKey& ignored, MemStatEntry* e) {
       if (e->peak() >= min_size) {
