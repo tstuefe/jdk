@@ -495,6 +495,7 @@ void Compilation::compile_method() {
 
   if (log() != nullptr) // Print code cache state into compiler log
     log()->code_cache_state();
+
 }
 
 
