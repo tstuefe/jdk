@@ -591,6 +591,41 @@ void FieldLayoutBuilder::insert_contended_padding(LayoutRawBlock* slot) {
   }
 }
 
+// Helper function for compute_regular_layout()
+// Return true if oop fields of currently assembled IK should be placed at start,
+// false if at end.
+static bool should_lead_with_oops(const InstanceKlass* super) {
+
+  if (super == nullptr) {
+    return false;
+  }
+
+  fieldDescriptor fd;
+  int offset = -1;
+
+  // Find last nonstatic field
+  for (AllFieldStream fs(super); !fs.done(); fs.next()) {
+    if (!fs.access_flags().is_static()) {
+      if (offset < fs.offset()) {
+        offset = fs.offset();
+        fd = fs.field_descriptor();
+      }
+    }
+  }
+
+  // If super class objects end with an oop, sub class objects should lead with oops to merge
+  // their OMB with that of the super class. If super class ends with a non-oop, or if super
+  // class has no non-static fields, let sub class trail with oops, in order to give
+  // sub-sub-class-objects a chance of merging their OMB with that of the sub class.
+  if (offset > 0) {
+    const BasicType type = fd.field_type();
+    return type == T_OBJECT || type == T_NARROWOOP;
+  }
+
+  assert(offset < 0, "offset 0?"); // offset includes header?
+  return false;
+}
+
 // Computation of regular classes layout is an evolution of the previous default layout
 // (FieldAllocationStyle 1):
 //   - primitive fields are allocated first (from the biggest to the smallest)
@@ -608,8 +643,14 @@ void FieldLayoutBuilder::compute_regular_layout() {
     insert_contended_padding(_layout->start());
     need_tail_padding = true;
   }
-  _layout->add(_root_group->primitive_fields());
-  _layout->add(_root_group->oop_fields());
+
+  if (should_lead_with_oops(_super_klass)) {
+    _layout->add(_root_group->oop_fields());
+    _layout->add(_root_group->primitive_fields());
+  } else {
+    _layout->add(_root_group->primitive_fields());
+    _layout->add(_root_group->oop_fields());
+  }
 
   if (!_contended_groups.is_empty()) {
     for (int i = 0; i < _contended_groups.length(); i++) {
