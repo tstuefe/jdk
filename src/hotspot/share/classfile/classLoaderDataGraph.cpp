@@ -563,6 +563,7 @@ extern "C" int print_loader_data_graph() {
   ClassLoaderDataGraph::print_on(tty);
   return 0;
 }
+#endif // PRODUCT
 
 void ClassLoaderDataGraph::print_on(outputStream * const out) {
   ClassLoaderDataGraphIterator iter;
@@ -570,6 +571,5 @@ void ClassLoaderDataGraph::print_on(outputStream * const out) {
     cld->print_on(out);
   }
 }
-#endif // PRODUCT
 
 void ClassLoaderDataGraph::print() { print_on(tty); }

@@ -37,6 +37,7 @@
 #include "oops/arrayKlass.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
+#include "oops/klassInfoLUT.hpp"
 #include "oops/objArrayKlass.inline.hpp"
 #include "oops/objArrayOop.inline.hpp"
 #include "oops/oop.inline.hpp"
@@ -51,7 +52,16 @@ ObjArrayKlass* ObjArrayKlass::allocate(ClassLoaderData* loader_data, int n, Klas
 
   int size = ArrayKlass::static_size(ObjArrayKlass::header_size());
 
-  return new (loader_data, size, THREAD) ObjArrayKlass(n, k, name);
+  ObjArrayKlass* oak = new (loader_data, size, THREAD) ObjArrayKlass(n, k, name);
+
+  {
+    char tmp[1024];
+    log_debug(metaspace)("Returning new OAK @" PTR_FORMAT " for %s, nKlass=%u, word size=%d",
+                          p2i(oak),
+                          oak->name()->as_C_string(tmp, sizeof(tmp)),
+                          CompressedKlassPointers::encode(oak), size);
+  }
+  return oak;
 }
 
 ObjArrayKlass* ObjArrayKlass::allocate_objArray_klass(ClassLoaderData* loader_data,
@@ -143,6 +153,11 @@ ObjArrayKlass::ObjArrayKlass(int n, Klass* element_klass, Symbol* name) : ArrayK
 
   // Compute modifier flags after bottom_klass and element_klass are initialized.
   set_modifier_flags(compute_modifier_flags());
+
+  // Add to KLUT
+  if (UseKLUT) {
+    KlassInfoLUT::register_klass(this);
+  }
 }
 
 size_t ObjArrayKlass::oop_size(oop obj) const {

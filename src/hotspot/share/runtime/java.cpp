@@ -54,6 +54,7 @@
 #include "oops/generateOopMap.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/instanceOop.hpp"
+#include "oops/klassInfoLUT.hpp"
 #include "oops/klassVtable.hpp"
 #include "oops/method.hpp"
 #include "oops/objArrayOop.hpp"
@@ -358,6 +359,12 @@ void print_statistics() {
   }
 
   ThreadsSMRSupport::log_statistics();
+
+  #ifdef ASSERT
+    if (UseKLUT) {
+      KlassInfoLUT::print_statistics(tty);
+    }
+  #endif
 
   if (log_is_enabled(Info, perf, class, link)) {
     LogStreamHandle(Info, perf, class, link) log;
