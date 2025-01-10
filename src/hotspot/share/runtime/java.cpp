@@ -360,11 +360,9 @@ void print_statistics() {
 
   ThreadsSMRSupport::log_statistics();
 
-  #ifdef ASSERT
-    if (UseKLUT) {
-      KlassInfoLUT::print_statistics(tty);
-    }
-  #endif
+  if (UseKLUT && PrintKLUTStatistics) {
+    KlassInfoLUT::print_statistics(tty);
+  }
 
   if (log_is_enabled(Info, perf, class, link)) {
     LogStreamHandle(Info, perf, class, link) log;

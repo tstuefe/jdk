@@ -99,11 +99,7 @@ public:
   static int try_register_perma_cld(ClassLoaderData* cld);
   static inline ClassLoaderData* get_perma_cld(int index);
 
-#ifdef KLUT_ENABLE_EXPENSIVE_STATS
-
   static void print_statistics(outputStream* out);
-
-#endif // KLUT_ENABLE_EXPENSIVE_STATS
 
 };
 

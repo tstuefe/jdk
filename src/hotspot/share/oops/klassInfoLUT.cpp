@@ -134,6 +134,7 @@ HIT_STATS_DO(XX)
 #undef XX
 
 void KlassInfoLUT::print_statistics(outputStream* st) {
+
   assert(UseKLUT, "?");
   st->print_cr("KLUT stats:");
 

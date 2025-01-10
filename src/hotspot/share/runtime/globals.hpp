@@ -1396,6 +1396,9 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, UseKLUT, false, EXPERIMENTAL,                               \
           "Only for coh")                                                   \
                                                                             \
+  product(bool, PrintKLUTStatistics, false,                                 \
+          "Print KLUT statistics at exit")                                  \
+                                                                            \
   develop(bool, RandomizeClassSpaceLocation, true,                          \
           "Randomize location of class space.")                             \
                                                                             \
