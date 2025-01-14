@@ -42,6 +42,7 @@
 #include "oops/klass.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/nativeCallStack.hpp"
 
 using metaspace::ChunkManager;
 using metaspace::MetaBlock;
@@ -104,6 +105,7 @@ MetaWord* ClassLoaderMetaspace::allocate(size_t word_size, Metaspace::MetadataTy
   MutexLocker fcl(lock(), Mutex::_no_safepoint_check_flag);
   MetaBlock result, wastage;
   const bool is_class = have_class_space_arena() && mdType == Metaspace::ClassType;
+
   if (is_class) {
     assert(word_size >= (sizeof(Klass)/BytesPerWord), "weird size for klass: %zu", word_size);
     result = class_space_arena()->allocate(word_size, wastage);
@@ -118,9 +120,16 @@ MetaWord* ClassLoaderMetaspace::allocate(size_t word_size, Metaspace::MetadataTy
     const bool in_class_arena = class_space_arena() != nullptr ? class_space_arena()->contains(result) : false;
     const bool in_nonclass_arena = non_class_space_arena()->contains(result);
     assert((is_class && in_class_arena) || (!is_class && in_class_arena != in_nonclass_arena),
-           "block from neither arena " METABLOCKFORMAT "?", METABLOCKFORMATARGS(result));
+         "block from neither arena " METABLOCKFORMAT "?", METABLOCKFORMATARGS(result));
   }
 #endif
+//
+//  if (UseKlassTable && is_class) {
+//    tty->print_cr("Thread* %p Alloc Klass: %p", Thread::current(), result.base() );
+//    NativeCallStack st(3);
+//    st.print_on(tty);
+//  }
+
   return result.base();
 }
 

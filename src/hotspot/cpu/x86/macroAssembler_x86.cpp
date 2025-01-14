@@ -6238,6 +6238,15 @@ void  MacroAssembler::decode_heap_oop_not_null(Register dst, Register src) {
 
 void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
   assert_different_registers(r, tmp);
+
+  if (UseKlassTable) {
+
+//emit_int8((unsigned char)0xCC);
+
+    movl(r, Address(r, Klass::narrowKlassOffset()));
+    return;
+  }
+
   if (CompressedKlassPointers::base() != nullptr) {
     mov64(tmp, (int64_t)CompressedKlassPointers::base());
     subq(r, tmp);
@@ -6249,6 +6258,12 @@ void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
 
 void MacroAssembler::encode_and_move_klass_not_null(Register dst, Register src) {
   assert_different_registers(src, dst);
+ //emit_int8((unsigned char)0xCC);
+  if (UseKlassTable) {
+    movl(dst, Address(src, Klass::narrowKlassOffset()));
+    return;
+  }
+
   if (CompressedKlassPointers::base() != nullptr) {
     mov64(dst, -(int64_t)CompressedKlassPointers::base());
     addq(dst, src);
@@ -6262,6 +6277,19 @@ void MacroAssembler::encode_and_move_klass_not_null(Register dst, Register src) 
 
 void  MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
   assert_different_registers(r, tmp);
+
+  if (UseKlassTable) {
+
+//emit_int8((unsigned char)0xCC);
+
+    shlq(r, 3);
+    mov64(tmp, (int64_t)theKlassTable.table_start());
+    addq(r, tmp);
+    movq(r, Address(r, 0));
+    return;
+  }
+
+
   // Note: it will change flags
   assert(UseCompressedClassPointers, "should only be used for compressed headers");
   // Cannot assert, unverified entry point counts instructions (see .ad file)
@@ -6280,6 +6308,21 @@ void  MacroAssembler::decode_and_move_klass_not_null(Register dst, Register src)
   assert_different_registers(src, dst);
   // Note: it will change flags
   assert (UseCompressedClassPointers, "should only be used for compressed headers");
+
+  if (UseKlassTable) {
+
+//emit_int8((unsigned char)0xCC);
+
+    shlq(src, 3); // need to revert!
+    mov64(dst, (int64_t)theKlassTable.table_start());
+    addq(dst, src);
+    movq(dst, Address(dst, 0));
+    shrq(src, 3); // restore
+
+    return;
+  }
+
+
   // Cannot assert, unverified entry point counts instructions (see .ad file)
   // vtableStubs also counts instructions in pd_code_size_limit.
   // Also do not verify_oop as this is called by verify_oop.

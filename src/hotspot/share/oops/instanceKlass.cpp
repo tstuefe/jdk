@@ -474,7 +474,7 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
   assert(loader_data != nullptr, "invariant");
 
   InstanceKlass* ik;
-  const bool use_class_space = parser.klass_needs_narrow_id();
+  const bool use_class_space = true; // parser.klass_needs_narrow_id();
 
   // Allocation
   if (parser.is_instance_ref_klass()) {
@@ -493,8 +493,9 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
     // normal
     ik = new (loader_data, size, use_class_space, THREAD) InstanceKlass(parser);
   }
+  assert(!UseKlassTable || ik->narrowKlass() > 0, "Sanity");
 
-  if (ik != nullptr && UseCompressedClassPointers && use_class_space) {
+  if (!UseKlassTable && ik != nullptr && UseCompressedClassPointers && use_class_space) {
     assert(CompressedKlassPointers::is_encodable(ik),
            "Klass " PTR_FORMAT "needs a narrow Klass ID, but is not encodable", p2i(ik));
   }

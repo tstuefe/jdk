@@ -26,17 +26,26 @@
 #define SHARE_OOPS_COMPRESSEDKLASS_INLINE_HPP
 
 #include "oops/compressedKlass.hpp"
-
+#include "oops/klass.hpp"
 #include "memory/universe.hpp"
 #include "oops/oop.hpp"
 #include "utilities/align.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 inline Klass* CompressedKlassPointers::decode_not_null_without_asserts(narrowKlass v, address narrow_base_base, int shift) {
+
+  if (UseKlassTable) {
+    return theKlassTable.get_klass_pointer(v);
+  }
+
   return (Klass*)((uintptr_t)narrow_base_base +((uintptr_t)v << shift));
 }
 
 inline narrowKlass CompressedKlassPointers::encode_not_null_without_asserts(Klass* k, address narrow_base, int shift) {
+  if (UseKlassTable) {
+    return k->narrowKlass();
+  }
+
   return (narrowKlass)(pointer_delta(k, narrow_base, 1) >> shift);
 }
 
@@ -60,8 +69,10 @@ inline narrowKlass CompressedKlassPointers::encode_not_null(Klass* v) {
   assert(!is_null(v), "klass value can never be zero");
   DEBUG_ONLY(check_encodable(v);)
   const narrowKlass nk = encode_not_null_without_asserts(v, base(), shift());
-  assert(decode_not_null_without_asserts(nk, base(), shift()) == v, "reversibility");
+  if (!UseKlassTable) {
+  assert( decode_not_null_without_asserts(nk, base(), shift()) == v, "reversibility");
   DEBUG_ONLY(check_valid_narrow_klass_id(nk);)
+  }
   return nk;
 }
 
@@ -71,6 +82,9 @@ inline narrowKlass CompressedKlassPointers::encode(Klass* v) {
 
 #ifdef ASSERT
 inline void CompressedKlassPointers::check_encodable(const void* addr) {
+    if (UseKlassTable) {
+      return;
+    }
   assert(UseCompressedClassPointers, "Only call for +UseCCP");
   assert(addr != nullptr, "Null Klass?");
   assert(is_encodable(addr),
@@ -79,6 +93,9 @@ inline void CompressedKlassPointers::check_encodable(const void* addr) {
 }
 
 inline void CompressedKlassPointers::check_valid_narrow_klass_id(narrowKlass nk) {
+    if (UseKlassTable) {
+      return;
+    }
   check_init(_base);
   assert(UseCompressedClassPointers, "Only call for +UseCCP");
   assert(nk > 0, "narrow Klass ID is 0");

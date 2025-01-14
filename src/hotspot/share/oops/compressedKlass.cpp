@@ -67,6 +67,11 @@ void CompressedKlassPointers::pre_initialize() {
 
 #ifdef ASSERT
 void CompressedKlassPointers::sanity_check_after_initialization() {
+
+    if (UseKlassTable) {
+      return;
+    }
+
   // In expectation of an assert, prepare condensed info to be printed with the assert.
   char tmp[256];
   os::snprintf(tmp, sizeof(tmp), "klass range: " RANGE2FMT ","
@@ -294,8 +299,8 @@ void CompressedKlassPointers::initialize(address addr, size_t len) {
 }
 
 void CompressedKlassPointers::print_mode(outputStream* st) {
-  st->print_cr("UseCompressedClassPointers %d, UseCompactObjectHeaders %d",
-               UseCompressedClassPointers, UseCompactObjectHeaders);
+  st->print_cr("UseCompressedClassPointers %d, UseCompactObjectHeaders %d, UseKlassTable %d, ",
+               UseCompressedClassPointers, UseCompactObjectHeaders, UseKlassTable);
   if (UseCompressedClassPointers) {
     st->print_cr("Narrow klass pointer bits %d, Max shift %d",
                  _narrow_klass_pointer_bits, _max_shift);

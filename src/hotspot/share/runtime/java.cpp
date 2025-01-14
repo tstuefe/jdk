@@ -349,6 +349,11 @@ void print_statistics() {
     MemTracker::final_report(tty);
   }
 
+  // Native memory tracking data
+  if (UseKlassTable) {
+    theKlassTable.print_on(tty);
+  }
+
   if (PrintMetaspaceStatisticsAtExit) {
     MetaspaceUtils::print_basic_report(tty, 0);
   }

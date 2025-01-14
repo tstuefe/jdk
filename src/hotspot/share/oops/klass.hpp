@@ -204,6 +204,23 @@ private:
 
   CDS_JAVA_HEAP_ONLY(int _archived_mirror_index;)
 
+   private:
+    uint32_t _nk;
+    void setNarrowKlass(uint32_t nk) {
+      assert(_nk == 0, "only once");
+      _nk = nk;
+    }
+   public:
+   uint32_t narrowKlass() const {
+     assert(_nk > 0, "only after init (Klass* %p)", this);
+     return _nk;
+   }
+   void initializeNarrowKlass();
+
+   static ByteSize narrowKlassOffset() { return byte_offset_of(Klass, _nk); }
+
+
+
 protected:
 
   Klass(KlassKind kind);
@@ -789,6 +806,34 @@ public:
   // Returns true if this Klass needs to be addressable via narrow Klass ID.
   inline bool needs_narrow_id() const;
 
+
 };
+
+class KlassTable {
+  static constexpr unsigned _cap = M;
+  volatile uint32_t _last;
+  Klass* _values[_cap];
+public:
+  KlassTable();
+  uint32_t allocate_slot();
+
+  Klass** table_start() { return _values; }
+
+  Klass* get_klass_pointer(uint32_t slot) const {
+    assert(slot > 0 && slot < _cap, "sanity");
+    assert(_values[slot] != nullptr, "not set");
+    return _values[slot];
+  }
+
+  void store_klass_pointer(uint32_t slot, Klass* k) {
+    assert(slot > 0 && slot < _cap, "sanity");
+    _values[slot] = k;
+  }
+
+  void print_on(outputStream* st) const;
+
+};
+
+extern KlassTable theKlassTable;
 
 #endif // SHARE_OOPS_KLASS_HPP

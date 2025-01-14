@@ -305,6 +305,13 @@ Klass::Klass(KlassKind kind) : _kind(kind),
                                _shared_class_path_index(-1) {
   CDS_ONLY(_shared_class_flags = 0;)
   CDS_JAVA_HEAP_ONLY(_archived_mirror_index = -1;)
+
+    if (UseKlassTable) {
+      initializeNarrowKlass();
+    }
+    // after init nklass above
+    _prototype_header = make_prototype(this);
+
   _primary_supers[0] = this;
   set_super_check_offset(in_bytes(primary_supers_offset()));
 }
@@ -1324,3 +1331,46 @@ void Klass::on_secondary_supers_verification_failure(Klass* super, Klass* sub, b
   fatal("%s: %s implements %s: linear_search: %d; table_lookup: %d",
         msg, sub->external_name(), super->external_name(), linear_result, table_result);
 }
+
+KlassTable::KlassTable() : _last(1) // dont hand out 0
+{
+  memset(_values, 0, sizeof(_values));
+}
+
+uint32_t KlassTable::allocate_slot() {
+  uint32_t slot = 0;
+  while (slot == 0) {
+    uint32_t last = Atomic::load(&_last);
+    assert(last <= _cap, "sanity");
+    if (last == _cap) {
+      fatal("klass table oom");
+    }
+    if (Atomic::cmpxchg(&_last, last, last + 1) == last) {
+      slot = last;
+    }
+  }
+  assert(slot > 0 && slot < _cap, "sanity");
+  return slot;
+
+}
+
+void Klass::initializeNarrowKlass() {
+  uint32_t nk = theKlassTable.allocate_slot();
+  theKlassTable.store_klass_pointer(nk, this);
+
+//tty->print_cr("Thread* %p Klass* %p nk %u", Thread::current(), this, nk);
+
+  setNarrowKlass(nk);
+}
+
+void KlassTable::print_on(outputStream* st) const {
+  unsigned count = 0;
+  for (unsigned i = 0; i < _cap; i++) {
+    if (_values[i] != nullptr) {
+      count ++;
+    }
+  }
+  st->print_cr("KlassPointerIndirectionTable: %u entries (including stale)", count);
+}
+
+KlassTable theKlassTable;
