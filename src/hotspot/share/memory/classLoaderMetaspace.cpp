@@ -31,6 +31,7 @@
 #include "memory/metaspace/chunkManager.hpp"
 #include "memory/metaspace/internalStats.hpp"
 #include "memory/metaspace/metablock.hpp"
+#include "memory/metaspace/metablock.inline.hpp"
 #include "memory/metaspace/metaspaceArena.hpp"
 #include "memory/metaspace/metaspaceArenaGrowthPolicy.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
@@ -39,6 +40,7 @@
 #include "memory/metaspace/metaspaceStatistics.hpp"
 #include "memory/metaspace/runningCounters.hpp"
 #include "memory/metaspaceTracer.hpp"
+#include "oops/compressedKlass.inline.hpp"
 #include "oops/klass.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "utilities/debug.hpp"
@@ -79,6 +81,9 @@ ClassLoaderMetaspace::ClassLoaderMetaspace(Mutex* lock, Metaspace::MetaspaceType
 
   // If needed, initialize class arena
   if (class_context != nullptr) {
+    //////
+    klass_alignment_words = Use2c0 ?  Metaspace::min_allocation_alignment_words : klass_alignment_words;
+    //////
     _class_space_arena = new MetaspaceArena(
         class_context,
         ArenaGrowthPolicy::policy_for_space_type(space_type, true),
@@ -98,12 +103,62 @@ ClassLoaderMetaspace::~ClassLoaderMetaspace() {
 
 }
 
+static MetaBlock allocate_from_class_arena(MetaspaceArena* arena, MetaBlock& wastage, bool overallocate_aggressively, size_t word_size) {
+  size_t outer_wordsize = 0;
+  const size_t max_outer_wordsize = align_up_2c0(word_size) + ALIGN_2c0;
+  if (!overallocate_aggressively) {
+    const address current_top = (address) arena->get_top_pointer();
+    const address nKlassBase = CompressedKlassPointers::base();
+    if (current_top != nullptr) {
+      const size_t offset = current_top - nKlassBase;
+      const size_t offset_aligned = align_up_2c0(offset);
+      const size_t over_allocate_words = (offset_aligned - offset) / BytesPerWord;
+      outer_wordsize = word_size + over_allocate_words;
+    } else {
+      outer_wordsize = max_outer_wordsize;
+    }
+  } else {
+    outer_wordsize = max_outer_wordsize;
+  }
+
+  return  arena->allocate_inner(outer_wordsize, wastage); // no fbl
+}
+
 // Allocate word_size words from Metaspace.
 MetaWord* ClassLoaderMetaspace::allocate(size_t word_size, Metaspace::MetadataType mdType) {
   word_size = align_up(word_size, Metaspace::min_allocation_word_size);
   MutexLocker fcl(lock(), Mutex::_no_safepoint_check_flag);
   MetaBlock result, wastage;
   const bool is_class = have_class_space_arena() && mdType == Metaspace::ClassType;
+
+  //////////
+  if (Use2c0) {
+    if (is_class) {
+      log_trace(metaspace)("(class arena) requesting %zu", word_size);
+
+      result = allocate_from_class_arena(class_space_arena(), wastage, false, word_size);
+      MetaWord* aligned = nullptr;
+      if (!result.is_empty()) {
+        aligned = (MetaWord*) align_up_2c0_pointer_with_base(CompressedKlassPointers::base(), (address)result.base());
+        if ((aligned + word_size) > result.end()) {
+          result = allocate_from_class_arena(class_space_arena(), wastage, true, word_size);
+          if (!result.is_empty()) {
+            aligned = (MetaWord*)  align_up_2c0_pointer_with_base(CompressedKlassPointers::base(), (address)result.base());
+            assert((aligned + word_size) <= result.end(), "sanity ");
+          }
+        }
+      }
+      if (aligned != nullptr) {
+      log_debug(metaspace)("(class arena) returning future Klass %p (%X) - nKlassID would be %x",
+          aligned,  ( (unsigned)(((uintptr_t)aligned) >> 6) ), CompressedKlassPointers::encode_not_null_without_asserts(
+          (Klass*)aligned,     CompressedKlassPointers::base(), CompressedKlassPointers::shift()
+          )   );
+      }
+      return (MetaWord*)aligned;
+    }
+  }
+  /////////
+
   if (is_class) {
     assert(word_size >= (sizeof(Klass)/BytesPerWord), "weird size for klass: %zu", word_size);
     result = class_space_arena()->allocate(word_size, wastage);

@@ -209,6 +209,11 @@ bool MetaspaceArena::attempt_enlarge_current_chunk(size_t requested_word_size) {
   return success;
 }
 
+const MetaWord* MetaspaceArena::get_top_pointer() const {
+  return current_chunk() != nullptr ?
+      current_chunk()->top() : nullptr;
+}
+
 // Allocate memory from Metaspace.
 // 1) Attempt to allocate from the free block list.
 // 2) Attempt to allocate from the current chunk.

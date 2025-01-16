@@ -54,6 +54,7 @@
 #include "runtime/safepointMechanism.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
+#include "utilities/align.hpp"
 #include "utilities/checkedCast.hpp"
 #include "utilities/macros.hpp"
 
@@ -6238,6 +6239,20 @@ void  MacroAssembler::decode_heap_oop_not_null(Register dst, Register src) {
 
 void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
   assert_different_registers(r, tmp);
+
+  if (Use2c0) {
+//    emit_int8((unsigned char)0xCC);  nop();nop();
+    if (CompressedKlassPointers::base() != nullptr) {
+      mov64(tmp, (int64_t)CompressedKlassPointers::base());
+      subq(r, tmp);
+    }
+    mov64(tmp, 0xba2e8ba3);
+    imulq(r, tmp);
+    shrq(r, 0x29);
+    return;
+  }
+
+
   if (CompressedKlassPointers::base() != nullptr) {
     mov64(tmp, (int64_t)CompressedKlassPointers::base());
     subq(r, tmp);
@@ -6247,7 +6262,22 @@ void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
   }
 }
 
-void MacroAssembler::encode_and_move_klass_not_null(Register dst, Register src) {
+void MacroAssembler::encode_and_move_klass_not_null(Register dst, Register src, Register tmp) {
+  assert_different_registers(dst, src, tmp);
+
+  if (Use2c0) {
+//    emit_int8((unsigned char)0xCC);  nop();nop();nop();nop();
+    mov(dst, src);
+    if (CompressedKlassPointers::base() != nullptr) {
+      mov64(tmp, (int64_t)CompressedKlassPointers::base());
+      subq(dst, tmp);
+    }
+    mov64(tmp, 0xba2e8ba3);
+    imulq(dst, tmp);
+    shrq(dst, 0x29);
+    return;
+  }
+
   assert_different_registers(src, dst);
   if (CompressedKlassPointers::base() != nullptr) {
     mov64(dst, -(int64_t)CompressedKlassPointers::base());
@@ -6264,6 +6294,18 @@ void  MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
   assert_different_registers(r, tmp);
   // Note: it will change flags
   assert(UseCompressedClassPointers, "should only be used for compressed headers");
+
+  if (Use2c0) {
+//    emit_int8((unsigned char)0xCC);  nop();nop();
+    imulq(tmp, /* src */ r, ALIGN_2c0);
+    movq(r, tmp);
+    if (CompressedKlassPointers::base() != nullptr) {
+      mov64(tmp, (int64_t)CompressedKlassPointers::base());
+      addq(r, tmp);
+    }
+    return;
+  }
+
   // Cannot assert, unverified entry point counts instructions (see .ad file)
   // vtableStubs also counts instructions in pd_code_size_limit.
   // Also do not verify_oop as this is called by verify_oop.
@@ -6276,10 +6318,26 @@ void  MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
   }
 }
 
-void  MacroAssembler::decode_and_move_klass_not_null(Register dst, Register src) {
+void  MacroAssembler::decode_and_move_klass_not_null(Register dst, Register src, Register tmp) {
   assert_different_registers(src, dst);
+  assert_different_registers(src, tmp);
+  assert_different_registers(dst, tmp);
+
   // Note: it will change flags
   assert (UseCompressedClassPointers, "should only be used for compressed headers");
+
+  if (Use2c0) {
+//  emit_int8((unsigned char)0xCC); nop()
+    imulq(tmp, src, ALIGN_2c0);
+    if (CompressedKlassPointers::base() != nullptr) {
+      mov64(dst, (int64_t)CompressedKlassPointers::base());
+    } else {
+      xorq(dst, dst);
+    }
+    addq(dst, tmp);
+    return;
+  }
+
   // Cannot assert, unverified entry point counts instructions (see .ad file)
   // vtableStubs also counts instructions in pd_code_size_limit.
   // Also do not verify_oop as this is called by verify_oop.

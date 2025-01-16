@@ -33,10 +33,16 @@
 #include "utilities/globalDefinitions.hpp"
 
 inline Klass* CompressedKlassPointers::decode_not_null_without_asserts(narrowKlass v, address narrow_base_base, int shift) {
+    if (Use2c0) {
+      return (Klass*)((uintptr_t)narrow_base_base + (v * ALIGN_2c0));
+    }
   return (Klass*)((uintptr_t)narrow_base_base +((uintptr_t)v << shift));
 }
 
 inline narrowKlass CompressedKlassPointers::encode_not_null_without_asserts(Klass* k, address narrow_base, int shift) {
+    if (Use2c0) {
+      return (narrowKlass)(pointer_delta(k, narrow_base, 1) / ALIGN_2c0);
+    }
   return (narrowKlass)(pointer_delta(k, narrow_base, 1) >> shift);
 }
 

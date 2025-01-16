@@ -56,7 +56,7 @@ public:
            word_size() == rhs.word_size();
   }
 
-  // Split off tail block.
+  // Split off tail block and returns tail
   inline MetaBlock split_off_tail(size_t tailsize);
 
   DEBUG_ONLY(inline void verify() const;)

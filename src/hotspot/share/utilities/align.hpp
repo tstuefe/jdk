@@ -100,6 +100,41 @@ inline bool is_aligned(T* ptr, A alignment) {
   return is_aligned((uintptr_t)ptr, alignment);
 }
 
+constexpr unsigned ALIGN_2c0 = 0x2c0;
+
+template<typename T>
+constexpr bool is_aligned_2c0(T size) {
+  return ((size / ALIGN_2c0) * ALIGN_2c0) == size;
+}
+
+template<typename T>
+constexpr T align_down_2c0(T size) {
+  T result = T((size / ALIGN_2c0) * ALIGN_2c0);
+  assert(result <= size, "Sanity");
+  assert(is_aligned_2c0(result),
+         "must be aligned: " UINT64_FORMAT, (uint64_t)result);
+  return result;
+}
+
+template<typename T>
+constexpr T align_up_2c0(T size) {
+  T result = T( ((size + (ALIGN_2c0 - 1)) / ALIGN_2c0) * ALIGN_2c0);
+  assert(result >= size, "Sanity");
+  assert(result < size + ALIGN_2c0, "Sanity");
+  assert(is_aligned_2c0(result),
+         "must be aligned: " UINT64_FORMAT, (uint64_t)result);
+  return result;
+}
+
+// return next aligned pointer based on given base
+constexpr address align_up_2c0_pointer_with_base(address base, address p) {
+  assert(p >= base, "sanity");
+  const size_t off = p - base;
+  const size_t off_aligned = align_up_2c0(off);
+  return base + off_aligned;
+}
+
+
 // Align metaspace objects by rounding up to natural word boundary
 template <typename T>
 inline T align_metadata_size(T size) {

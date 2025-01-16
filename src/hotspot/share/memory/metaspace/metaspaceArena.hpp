@@ -128,11 +128,11 @@ class MetaspaceArena : public CHeapObj<mtClass> {
   // On success, true is returned, false otherwise.
   bool attempt_enlarge_current_chunk(size_t requested_word_size);
 
-  // Allocate from the arena proper, once dictionary allocations and fencing are sorted out.
-  MetaBlock allocate_inner(size_t word_size, MetaBlock& wastage);
+
 
 public:
-
+  // Allocate from the arena proper, once dictionary allocations and fencing are sorted out.
+  MetaBlock allocate_inner(size_t word_size, MetaBlock& wastage);
   MetaspaceArena(MetaspaceContext* context,
                  const ArenaGrowthPolicy* growth_policy,
                  size_t allocation_alignment_words,
@@ -168,6 +168,8 @@ public:
 
   // Returns true if the given block is contained in this arena
   DEBUG_ONLY(bool contains(MetaBlock bl) const;)
+
+  const MetaWord* get_top_pointer() const;
 };
 
 } // namespace metaspace

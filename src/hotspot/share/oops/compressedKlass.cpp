@@ -63,6 +63,10 @@ void CompressedKlassPointers::pre_initialize() {
     _narrow_klass_pointer_bits = narrow_klass_pointer_bits_noncoh;
     _max_shift = max_shift_noncoh;
   }
+
+      if (Use2c0) {
+        _max_shift = 6;
+      }
 }
 
 #ifdef ASSERT
@@ -96,7 +100,10 @@ void CompressedKlassPointers::sanity_check_after_initialization() {
 
   // Check that Klass range is fully engulfed in the encoding range
   const address encoding_start = _base;
-  const address encoding_end = (address)(p2u(_base) + (uintptr_t)nth_bit(narrow_klass_pointer_bits() + _shift));
+  const address encoding_end =
+      Use2c0 ?
+          (address) (p2u(_base) + ((uintptr_t)nth_bit(narrow_klass_pointer_bits()) * ALIGN_2c0)) :
+          (address) (p2u(_base) + (uintptr_t)nth_bit(narrow_klass_pointer_bits() + _shift));
   ASSERT_HERE_2(_klass_range_start >= _base && _klass_range_end <= encoding_end,
                 "Resulting encoding range does not fully cover the class range");
 
@@ -114,7 +121,7 @@ void CompressedKlassPointers::sanity_check_after_initialization() {
 
   Klass* const k1 = decode_not_null_without_asserts(_lowest_valid_narrow_klass_id, _base, _shift);
   if (encoding_start == _klass_range_start) {
-    ASSERT_HERE_2((address)k1 == _klass_range_start + klass_align, "Not lowest");
+    ASSERT_HERE_2((address)k1 == _klass_range_start + Use2c0 ? ALIGN_2c0 : klass_align, "Not lowest");
   } else {
     ASSERT_HERE_2((address)k1 == _klass_range_start, "Not lowest");
   }
@@ -139,6 +146,15 @@ void CompressedKlassPointers::sanity_check_after_initialization() {
 // of narrowKlass we can expect.
 void CompressedKlassPointers::calc_lowest_highest_narrow_klass_id() {
   address lowest_possible_klass_location = _klass_range_start;
+
+    /////////
+    if (Use2c0) {
+      _lowest_valid_narrow_klass_id = 1;
+      address highest_possible_klass = _base + align_down_2c0(_klass_range_end - _base) - ALIGN_2c0;
+      _highest_valid_narrow_klass_id = ((uintptr_t)(highest_possible_klass - _base)) / ALIGN_2c0;
+      return;
+    }
+    ///////
 
   // A Klass will never be placed at the Encoding range start, since that would translate to a narrowKlass=0, which
   // is disallowed. Note that both Metaspace and CDS prvent allocation at the first address for this reason.
@@ -208,7 +224,7 @@ char* CompressedKlassPointers::reserve_address_space_for_16bit_move(size_t size,
 
 void CompressedKlassPointers::initialize(address addr, size_t len) {
 
-  if (len > max_klass_range_size()) {
+  if (!Use2c0 && len > max_klass_range_size()) {
     stringStream ss;
     ss.print("Class space size (%zu) exceeds the maximum possible size (%zu)",
               len, max_klass_range_size());
@@ -230,12 +246,16 @@ void CompressedKlassPointers::initialize(address addr, size_t len) {
     // a cacheline size.
     _base = addr;
 
+    if (Use2c0) {
+       _shift = 6; //cacheline size
+    } else {
     const int log_cacheline = exact_log2(DEFAULT_CACHE_LINE_SIZE);
     int s = max_shift();
     while (s > log_cacheline && ((size_t)nth_bit(narrow_klass_pointer_bits() + s - 1) > len)) {
       s--;
     }
     _shift = s;
+    }
 
   } else {
 
@@ -294,8 +314,8 @@ void CompressedKlassPointers::initialize(address addr, size_t len) {
 }
 
 void CompressedKlassPointers::print_mode(outputStream* st) {
-  st->print_cr("UseCompressedClassPointers %d, UseCompactObjectHeaders %d",
-               UseCompressedClassPointers, UseCompactObjectHeaders);
+  st->print_cr("UseCompressedClassPointers %d, UseCompactObjectHeaders %d, Use2c0 %d",
+               UseCompressedClassPointers, UseCompactObjectHeaders, Use2c0);
   if (UseCompressedClassPointers) {
     st->print_cr("Narrow klass pointer bits %d, Max shift %d",
                  _narrow_klass_pointer_bits, _max_shift);

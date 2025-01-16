@@ -177,6 +177,9 @@ size_t oopDesc::size()  {
 }
 
 size_t oopDesc::size_given_klass(Klass* klass)  {
+
+  if (UseNewCode)tty->print_cr("this: %p Klass %p", this, klass);
+
   int lh = klass->layout_helper();
   size_t s;
 

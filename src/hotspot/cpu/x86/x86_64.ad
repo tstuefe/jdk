@@ -361,6 +361,10 @@ reg_class int_no_rbp_r13_reg %{
   return _INT_NO_RBP_R13_REG_mask;
 %}
 
+ 
+// Singleton class for RDX pointer register
+reg_class ptr_rdx_reg(RDX, RDX_H);
+
 // Singleton class for RAX pointer register
 reg_class ptr_rax_reg(RAX, RAX_H);
 
@@ -408,6 +412,9 @@ reg_class int_rdx_reg(RDX);
 
 // Singleton class for RDI int register
 reg_class int_rdi_reg(RDI);
+
+// Singleton class for RSI int register
+reg_class int_rsi_reg(RSI);
 
 // Singleton class for instruction pointer
 // reg_class ip_reg(RIP);
@@ -2678,6 +2685,16 @@ operand rsi_RegP()
   interface(REG_INTER);
 %}
 
+operand rsi_RegN()
+%{
+  constraint(ALLOC_IN_RC(int_rsi_reg));
+  match(RegN);
+  match(rRegN);
+
+  format %{ %}
+  interface(REG_INTER);
+%}
+
 operand rbp_RegP()
 %{
   constraint(ALLOC_IN_RC(ptr_rbp_reg));
@@ -2766,6 +2783,16 @@ operand r11_RegL()
   constraint(ALLOC_IN_RC(long_r11_reg));
   match(RegL);
   match(rRegL);
+
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand rdx_RegP()
+%{
+  constraint(ALLOC_IN_RC(ptr_rdx_reg));
+  match(RegP);
+  match(rRegP);
 
   format %{ %}
   interface(REG_INTER);
@@ -6015,22 +6042,22 @@ instruct decodeHeapOop_not_null(rRegP dst, rRegN src, rFlagsReg cr) %{
   ins_pipe(ialu_reg_long);
 %}
 
-instruct encodeKlass_not_null(rRegN dst, rRegP src, rFlagsReg cr) %{
+instruct encodeKlass_not_null(rRegN dst, rRegP src, rRegP tmp, rFlagsReg cr) %{
   match(Set dst (EncodePKlass src));
-  effect(TEMP dst, KILL cr);
-  format %{ "encode_and_move_klass_not_null $dst,$src" %}
+  effect(TEMP_DEF dst, USE src, TEMP tmp, KILL cr);
+  format %{ "encode_and_move_klass_not_null $dst,$src,$tmp" %}
   ins_encode %{
-    __ encode_and_move_klass_not_null($dst$$Register, $src$$Register);
+    __ encode_and_move_klass_not_null($dst$$Register, $src$$Register, $tmp$$Register);
   %}
   ins_pipe(ialu_reg_long);
 %}
 
-instruct decodeKlass_not_null(rRegP dst, rRegN src, rFlagsReg cr) %{
+instruct decodeKlass_not_null(rRegP dst, rRegN src, rRegP tmp, rFlagsReg cr) %{
   match(Set dst (DecodeNKlass src));
-  effect(TEMP dst, KILL cr);
-  format %{ "decode_and_move_klass_not_null $dst,$src" %}
+  effect(TEMP_DEF dst, USE src, TEMP tmp, KILL cr);
+  format %{ "decode_and_move_klass_not_null $dst,$src,$tmp" %}
   ins_encode %{
-    __ decode_and_move_klass_not_null($dst$$Register, $src$$Register);
+    __ decode_and_move_klass_not_null($dst$$Register, $src$$Register, $tmp$$Register);
   %}
   ins_pipe(ialu_reg_long);
 %}
