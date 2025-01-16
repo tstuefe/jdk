@@ -59,14 +59,22 @@ void CompressedKlassPointers::pre_initialize() {
   if (UseCompactObjectHeaders) {
     _narrow_klass_pointer_bits = narrow_klass_pointer_bits_coh;
     _max_shift = max_shift_coh;
+
+    // let the shift be the smaller pow2 value than what we can cover with shift of 2c0 (704).
+    // The shift should not matter for decoding anyway. But using such a value makes some asserts
+    // and auto corrections kind of work (e.g. scaling down compressedclassspacesize) which I cannot
+    // be bothered to rewrite right now.
+        if (Use2c0) {
+          _max_shift =
+              log2i_exact(round_down_power_of_2(nth_bit(_narrow_klass_pointer_bits) * ALIGN_2c0)) - _narrow_klass_pointer_bits;
+        }
+
   } else {
     _narrow_klass_pointer_bits = narrow_klass_pointer_bits_noncoh;
     _max_shift = max_shift_noncoh;
   }
 
-      if (Use2c0) {
-        _max_shift = 6;
-      }
+
 }
 
 #ifdef ASSERT
@@ -247,7 +255,7 @@ void CompressedKlassPointers::initialize(address addr, size_t len) {
     _base = addr;
 
     if (Use2c0) {
-       _shift = 6; //cacheline size
+      _shift = max_shift();
     } else {
     const int log_cacheline = exact_log2(DEFAULT_CACHE_LINE_SIZE);
     int s = max_shift();
