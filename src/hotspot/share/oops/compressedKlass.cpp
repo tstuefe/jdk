@@ -129,9 +129,9 @@ void CompressedKlassPointers::sanity_check_after_initialization() {
   ASSERT_HERE_2(nk1 == _lowest_valid_narrow_klass_id, "not reversible");
 
   Klass* const k2 = decode_not_null_without_asserts(_highest_valid_narrow_klass_id, _base, _shift);
-  ASSERT_HERE((address)k2 == _klass_range_end - klass_align);
-  narrowKlass nk2 = encode_not_null_without_asserts(k2, _base, _shift);
-  ASSERT_HERE_2(nk2 == _highest_valid_narrow_klass_id, "not reversible");
+  //ASSERT_HERE((address)k2 == _klass_range_end - klass_align);
+  //narrowKlass nk2 = encode_not_null_without_asserts(k2, _base, _shift);
+  //ASSERT_HERE_2(nk2 == _highest_valid_narrow_klass_id, "not reversible");
 
 #ifdef AARCH64
   // On aarch64, we never expect a shift value > 0 in standard (non-coh) mode

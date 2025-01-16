@@ -256,7 +256,7 @@ public:
     // 2) It is suitably aligned to 2^encoding_shift. This only really matters for
     //    +UseCompactObjectHeaders, since the encoding shift can be large (max 10 bits -> 1KB).
     return (address)addr >= _klass_range_start && (address)addr < _klass_range_end &&
-        Use2c0 ? is_aligned_2c0(p2u(addr)) : is_aligned(addr, klass_alignment_in_bytes()  );
+        Use2c0 ? is_aligned_2c0(p2u(addr) - p2u(_base)) : is_aligned(addr, klass_alignment_in_bytes()  );
   }
 
 #if defined(AARCH64) && !defined(ZERO)
