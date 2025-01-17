@@ -170,6 +170,8 @@ void KlassInfoLUT::print_statistics(outputStream* st) {
 
   const uint64_t hits_ak = counter_hits_OAK + counter_hits_TAK;
   const uint64_t hits_ik = hits - hits_ak;
+  const uint64_t no_info_hits = counter_noinfo_ICLK + counter_noinfo_IMK + counter_noinfo_IK_other;
+
   PRINT_WITH_PERCENTAGE("Hits, IK (all)", hits_ik, hits);
   PRINT_WITH_PERCENTAGE("Hits, AK (all)", hits_ak, hits);
 
@@ -177,14 +179,14 @@ void KlassInfoLUT::print_statistics(outputStream* st) {
   PRINT_WITH_PERCENTAGE("Hits, all for systemloader", counter_hits_sysloader, hits);
   PRINT_WITH_PERCENTAGE("Hits, all for platformloader", counter_hits_platformloader, hits);
 
-  const uint64_t no_info_hits = counter_noinfo_ICLK + counter_noinfo_IMK + counter_noinfo_IK_other;
-
-  st->print_cr("   IK details missing in %.2f%% of all IK hits (IMK: %.2f%%, ICLK: %.2f%%, other: %.2f%%) and %.2f%% of all hits",
-               PERCENTAGE_OF(no_info_hits, hits_ik),
-               PERCENTAGE_OF(counter_noinfo_IMK, hits_ik),
-               PERCENTAGE_OF(counter_noinfo_ICLK, hits_ik),
-               PERCENTAGE_OF(counter_noinfo_IK_other, hits_ik),
-               PERCENTAGE_OF(counter_noinfo_IK_other, hits_ik + hits_ak)
+  st->print_cr("   IK details missing for " UINT64_FORMAT " hits (%.2f%%) due to: "
+               "IMK " UINT64_FORMAT " (%.2f%%) "
+               "ICLK " UINT64_FORMAT " (%.2f%%) "
+               "other " UINT64_FORMAT " (%.2f%%)",
+               no_info_hits, PERCENTAGE_OF(no_info_hits, hits),
+               counter_noinfo_IMK, PERCENTAGE_OF(counter_noinfo_IMK, hits),
+               counter_noinfo_ICLK, PERCENTAGE_OF(counter_noinfo_ICLK, hits),
+               counter_noinfo_IK_other, PERCENTAGE_OF(counter_noinfo_IK_other, hits)
   );
 #endif // KLUT_ENABLE_EXPENSIVE_STATS
 
