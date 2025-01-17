@@ -179,11 +179,12 @@ void KlassInfoLUT::print_statistics(outputStream* st) {
 
   const uint64_t no_info_hits = counter_noinfo_ICLK + counter_noinfo_IMK + counter_noinfo_IK_other;
 
-  st->print_cr("   IK details missing in %.2f%% of all IK hits (IMK: %.2f%%, ICLK: %.2f%%, other: %.2f%%)",
+  st->print_cr("   IK details missing in %.2f%% of all IK hits (IMK: %.2f%%, ICLK: %.2f%%, other: %.2f%%) and %.2f%% of all hits",
                PERCENTAGE_OF(no_info_hits, hits_ik),
                PERCENTAGE_OF(counter_noinfo_IMK, hits_ik),
                PERCENTAGE_OF(counter_noinfo_ICLK, hits_ik),
-               PERCENTAGE_OF(counter_noinfo_IK_other, hits_ik)
+               PERCENTAGE_OF(counter_noinfo_IK_other, hits_ik),
+               PERCENTAGE_OF(counter_noinfo_IK_other, hits_ik + hits_ak)
   );
 #endif // KLUT_ENABLE_EXPENSIVE_STATS
 
