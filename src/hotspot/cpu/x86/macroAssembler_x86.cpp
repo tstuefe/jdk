@@ -5983,6 +5983,7 @@ void MacroAssembler::load_narrow_klass_compact(Register dst, Register src) {
 #endif
 
 void MacroAssembler::load_klass(Register dst, Register src, Register tmp) {
+  block_comment("MacroAssembler::load_klass");
   assert_different_registers(src, tmp);
   assert_different_registers(dst, tmp);
 #ifdef _LP64
@@ -5997,6 +5998,7 @@ void MacroAssembler::load_klass(Register dst, Register src, Register tmp) {
   {
     movptr(dst, Address(src, oopDesc::klass_offset_in_bytes()));
   }
+  block_comment("} // MacroAssembler::load_klass");
 }
 
 void MacroAssembler::store_klass(Register dst, Register src, Register tmp) {
@@ -6277,6 +6279,7 @@ void MacroAssembler::encode_and_move_klass_not_null(Register dst, Register src) 
 }
 
 void  MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
+  block_comment("MacroAssembler::decode_klass_not_null");
   assert_different_registers(r, tmp);
   // Note: it will change flags
   assert(UseCompressedClassPointers, "should only be used for compressed headers");
@@ -6290,6 +6293,7 @@ void  MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
     mov64(tmp, (int64_t)CompressedKlassPointers::base());
     addq(r, tmp);
   }
+  block_comment("} // MacroAssembler::decode_klass_not_null");
 }
 
 void  MacroAssembler::decode_and_move_klass_not_null(Register dst, Register src) {
