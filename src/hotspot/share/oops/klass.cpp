@@ -301,7 +301,7 @@ Klass::Klass() : _kind(UnknownKlassKind) {
 // The constructor is also used from CppVtableCloner,
 // which doesn't zero out the memory before calling the constructor.
 Klass::Klass(KlassKind kind) : _kind(kind),
-                               _prototype_header(make_prototype(this)),
+//                               _prototype_header(make_prototype(this)),
                                _shared_class_path_index(-1) {
   CDS_ONLY(_shared_class_flags = 0;)
   CDS_JAVA_HEAP_ONLY(_archived_mirror_index = -1;)
@@ -1335,6 +1335,7 @@ void Klass::on_secondary_supers_verification_failure(Klass* super, Klass* sub, b
 KlassTable::KlassTable() : _last(1) // dont hand out 0
 {
   memset(_values, 0, sizeof(_values));
+  log_info(kptab)("Initialized kptable, size %zu", sizeof(_values));
 }
 
 uint32_t KlassTable::allocate_slot() {
@@ -1357,8 +1358,7 @@ uint32_t KlassTable::allocate_slot() {
 void Klass::initializeNarrowKlass() {
   uint32_t nk = theKlassTable.allocate_slot();
   theKlassTable.store_klass_pointer(nk, this);
-
-//tty->print_cr("Thread* %p Klass* %p nk %u", Thread::current(), this, nk);
+  log_debug(kptab)("Klass* " PTR_FORMAT ": nk %u", p2i(this), nk);
 
   setNarrowKlass(nk);
 }
