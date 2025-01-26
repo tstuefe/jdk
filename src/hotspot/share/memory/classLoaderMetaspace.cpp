@@ -106,7 +106,7 @@ MetaWord* ClassLoaderMetaspace::allocate(size_t word_size, Metaspace::MetadataTy
   MetaBlock result, wastage;
   const bool is_class = have_class_space_arena() && mdType == Metaspace::ClassType;
 
-  if (is_class) {
+  if (!UseKlassTable && is_class) {
     assert(word_size >= (sizeof(Klass)/BytesPerWord), "weird size for klass: %zu", word_size);
     result = class_space_arena()->allocate(word_size, wastage);
   } else {
@@ -119,8 +119,13 @@ MetaWord* ClassLoaderMetaspace::allocate(size_t word_size, Metaspace::MetadataTy
   if (result.is_nonempty()) {
     const bool in_class_arena = class_space_arena() != nullptr ? class_space_arena()->contains(result) : false;
     const bool in_nonclass_arena = non_class_space_arena()->contains(result);
-    assert((is_class && in_class_arena) || (!is_class && in_class_arena != in_nonclass_arena),
-         "block from neither arena " METABLOCKFORMAT "?", METABLOCKFORMATARGS(result));
+    if (UseKlassTable) {
+      assert(in_nonclass_arena, "sanity");
+
+    } else {
+      assert((is_class && in_class_arena) || (!is_class && in_class_arena != in_nonclass_arena),
+             "block from neither arena " METABLOCKFORMAT "?", METABLOCKFORMATARGS(result));
+    }
   }
 #endif
 //

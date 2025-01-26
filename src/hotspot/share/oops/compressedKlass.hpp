@@ -26,6 +26,7 @@
 #define SHARE_OOPS_COMPRESSEDKLASS_HPP
 
 #include "memory/allStatic.hpp"
+#include "runtime/globals.hpp"
 #include "utilities/align.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -249,6 +250,9 @@ public:
   // Returns whether the pointer is in the memory region used for encoding compressed
   // class pointers.  This includes CDS.
   static inline bool is_encodable(const void* addr) {
+
+    if (UseKlassTable) return true;
+
     // An address can only be encoded if:
     //
     // 1) the address lies within the klass range.
