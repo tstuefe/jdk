@@ -53,6 +53,7 @@ class ReferenceLocateClosure : public OopClosure {
   void do_oop_shared(UnifiedOopRef ref);
 
  public:
+  static constexpr int type = 16;
   ReferenceLocateClosure(RootCallback& callback,
                          OldObjectRoot::System system,
                          OldObjectRoot::Type type,

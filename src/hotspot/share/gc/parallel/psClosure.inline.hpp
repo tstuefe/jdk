@@ -36,6 +36,7 @@
 
 class PSAdjustWeakRootsClosure final: public OopClosure {
 public:
+  static constexpr int type = 11;
   virtual void do_oop(narrowOop* p) { ShouldNotReachHere(); }
 
   virtual void do_oop(oop* p)       {
@@ -69,6 +70,7 @@ private:
     }
   }
 public:
+  static constexpr int type = 13;
   PSRootsClosure(PSPromotionManager* pm) : _promotion_manager(pm) { }
   void do_oop(oop* p)       { PSRootsClosure::do_oop_work(p); }
   void do_oop(narrowOop* p) { PSRootsClosure::do_oop_work(p); }
@@ -85,6 +87,7 @@ private:
   // pointing to the young generation after being scanned.
   ClassLoaderData*    _scanned_cld;
 public:
+  static constexpr int type = 14;
   PSScavengeFromCLDClosure(PSPromotionManager* pm) : _pm(pm), _scanned_cld(nullptr) { }
   void do_oop(narrowOop* p) { ShouldNotReachHere(); }
   void do_oop(oop* p)       {

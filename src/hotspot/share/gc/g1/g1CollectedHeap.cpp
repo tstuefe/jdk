@@ -2969,6 +2969,7 @@ class RegisterNMethodOopClosure: public OopClosure {
   nmethod* _nm;
 
 public:
+  static constexpr int type = 17;
   RegisterNMethodOopClosure(G1CollectedHeap* g1h, nmethod* nm) :
     _g1h(g1h), _nm(nm) {}
 

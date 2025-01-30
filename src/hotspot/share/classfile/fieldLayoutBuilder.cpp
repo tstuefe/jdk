@@ -591,6 +591,31 @@ void FieldLayoutBuilder::insert_contended_padding(LayoutRawBlock* slot) {
   }
 }
 
+// Helper function for compute_regular_layout()
+// Return true if oop fields of ik should be placed at start, false if at end.
+static bool should_lead_with_oops(const InstanceKlass* super) {
+  if (super == nullptr) {
+    return false;
+  }
+  // If we have a regular InstanceKlass, we can calculate the object
+  // size without an object. In that case, lead with oops if super class
+  // has an oop map and it borders the end of the object.
+  const unsigned super_omb_count = super->nonstatic_oop_map_count();
+  if (super_omb_count > 0) {
+    const int super_kind = super->kind();
+    const int super_lh = super->layout_helper();
+    if (super_kind == Klass::InstanceKlassKind &&
+        !Klass::layout_helper_needs_slow_path(super_lh)) {
+      const OopMapBlock* const last_omb = super->start_of_nonstatic_oop_maps() + super_omb_count - 1;
+      const unsigned last_oop_end_bytes = last_omb->offset() + last_omb->count() * BytesPerHeapOop;
+      const unsigned obj_size_bytes = Klass::layout_helper_to_size_helper(super_lh) * BytesPerWord;
+      return obj_size_bytes == last_oop_end_bytes;
+    }
+  }
+  // We don't know object size. Just guess: lead with oops if parent has oops, otherwise let oops trail
+  return super_omb_count > 0;
+}
+
 // Computation of regular classes layout is an evolution of the previous default layout
 // (FieldAllocationStyle 1):
 //   - primitive fields are allocated first (from the biggest to the smallest)
@@ -608,8 +633,18 @@ void FieldLayoutBuilder::compute_regular_layout() {
     insert_contended_padding(_layout->start());
     need_tail_padding = true;
   }
-  _layout->add(_root_group->primitive_fields());
-  _layout->add(_root_group->oop_fields());
+
+  // We place oop fields at the start of the object if there is a chance of
+  // these fields being merged with those of the super class(es) to one OopMapBlock.
+  // Otherwise, we place them at the end, for the same reason - to make it more likely
+  // child classes will merge their omb's with our trailing one.
+  if (UseNewCode2 && should_lead_with_oops(_super_klass)) {
+    _layout->add(_root_group->oop_fields());
+    _layout->add(_root_group->primitive_fields());
+  } else {
+    _layout->add(_root_group->primitive_fields());
+    _layout->add(_root_group->oop_fields());
+  }
 
   if (!_contended_groups.is_empty()) {
     for (int i = 0; i < _contended_groups.length(); i++) {

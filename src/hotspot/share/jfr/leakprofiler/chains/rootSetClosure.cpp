@@ -68,6 +68,7 @@ class RawRootClosure : public OopClosure {
   Delegate* _delegate;
 
 public:
+  static constexpr int type = 15;
   RawRootClosure(Delegate* delegate) : _delegate(delegate) {}
 
   void do_oop(oop* ref) {

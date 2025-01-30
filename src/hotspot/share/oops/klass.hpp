@@ -212,7 +212,7 @@ protected:
   Klass();
 
  public:
-  int kind() { return _kind; }
+  int kind() const { return _kind; }
 
   enum class DefaultsLookupMode { find, skip };
   enum class OverpassLookupMode { find, skip };

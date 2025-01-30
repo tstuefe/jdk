@@ -27,6 +27,7 @@
 
 #include "oops/oop.hpp"
 
+#include "memory/resourceArea.inline.hpp"
 #include "memory/universe.hpp"
 #include "memory/iterator.inline.hpp"
 #include "oops/access.inline.hpp"
@@ -372,18 +373,74 @@ void oopDesc::incr_age() {
   }
 }
 
+#define EXPENSIVE_TRACE
+
+template <typename OopClosureType>
+static void print_my_info(const char* fun, oopDesc* obj, Klass* k = nullptr) {
+#ifdef EXPENSIVE_TRACE
+  if (UseNewCode) {
+    // Note: one line per item, key separated by tab from value, to make it awk friendly
+    char txt[1024];
+    stringStream ss(txt, 1024);
+    ResourceMark rm;
+    if (k == nullptr) { k = obj->klass(); }
+    Symbol* kname = k->name();
+    const char* kname_s = kname != nullptr ? kname->as_C_string() : "??";
+    const ClassLoaderData* cld = k->class_loader_data();
+    const char* clname_s;
+    if (cld->is_boot_class_loader_data()) {
+      clname_s = "<bootstrap>";
+    } else {
+      Symbol* clname = cld != nullptr ? cld->name() : nullptr;
+      clname_s = clname != nullptr ? clname->as_C_string() : "???";
+    }
+
+    const int kind = k->kind();
+    static const char* kind_strings[] = {
+        "IK", "IRK", "IMK", "ICLK", "ISCK", "TAK", "OAK", "?????"
+    };
+    const char* kind_s = kind_strings[kind];
+
+    ss.print_cr("funktion %s", fun);
+    ss.print_cr("closure %d", OopClosureType::type);
+    ss.print_cr("kind %s", kind_s);
+    ss.print_cr("klass %s", kname_s);
+    ss.print_cr("cld %p", cld);
+    ss.print_cr("clname %s", clname_s);
+    ss.print_cr("objsz %zu", obj->size_given_klass(k));
+
+    if (k->is_instance_klass()) {
+      const InstanceKlass* const ik = InstanceKlass::cast(k);
+      const unsigned ombcount = ik->nonstatic_oop_map_count();
+      ss.print_cr("oopmapcount %u", ombcount);
+      for (unsigned i = 0; i < ombcount; i++) {
+        const OopMapBlock* const omb = ik->start_of_nonstatic_oop_maps() + i;
+        ss.print_cr("oopmapblock-%u-offset %d", i, omb->offset());
+        ss.print_cr("oopmapblock-%u-count %u", i, omb->count());
+      }
+    }
+    ss.cr();
+    tty->print_raw(txt);
+  }
+#endif
+}
+
+
 template <typename OopClosureType>
 void oopDesc::oop_iterate(OopClosureType* cl) {
+  print_my_info<OopClosureType>("oop_iterate", this);
   OopIteratorClosureDispatch::oop_oop_iterate(cl, this, klass());
 }
 
 template <typename OopClosureType>
 void oopDesc::oop_iterate(OopClosureType* cl, MemRegion mr) {
+  print_my_info<OopClosureType>("oop_iterate_mr", this);
   OopIteratorClosureDispatch::oop_oop_iterate(cl, this, klass(), mr);
 }
 
 template <typename OopClosureType>
 size_t oopDesc::oop_iterate_size(OopClosureType* cl) {
+  print_my_info<OopClosureType>("oop_iterate_sz", this);
   Klass* k = klass();
   size_t size = size_given_klass(k);
   OopIteratorClosureDispatch::oop_oop_iterate(cl, this, k);
@@ -392,6 +449,7 @@ size_t oopDesc::oop_iterate_size(OopClosureType* cl) {
 
 template <typename OopClosureType>
 size_t oopDesc::oop_iterate_size(OopClosureType* cl, MemRegion mr) {
+  print_my_info<OopClosureType>("oop_iterate_sz_mr", this);
   Klass* k = klass();
   size_t size = size_given_klass(k);
   OopIteratorClosureDispatch::oop_oop_iterate(cl, this, k, mr);
@@ -400,6 +458,7 @@ size_t oopDesc::oop_iterate_size(OopClosureType* cl, MemRegion mr) {
 
 template <typename OopClosureType>
 void oopDesc::oop_iterate_backwards(OopClosureType* cl) {
+  print_my_info<OopClosureType>("oop_iterate_bw", this);
   oop_iterate_backwards(cl, klass());
 }
 

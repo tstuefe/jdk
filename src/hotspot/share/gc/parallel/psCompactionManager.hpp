@@ -52,6 +52,7 @@ public:
 
   virtual void do_oop(oop* p)                     { do_oop_work(p); }
   virtual void do_oop(narrowOop* p)               { do_oop_work(p); }
+  static constexpr int type = 10;
 };
 
 class ParCompactionManager : public CHeapObj<mtGC> {
