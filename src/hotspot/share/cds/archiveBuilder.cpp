@@ -350,7 +350,8 @@ address ArchiveBuilder::reserve_buffer() {
     _requested_dynamic_archive_bottom = my_archive_requested_bottom;
   }
 
-  _buffer_to_requested_delta = my_archive_requested_bottom - _buffer_bottom;
+  const size_t initial_offset = UseCompressedClassPointers ? MetaspaceShared::nklass_protzone_size() : 0;
+  _buffer_to_requested_delta = (my_archive_requested_bottom + initial_offset) - _buffer_bottom;
 
   address my_archive_requested_top = my_archive_requested_bottom + buffer_size;
   if (my_archive_requested_bottom <  _requested_static_archive_bottom ||

@@ -397,14 +397,14 @@ bool VirtualMemoryTracker::add_reserved_region(address base_addr, size_t size,
       }
 
       // Print some more details. Don't use UL here to avoid circularities.
-      tty->print_cr("Error: existing region: [" INTPTR_FORMAT "-" INTPTR_FORMAT "), memory tag %u.\n"
+      log_error(nmt)("Error: existing region: [" INTPTR_FORMAT "-" INTPTR_FORMAT "), memory tag %u.\n"
                     "       new region: [" INTPTR_FORMAT "-" INTPTR_FORMAT "), memory tag %u.",
                     p2i(reserved_rgn->base()), p2i(reserved_rgn->end()), (unsigned)reserved_rgn->mem_tag(),
                     p2i(base_addr), p2i(base_addr + size), (unsigned)mem_tag);
       if (MemTracker::tracking_level() == NMT_detail) {
-        tty->print_cr("Existing region allocated from:");
+        log_error(nmt)("Existing region allocated from:");
         reserved_rgn->call_stack()->print_on(tty);
-        tty->print_cr("New region allocated from:");
+        log_error(nmt)("New region allocated from:");
         stack.print_on(tty);
       }
       ShouldNotReachHere();

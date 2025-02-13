@@ -1617,6 +1617,9 @@ void FileMapInfo::write_region(int region, char* base, size_t size,
     requested_base = ArchiveBuilder::current()->to_requested(base);
     assert(requested_base >= requested_SharedBaseAddress, "must be");
     mapping_offset = requested_base - requested_SharedBaseAddress;
+    if (UseCompressedClassPointers) {
+      mapping_offset += MetaspaceShared::nklass_protzone_size();
+    }
   }
 
   r->set_file_offset(_file_offset);
@@ -1840,7 +1843,9 @@ MapArchiveResult FileMapInfo::map_regions(int regions[], int num_regions, char* 
     DEBUG_ONLY(if (last_region != nullptr) {
         // Ensure that the OS won't be able to allocate new memory spaces between any mapped
         // regions, or else it would mess up the simple comparison in MetaspaceObj::is_shared().
-        assert(r->mapped_base() == last_region->mapped_end(), "must have no gaps");
+        assert(r->mapped_base() == last_region->mapped_end(),
+              "no gaps, no overlap allowed (last ends:" PTR_FORMAT ", this starts:" PTR_FORMAT ")",
+              p2u(last_region->mapped_end()), p2u(r->mapped_base()));
       }
       last_region = r;)
     log_info(cds)("Mapped %s region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s)", is_static() ? "static " : "dynamic",
@@ -1925,7 +1930,7 @@ MapArchiveResult FileMapInfo::map_region(int i, intx addr_delta, char* mapped_ba
     // space (Posix). See also comment in MetaspaceShared::map_archives().
     char* base = map_memory(_fd, _full_path, r->file_offset(),
                             requested_addr, size, r->read_only(),
-                            r->allow_exec(), mtClassShared);
+                            r->allow_exec(), /* mtClassShared */ mtClass);
     if (base != requested_addr) {
       log_info(cds)("Unable to map %s shared space at " INTPTR_FORMAT,
                     shared_region_name[i], p2i(requested_addr));
@@ -1944,7 +1949,8 @@ MapArchiveResult FileMapInfo::map_region(int i, intx addr_delta, char* mapped_ba
   if (rs.is_reserved()) {
     char* mapped_base = r->mapped_base();
     assert(rs.base() <= mapped_base && mapped_base + size <= rs.end(),
-           PTR_FORMAT " <= " PTR_FORMAT " < " PTR_FORMAT " <= " PTR_FORMAT,
+           "region %d, addr_delta: %zd: " PTR_FORMAT " <= " PTR_FORMAT " < " PTR_FORMAT " <= " PTR_FORMAT,
+           i, addr_delta,
            p2i(rs.base()), p2i(mapped_base), p2i(mapped_base + size), p2i(rs.end()));
     r->set_in_reserved_space(rs.is_reserved());
   }

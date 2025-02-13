@@ -115,10 +115,11 @@ public:
 };
 
 class SharedPathTable {
+  uintptr_t _magic;
   Array<SharedClassPathEntry*>* _entries;
 public:
-  SharedPathTable() : _entries(nullptr) {}
-  SharedPathTable(Array<SharedClassPathEntry*>* entries) : _entries(entries) {}
+  SharedPathTable() : _magic(0x18921892), _entries(nullptr) {}
+  SharedPathTable(Array<SharedClassPathEntry*>* entries) : _magic(0x18921892), _entries(entries) {}
 
   void dumptime_init(ClassLoaderData* loader_data, TRAPS);
   void metaspace_pointers_do(MetaspaceClosure* it);
