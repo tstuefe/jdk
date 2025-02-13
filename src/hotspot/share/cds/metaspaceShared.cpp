@@ -1238,13 +1238,13 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
 
   ReservedSpace total_space_rs, archive_space_rs, class_space_rs;
   MapArchiveResult result = MAP_ARCHIVE_OTHER_FAILURE;
-  char* mapped_base_address = reserve_address_space_for_archives(static_mapinfo,
-                                                                 dynamic_mapinfo,
-                                                                 use_requested_addr,
-                                                                 total_space_rs,
-                                                                 archive_space_rs,
-                                                                 class_space_rs);
-  if (mapped_base_address == nullptr) {
+  const bool mapping_ok = reserve_address_space_for_archives(static_mapinfo,
+                                                           dynamic_mapinfo,
+                                                           use_requested_addr,
+                                                           total_space_rs,
+                                                           archive_space_rs,
+                                                           class_space_rs);
+  if (!mapping_ok) {
     result = MAP_ARCHIVE_MMAP_FAILURE;
     log_debug(cds)("Failed to reserve spaces (use_requested_addr=%u)", (unsigned)use_requested_addr);
   } else {
@@ -1299,9 +1299,9 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
         archive_space_rs = {};
       }
     }
-    MapArchiveResult static_result = map_archive(static_mapinfo, mapped_base_address, archive_space_rs);
+    MapArchiveResult static_result = map_archive(static_mapinfo, archive_space_rs.base(), archive_space_rs);
     MapArchiveResult dynamic_result = (static_result == MAP_ARCHIVE_SUCCESS) ?
-                                     map_archive(dynamic_mapinfo, mapped_base_address, archive_space_rs) : MAP_ARCHIVE_OTHER_FAILURE;
+                                     map_archive(dynamic_mapinfo, archive_space_rs.base(), archive_space_rs) : MAP_ARCHIVE_OTHER_FAILURE;
 
     DEBUG_ONLY(if (ArchiveRelocationMode == 1 && use_requested_addr) {
       // This is for simulating mmap failures at the requested address. In
@@ -1340,7 +1340,7 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
   }
 
   if (result == MAP_ARCHIVE_SUCCESS) {
-    SharedBaseAddress = (size_t)mapped_base_address;
+    SharedBaseAddress = (size_t)archive_space_rs.base();
 #ifdef _LP64
         if (Metaspace::using_class_space()) {
           // Set up ccs in metaspace.
@@ -1358,11 +1358,9 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
             //
             // In order for those IDs to still be valid, we need to dictate base and shift: base should be the
             // mapping start, shift the shift used at archive generation time.
-            address precomputed_narrow_klass_base = cds_base - ArchiveBuilder::precomputed_narrow_klass_base_address_offset();
-            const int precomputed_narrow_klass_shift = ArchiveBuilder::precomputed_narrow_klass_shift();
             CompressedKlassPointers::initialize_for_given_encoding(
-              cds_base, ccs_end - cds_base, // Klass range
-              precomputed_narrow_klass_base, precomputed_narrow_klass_shift // precomputed encoding, see ArchiveBuilder
+                (address)total_space_rs.base(), total_space_rs.size(), // Klass range
+                (address)total_space_rs.base(), ArchiveBuilder::precomputed_narrow_klass_shift() // encoding used at dumptime, see ArchiveBuilder
             );
           } else {
             // Let JVM freely chose encoding base and shift
@@ -1386,6 +1384,11 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
   return result;
 }
 
+static size_t combined_size(FileMapInfo* static_mapinfo, FileMapInfo* dynamic_mapinfo) {
+  size_t s = (dynamic_mapinfo != nullptr) ? dynamic_mapinfo->mapping_end_offset() : static_mapinfo->mapping_end_offset();
+  s = align_up(s, MetaspaceShared::core_region_alignment());
+  return s;
+}
 
 // This will reserve two address spaces suitable to house Klass structures, one
 //  for the cds archives (static archive and optionally dynamic archive) and
@@ -1443,46 +1446,42 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
 //      archive space, close enough such that narrow class pointer encoding
 //      covers both spaces.
 //      If UseCompressedClassPointers=0, class_space_rs remains unreserved.
-// - On error: null is returned and the spaces remain unreserved.
-char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_mapinfo,
+// - On error: false is returned and the spaces remain unreserved.
+bool MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_mapinfo,
                                                           FileMapInfo* dynamic_mapinfo,
                                                           bool use_archive_base_addr,
                                                           ReservedSpace& total_space_rs,
                                                           ReservedSpace& archive_space_rs,
                                                           ReservedSpace& class_space_rs) {
 
-  address const requested_archive_base_address = (address) (use_archive_base_addr ? static_mapinfo->requested_base_address() : nullptr);
-  const size_t protzone_size = UseCompressedClassPointers ? MetaspaceShared::nKlass_prot_zone_size() : 0;
-
-  address const base_address = (address) (use_archive_base_addr ? static_mapinfo->requested_base_address() : nullptr);
+  address const requested_archive_base = (address) (use_archive_base_addr ? static_mapinfo->requested_base_address() : nullptr);
   const size_t archive_space_alignment = core_region_alignment();
 
   // Size and requested location of the archive_space_rs (for both static and dynamic archives)
   assert(static_mapinfo->mapping_base_offset() == 0, "Must be");
-  size_t archive_end_offset  = (dynamic_mapinfo == nullptr) ? static_mapinfo->mapping_end_offset() : dynamic_mapinfo->mapping_end_offset();
-  size_t archive_space_size = align_up(archive_end_offset, archive_space_alignment);
+  size_t archive_space_size = combined_size(static_mapinfo, dynamic_mapinfo);
 
   if (!Metaspace::using_class_space()) {
     // Get the simple case out of the way first:
     // no compressed class space, simple allocation.
 
     // When running without class space, requested archive base should be aligned to cds core alignment.
-    assert(is_aligned(base_address, archive_space_alignment),
+    assert(is_aligned(requested_archive_base, archive_space_alignment),
              "Archive base address unaligned: " PTR_FORMAT ", needs alignment: %zu.",
-             p2i(base_address), archive_space_alignment);
+             p2i(requested_archive_base), archive_space_alignment);
 
-    archive_space_rs = MemoryReserver::reserve((char*)base_address,
+    archive_space_rs = MemoryReserver::reserve((char*)requested_archive_base,
                                                archive_space_size,
                                                archive_space_alignment,
                                                os::vm_page_size());
     if (archive_space_rs.is_reserved()) {
-      assert(base_address == nullptr ||
-             (address)archive_space_rs.base() == base_address, "Sanity");
+      assert(requested_archive_base == nullptr ||
+             (address)archive_space_rs.base() == requested_archive_base, "Sanity");
       // Register archive space with NMT.
       MemTracker::record_virtual_memory_tag(archive_space_rs.base(), mtClassShared);
-      return archive_space_rs.base();
+      return true;
     }
-    return nullptr;
+    return false;
   }
 
 #ifdef _LP64
@@ -1491,73 +1490,84 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
   //  with narrow class pointers.
   // We reserve the whole range spanning both spaces, then split that range up.
 
+  // Calculate all relevant offsets into the Klass encoding range:
+
+  // Protzone
+  constexpr size_t protzone_begin_offset = 0;
+  const size_t protzone_size = MetaspaceShared::nKlass_prot_zone_size();
+  const size_t protzone_end_offset = protzone_size;
+
+  // Archive
+  const size_t archive_begin_offset = protzone_size;
+  const size_t archive_end_offset = archive_begin_offset + archive_space_size;
+
+  // Class space
+  // We may need to reduce class space size if it would not fit into whatever is left following the archive
   const size_t class_space_alignment = Metaspace::reserve_alignment();
+  const size_t class_space_begin_offset = align_up(archive_end_offset, class_space_alignment);
+  size_t class_space_size = CompressedClassSpaceSize;
+  {
+    constexpr size_t max_encoding_range_size = 4 * G;
+    const size_t space_left_for_class_space = max_encoding_range_size - class_space_begin_offset;
+    guarantee(space_left_for_class_space >= class_space_alignment, "Archive too large?");
+    if (space_left_for_class_space < class_space_size) {
+      class_space_size = align_down(space_left_for_class_space, class_space_alignment);
+      log_info(metaspace)("CDS initialization: reducing class space size from %zu to %zu",
+                          CompressedClassSpaceSize, class_space_size);
+      FLAG_SET_ERGO(CompressedClassSpaceSize, class_space_size);
+    }
+  }
+  const size_t class_space_end_offset = class_space_begin_offset + class_space_size;
+
+  // Calculate the total mapping base
+  address const encoding_base = requested_archive_base == nullptr ? nullptr : requested_archive_base - protzone_size;
 
   // When running with class space, requested archive base must satisfy both cds core alignment
   // and class space alignment.
   const size_t base_address_alignment = MAX2(class_space_alignment, archive_space_alignment);
-  assert(is_aligned(base_address, base_address_alignment),
-           "Archive base address unaligned: " PTR_FORMAT ", needs alignment: %zu.",
-           p2i(base_address), base_address_alignment);
+  assert(is_aligned(encoding_base, base_address_alignment),
+           "Encoding base address unaligned: " PTR_FORMAT ", needs alignment: %zu.",
+           p2i(encoding_base), base_address_alignment);
 
-  size_t class_space_size = CompressedClassSpaceSize;
-  assert(CompressedClassSpaceSize > 0 &&
-         is_aligned(CompressedClassSpaceSize, class_space_alignment),
-         "CompressedClassSpaceSize malformed: %zu", CompressedClassSpaceSize);
-
-  const size_t ccs_begin_offset = align_up(archive_space_size, class_space_alignment);
-  const size_t gap_size = ccs_begin_offset - archive_space_size;
-
-  // Reduce class space size if it would not fit into the Klass encoding range
-  constexpr size_t max_encoding_range_size = 4 * G;
-  guarantee(archive_space_size < max_encoding_range_size - class_space_alignment, "Archive too large");
-  if ((archive_space_size + gap_size + class_space_size) > max_encoding_range_size) {
-    class_space_size = align_down(max_encoding_range_size - archive_space_size - gap_size, class_space_alignment);
-    log_info(metaspace)("CDS initialization: reducing class space size from %zu to %zu",
-        CompressedClassSpaceSize, class_space_size);
-    FLAG_SET_ERGO(CompressedClassSpaceSize, class_space_size);
-  }
-
-  const size_t total_range_size =
-      archive_space_size + gap_size + class_space_size;
+  const size_t total_range_size = class_space_end_offset;
 
   // Test that class space base address plus shift can be decoded by aarch64, when restored.
   const int precomputed_narrow_klass_shift = ArchiveBuilder::precomputed_narrow_klass_shift();
-  if (!CompressedKlassPointers::check_klass_decode_mode(base_address, precomputed_narrow_klass_shift,
+  if (!CompressedKlassPointers::check_klass_decode_mode(encoding_base, precomputed_narrow_klass_shift,
                                                         total_range_size)) {
     log_info(cds)("CDS initialization: Cannot use SharedBaseAddress " PTR_FORMAT " with precomputed shift %d.",
-                  p2i(base_address), precomputed_narrow_klass_shift);
+                  p2i(encoding_base), precomputed_narrow_klass_shift);
     use_archive_base_addr = false;
   }
 
-  assert(total_range_size > ccs_begin_offset, "must be");
   if (use_windows_memory_mapping() && use_archive_base_addr) {
-    if (base_address != nullptr) {
+    if (encoding_base != nullptr) {
       // On Windows, we cannot safely split a reserved memory space into two (see JDK-8255917).
       // Hence, we optimistically reserve archive space and class space side-by-side. We only
       // do this for use_archive_base_addr=true since for use_archive_base_addr=false case
       // caller will not split the combined space for mapping, instead read the archive data
       // via sequential file IO.
-      address ccs_base = base_address + archive_space_size + gap_size;
-      archive_space_rs = MemoryReserver::reserve((char*)base_address,
-                                                 archive_space_size,
-                                                 archive_space_alignment,
-                                                 os::vm_page_size());
-      class_space_rs   = MemoryReserver::reserve((char*)ccs_base,
-                                                 class_space_size,
-                                                 class_space_alignment,
-                                                 os::vm_page_size());
+      guarantee(0, "TODO");
+//      address ccs_base = base_address + archive_space_size + gap_size;
+//      archive_space_rs = MemoryReserver::reserve((char*)base_address,
+//                                                 archive_space_size,
+//                                                 archive_space_alignment,
+//                                                 os::vm_page_size());
+//      class_space_rs   = MemoryReserver::reserve((char*)ccs_base,
+//                                                 class_space_size,
+//                                                 class_space_alignment,
+//                                                 os::vm_page_size());
     }
     if (!archive_space_rs.is_reserved() || !class_space_rs.is_reserved()) {
       release_reserved_spaces(total_space_rs, archive_space_rs, class_space_rs);
-      return nullptr;
+      return false;
     }
     // NMT: fix up the space tags
     MemTracker::record_virtual_memory_tag(archive_space_rs.base(), mtClassShared);
     MemTracker::record_virtual_memory_tag(class_space_rs.base(), mtClass);
   } else {
-    if (use_archive_base_addr && base_address != nullptr) {
-      total_space_rs = MemoryReserver::reserve((char*) base_address,
+    if (use_archive_base_addr && encoding_base != nullptr) {
+      total_space_rs = MemoryReserver::reserve((char*) encoding_base,
                                                total_range_size,
                                                base_address_alignment,
                                                os::vm_page_size());
@@ -1571,34 +1581,32 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
     }
 
     if (!total_space_rs.is_reserved()) {
-      return nullptr;
+      return false;
     }
 
     // Paranoid checks:
-    assert(!use_archive_base_addr || (address)total_space_rs.base() == base_address,
-           "Sanity (" PTR_FORMAT " vs " PTR_FORMAT ")", p2i(base_address), p2i(total_space_rs.base()));
+    assert(!use_archive_base_addr || (address)total_space_rs.base() == encoding_base,
+           "Sanity (" PTR_FORMAT " vs " PTR_FORMAT ")", p2i(encoding_base), p2i(total_space_rs.base()));
     assert(is_aligned(total_space_rs.base(), base_address_alignment), "Sanity");
     assert(total_space_rs.size() == total_range_size, "Sanity");
 
     // Now split up the space into ccs and cds archive. For simplicity, just leave
     //  the gap reserved at the end of the archive space. Do not do real splitting.
-    archive_space_rs = total_space_rs.first_part(ccs_begin_offset,
-                                                 (size_t)archive_space_alignment);
-    class_space_rs = total_space_rs.last_part(ccs_begin_offset);
-    MemTracker::record_virtual_memory_split_reserved(total_space_rs.base(), total_space_rs.size(),
-                                                     ccs_begin_offset, mtClassShared, mtClass);
+    archive_space_rs = total_space_rs.partition(archive_begin_offset, archive_space_size);
+    class_space_rs = total_space_rs.partition(class_space_begin_offset, class_space_size);
+//    MemTracker::record_virtual_memory_split_reserved(total_space_rs.base(), total_space_rs.size(),
+//                                                     ccs_begin_offset, mtClassShared, mtClass);
   }
   assert(is_aligned(archive_space_rs.base(), archive_space_alignment), "Sanity");
   assert(is_aligned(archive_space_rs.size(), archive_space_alignment), "Sanity");
   assert(is_aligned(class_space_rs.base(), class_space_alignment), "Sanity");
   assert(is_aligned(class_space_rs.size(), class_space_alignment), "Sanity");
 
-
-  return archive_space_rs.base();
+  return true;
 
 #else
   ShouldNotReachHere();
-  return nullptr;
+  return false;
 #endif
 
 }

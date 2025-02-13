@@ -498,7 +498,6 @@ public:
   // TinyClassPointer Mode:
   //    We use the highest possible shift value to maximize the encoding range size.
   static int precomputed_narrow_klass_shift();
-  static size_t precomputed_narrow_klass_base_address_offset();
 #endif // _LP64
 
 };

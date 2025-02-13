@@ -185,12 +185,12 @@ private:
   // use_requested_addr: If true (default), attempt to map at the address the
   static MapArchiveResult map_archives(FileMapInfo* static_mapinfo, FileMapInfo* dynamic_mapinfo,
                                        bool use_requested_addr);
-  static char* reserve_address_space_for_archives(FileMapInfo* static_mapinfo,
-                                                  FileMapInfo* dynamic_mapinfo,
-                                                  bool use_archive_base_addr,
-                                                  ReservedSpace& total_space_rs,
-                                                  ReservedSpace& archive_space_rs,
-                                                  ReservedSpace& class_space_rs);
+  static bool reserve_address_space_for_archives(FileMapInfo* static_mapinfo,
+                                                 FileMapInfo* dynamic_mapinfo,
+                                                 bool use_archive_base_addr,
+                                                 ReservedSpace& total_space_rs,
+                                                 ReservedSpace& archive_space_rs,
+                                                 ReservedSpace& class_space_rs);
  static void release_reserved_spaces(ReservedSpace& total_space_rs,
                                      ReservedSpace& archive_space_rs,
                                      ReservedSpace& class_space_rs);

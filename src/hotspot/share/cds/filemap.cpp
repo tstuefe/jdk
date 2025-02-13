@@ -2166,7 +2166,7 @@ bool FileMapInfo::can_use_heap_region() {
   // ArchiveBuilder::precomputed_narrow_klass_shift. We enforce this encoding at runtime (see
   // CompressedKlassPointers::initialize_for_given_encoding()). Therefore, the following assertions must
   // hold:
-  address archive_narrow_klass_base = (address)header()->mapped_base_address();
+  address archive_narrow_klass_base = (address)header()->mapped_base_address() - MetaspaceShared::nKlass_prot_zone_size();
   const int archive_narrow_klass_pointer_bits = header()->narrow_klass_pointer_bits();
   const int archive_narrow_klass_shift = header()->narrow_klass_shift();
 
