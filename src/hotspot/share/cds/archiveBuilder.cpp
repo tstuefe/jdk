@@ -793,6 +793,7 @@ void ArchiveBuilder::make_klasses_shareable() {
       Klass* requested_k = to_requested(k);
       address narrow_klass_base = _requested_static_archive_bottom; // runtime encoding base == runtime mapping start
       const int narrow_klass_shift = precomputed_narrow_klass_shift();
+guarantee(0, "fixme");
       narrowKlass nk = CompressedKlassPointers::encode_not_null_without_asserts(requested_k, narrow_klass_base, narrow_klass_shift);
       k->set_prototype_header(markWord::prototype().set_narrow_klass(nk));
     }
@@ -974,7 +975,7 @@ narrowKlass ArchiveBuilder::get_requested_narrow_klass(Klass* k) {
   const size_t klass_alignment = MAX2(SharedSpaceObjectAlignment, (size_t)nth_bit(narrow_klass_shift));
   assert(is_aligned(k, klass_alignment), "Klass " PTR_FORMAT " misaligned.", p2i(k));
 #endif
-  address narrow_klass_base = _requested_static_archive_bottom; // runtime encoding base == runtime mapping start
+  address narrow_klass_base = _requested_static_archive_bottom - precomputed_narrow_klass_base_address_offset(); // runtime encoding base == runtime mapping start
   // Note: use the "raw" version of encode that takes explicit narrow klass base and shift. Don't use any
   // of the variants that do sanity checks, nor any of those that use the current - dump - JVM's encoding setting.
   return CompressedKlassPointers::encode_not_null_without_asserts(requested_k, narrow_klass_base, narrow_klass_shift);
@@ -1070,6 +1071,10 @@ int ArchiveBuilder::precomputed_narrow_klass_shift() {
   assert(UseCompressedClassPointers, "Only needed for compressed class pointers");
   return UseCompactObjectHeaders ?  CompressedKlassPointers::max_shift() : 0;
 }
+size_t ArchiveBuilder::precomputed_narrow_klass_base_address_offset() {
+  return MetaspaceShared::nKlass_prot_zone_size();
+}
+
 #endif // _LP64
 
 void ArchiveBuilder::relocate_to_requested() {

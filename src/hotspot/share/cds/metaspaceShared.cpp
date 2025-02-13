@@ -145,6 +145,10 @@ size_t MetaspaceShared::core_region_alignment() {
   return os::cds_core_region_alignment();
 }
 
+size_t MetaspaceShared::nKlass_prot_zone_size() {
+  return UseNewCode ? (16 * M) : 0;
+}
+
 static bool shared_base_valid(char* shared_base) {
   // We check user input for SharedBaseAddress at dump time.
 
@@ -1354,7 +1358,7 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
             //
             // In order for those IDs to still be valid, we need to dictate base and shift: base should be the
             // mapping start, shift the shift used at archive generation time.
-            address precomputed_narrow_klass_base = cds_base;
+            address precomputed_narrow_klass_base = cds_base - ArchiveBuilder::precomputed_narrow_klass_base_address_offset();
             const int precomputed_narrow_klass_shift = ArchiveBuilder::precomputed_narrow_klass_shift();
             CompressedKlassPointers::initialize_for_given_encoding(
               cds_base, ccs_end - cds_base, // Klass range
@@ -1446,6 +1450,9 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
                                                           ReservedSpace& total_space_rs,
                                                           ReservedSpace& archive_space_rs,
                                                           ReservedSpace& class_space_rs) {
+
+  address const requested_archive_base_address = (address) (use_archive_base_addr ? static_mapinfo->requested_base_address() : nullptr);
+  const size_t protzone_size = UseCompressedClassPointers ? MetaspaceShared::nKlass_prot_zone_size() : 0;
 
   address const base_address = (address) (use_archive_base_addr ? static_mapinfo->requested_base_address() : nullptr);
   const size_t archive_space_alignment = core_region_alignment();
