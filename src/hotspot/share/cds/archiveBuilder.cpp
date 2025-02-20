@@ -371,7 +371,7 @@ address ArchiveBuilder::reserve_buffer() {
   if (CDSConfig::is_dumping_static_archive()) {
     // We don't want any valid object to be at the very bottom of the archive.
     // See ArchivePtrMarker::mark_pointer().
-    _pz_region.allocate(16);
+    _pz_region.allocate(MetaspaceShared::protection_zone_size());
     start_dump_region(&_rw_region);
   }
 

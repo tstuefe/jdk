@@ -145,6 +145,10 @@ size_t MetaspaceShared::core_region_alignment() {
   return os::cds_core_region_alignment();
 }
 
+size_t MetaspaceShared::protection_zone_size() {
+  return os::cds_core_region_alignment();
+}
+
 static bool shared_base_valid(char* shared_base) {
   // We check user input for SharedBaseAddress at dump time.
 
