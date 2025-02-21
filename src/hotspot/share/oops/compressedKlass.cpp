@@ -163,11 +163,6 @@ void CompressedKlassPointers::initialize_for_given_encoding(address addr, size_t
     vm_exit_during_initialization(ss.base());
   }
 
-  // Note: While it would be technically valid for the encoding base to precede the start of the Klass range,
-  // we never do this here. This is used at CDS runtime to re-instate the scheme used to precompute the
-  // narrow Klass IDs in the archive, and the requested base should point to the start of the Klass range.
-  assert(requested_base == addr, "Invalid requested base");
-
   // Remember Klass range:
   _klass_range_start = addr;
   _klass_range_end = addr + len;
