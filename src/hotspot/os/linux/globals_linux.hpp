@@ -92,6 +92,17 @@
   product(bool, PrintMemoryMapAtExit, false, DIAGNOSTIC,                \
           "Print an annotated memory map at exit")                      \
                                                                         \
+                                                                        \
+  product(bool, FakeNUMA, false, DIAGNOSTIC,                            \
+          "Fake NUMA behavior.")                                        \
+                                                                        \
+  product(intx, FakeNUMANodes, 8, DIAGNOSTIC,                           \
+          "If FakeNUMA, number of fake NUMA nodes the process sees.")   \
+                                                                        \
+  product(bool, FakeNUMAStressMigrations, false, DIAGNOSTIC,            \
+          "If FakeNUMA, we stress migrations of tasks to different nodes.") \
+
+ // end of RUNTIME_OS_FLAGS
 // end of RUNTIME_OS_FLAGS
 
 //

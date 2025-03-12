@@ -3068,6 +3068,9 @@ size_t os::pd_pretouch_memory(void* first, void* last, size_t page_size) {
 }
 
 void os::numa_make_global(char *addr, size_t bytes) {
+  if (FakeNUMA) {
+    return;
+  }
   Linux::numa_interleave_memory(addr, bytes);
 }
 
@@ -3076,6 +3079,9 @@ void os::numa_make_global(char *addr, size_t bytes) {
 #define USE_MPOL_PREFERRED 0
 
 void os::numa_make_local(char *addr, size_t bytes, int lgrp_hint) {
+  if (FakeNUMA) {
+    return;
+  }
   // To make NUMA and large pages more robust when both enabled, we need to ease
   // the requirements on where the memory should be allocated. MPOL_BIND is the
   // default policy and it will force memory to be allocated on the specified
@@ -3090,15 +3096,27 @@ void os::numa_make_local(char *addr, size_t bytes, int lgrp_hint) {
 bool os::numa_topology_changed() { return false; }
 
 size_t os::numa_get_groups_num() {
+  if (FakeNUMA) {
+    return FakeNUMANodes;
+  }
   // Return just the number of nodes in which it's possible to allocate memory
   // (in numa terminology, configured nodes).
   return Linux::numa_num_configured_nodes();
 }
 
-int os::numa_get_group_id() {
-  int cpu_id = Linux::sched_getcpu();
+static int numa_get_group_id_0() {
+  if (FakeNUMA) {
+    if (FakeNUMAStressMigrations) {
+      static unsigned last = 31;
+      last = os::next_random(last);
+      return (int)(last % FakeNUMANodes);
+    } else {
+      return (((unsigned) os::current_thread_id()) % FakeNUMANodes);
+    }
+  }
+  int cpu_id = os::Linux::sched_getcpu();
   if (cpu_id != -1) {
-    int lgrp_id = Linux::get_node_by_cpu(cpu_id);
+    int lgrp_id = os::Linux::get_node_by_cpu(cpu_id);
     if (lgrp_id != -1) {
       return lgrp_id;
     }
@@ -3106,7 +3124,16 @@ int os::numa_get_group_id() {
   return 0;
 }
 
+int os::numa_get_group_id() {
+  return numa_get_group_id_0();
+}
+
 int os::numa_get_group_id_for_address(const void* address) {
+  if (FakeNUMA) {
+    const int log_64M = exact_log2(64 * M);
+    uintptr_t ai = (uintptr_t)address >> log_64M;
+    return (int)ai % FakeNUMANodes;
+  }
   void** pages = const_cast<void**>(&address);
   int id = -1;
 
@@ -3120,11 +3147,18 @@ int os::numa_get_group_id_for_address(const void* address) {
 }
 
 bool os::numa_get_group_ids_for_range(const void** addresses, int* lgrp_ids, size_t count) {
+  if (FakeNUMA) {
+    ShouldNotReachHere(); // not implemented
+    return false;
+  }
   void** pages = const_cast<void**>(addresses);
   return os::Linux::numa_move_pages(0, count, pages, nullptr, lgrp_ids, 0) == 0;
 }
 
 int os::Linux::get_existing_num_nodes() {
+  if (FakeNUMA) {
+    return FakeNUMANodes;
+  }
   int node;
   int highest_node_number = Linux::numa_max_node();
   int num_nodes = 0;
@@ -3139,6 +3173,14 @@ int os::Linux::get_existing_num_nodes() {
 }
 
 size_t os::numa_get_leaf_groups(uint *ids, size_t size) {
+
+  if (FakeNUMA) {
+    for (int node = 0; node < FakeNUMANodes; node++) {
+      ids[node] = node;
+    }
+    return FakeNUMANodes;
+  }
+
   int highest_node_number = Linux::numa_max_node();
   size_t i = 0;
 
@@ -4680,6 +4722,12 @@ jint os::init_2(void) {
 
   if (UseNUMA || UseNUMAInterleaving) {
     Linux::numa_init();
+  }
+
+  if (FakeNUMA) {
+    assert(is_power_of_2(FakeNUMANodes) && FakeNUMANodes > 0, "FakeNUMANodes invalid");
+    UseNUMA = true;
+    UseNUMAInterleaving = true;
   }
 
   if (MaxFDLimit) {
