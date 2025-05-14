@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@
 #include "utilities/globalDefinitions.hpp"
 
 class G1CodeRootSetHashTable;
-class HeapRegion;
+class G1HeapRegion;
 class nmethod;
 
 // Implements storage for a set of code roots.
@@ -44,15 +44,16 @@ class G1CodeRootSet {
 
   void add(nmethod* method);
   bool remove(nmethod* method);
+  void bulk_remove();
   bool contains(nmethod* method);
   void clear();
 
   // Prepare for MT iteration. Must be called before nmethods_do.
   void reset_table_scanner();
-  void nmethods_do(CodeBlobClosure* blk) const;
+  void nmethods_do(NMethodClosure* blk) const;
 
   // Remove all nmethods which no longer contain pointers into our "owner" region.
-  void clean(HeapRegion* owner);
+  void clean(G1HeapRegion* owner);
 
   bool is_empty() { return length() == 0;}
 

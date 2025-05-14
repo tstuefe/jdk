@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2016, 2023, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2016 SAP SE. All rights reserved.
+ * Copyright (c) 2016, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2024 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -56,11 +56,11 @@ inline void frame::setup() {
   assert(_on_heap || (is_aligned(_sp, alignment_in_bytes) && is_aligned(_fp, alignment_in_bytes)),
          "invalid alignment sp:" PTR_FORMAT " unextended_sp:" PTR_FORMAT " fp:" PTR_FORMAT, p2i(_sp), p2i(_unextended_sp), p2i(_fp));
 
-  address original_pc = CompiledMethod::get_deopt_original_pc(this);
+  address original_pc = get_deopt_original_pc();
   if (original_pc != nullptr) {
     _pc = original_pc;
     _deopt_state = is_deoptimized;
-    assert(_cb == nullptr || _cb->as_compiled_method()->insts_contains_inclusive(_pc),
+    assert(_cb == nullptr || _cb->as_nmethod()->insts_contains_inclusive(_pc),
            "original PC must be in the main code section of the compiled method (or must be immediately following it)");
   } else {
     if (_cb == SharedRuntime::deopt_blob()) {
@@ -109,16 +109,19 @@ inline frame::z_ijava_state* frame::ijava_state() const {
   return state;
 }
 
-inline BasicObjectLock** frame::interpreter_frame_monitors_addr() const {
-  return (BasicObjectLock**) &(ijava_state()->monitors);
-}
-
 // The next two functions read and write z_ijava_state.monitors.
 inline BasicObjectLock* frame::interpreter_frame_monitors() const {
-  return *interpreter_frame_monitors_addr();
+  BasicObjectLock* result = (BasicObjectLock*) at_relative(_z_ijava_idx(monitors));
+  // make sure the pointer points inside the frame
+  assert(sp() <= (intptr_t*) result, "monitor end should be above the stack pointer");
+  assert((intptr_t*) result < fp(),  "monitor end should be strictly below the frame pointer: result: " INTPTR_FORMAT " fp: " INTPTR_FORMAT, p2i(result), p2i(fp()));
+  return result;
 }
+
 inline void frame::interpreter_frame_set_monitors(BasicObjectLock* monitors) {
-  *interpreter_frame_monitors_addr() = monitors;
+  assert(is_interpreted_frame(), "interpreted frame expected");
+  // set relativized monitors
+  ijava_state()->monitors = (intptr_t) ((intptr_t*)monitors - fp());
 }
 
 // Accessors
@@ -180,7 +183,8 @@ inline intptr_t* frame::link_or_null() const {
 }
 
 inline intptr_t* frame::interpreter_frame_locals() const {
-  return (intptr_t*) (ijava_state()->locals);
+  intptr_t n = *addr_at(_z_ijava_idx(locals));
+  return &fp()[n]; // return relativized locals
 }
 
 inline intptr_t* frame::interpreter_frame_bcp_addr() const {
@@ -202,11 +206,14 @@ inline intptr_t* frame::interpreter_frame_expression_stack() const {
 // Also begin is one past last monitor.
 
 inline intptr_t* frame::interpreter_frame_top_frame_sp() {
-  return (intptr_t*)ijava_state()->top_frame_sp;
+  intptr_t n = *addr_at(_z_ijava_idx(top_frame_sp));
+  return &fp()[n]; // return relativized locals
 }
 
 inline void frame::interpreter_frame_set_top_frame_sp(intptr_t* top_frame_sp) {
-  ijava_state()->top_frame_sp = (intptr_t) top_frame_sp;
+  assert(is_interpreted_frame(), "interpreted frame expected");
+  // set relativized top_frame_sp
+  ijava_state()->top_frame_sp = (intptr_t) (top_frame_sp - fp());
 }
 
 inline void frame::interpreter_frame_set_sender_sp(intptr_t* sender_sp) {
@@ -290,20 +297,6 @@ inline void frame::set_saved_oop_result(RegisterMap* map, oop obj) {
 
 inline intptr_t* frame::real_fp() const {
   return fp();
-}
-
-inline const ImmutableOopMap* frame::get_oop_map() const {
-  if (_cb == nullptr) return nullptr;
-  if (_cb->oop_maps() != nullptr) {
-    NativePostCallNop* nop = nativePostCallNop_at(_pc);
-    if (nop != nullptr && nop->displacement() != 0) {
-      int slot = ((nop->displacement() >> 24) & 0xff);
-      return _cb->oop_map_for_slot(slot, _pc);
-    }
-    const ImmutableOopMap* oop_map = OopMapSet::find_map(this);
-    return oop_map;
-  }
-  return nullptr;
 }
 
 inline int frame::compiled_frame_stack_argsize() const {

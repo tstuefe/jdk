@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@
  */
 
 import java.lang.foreign.Arena;
+import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 
@@ -135,6 +136,8 @@ public class TestScopedOperations {
         ScopedOperation.ofScope(a -> a.allocateFrom(ValueLayout.JAVA_FLOAT, new float[]{0}), "Arena::allocateFrom/float");
         ScopedOperation.ofScope(a -> a.allocateFrom(ValueLayout.JAVA_LONG, new long[]{0}), "Arena::allocateFrom/long");
         ScopedOperation.ofScope(a -> a.allocateFrom(ValueLayout.JAVA_DOUBLE, new double[]{0}), "Arena::allocateFrom/double");
+        var source = MemorySegment.ofArray(new byte[]{});
+        ScopedOperation.ofScope(a -> a.allocateFrom(ValueLayout.JAVA_INT, source, JAVA_BYTE, 0, 1), "Arena::allocateFrom/5arg");
     };
 
     @DataProvider(name = "scopedOperations")

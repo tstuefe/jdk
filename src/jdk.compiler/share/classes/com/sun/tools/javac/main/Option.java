@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -83,6 +83,10 @@ import static com.sun.tools.javac.main.Option.OptionKind.*;
  * {@code handleOption} then calls {@link #process process} providing a suitable
  * {@link OptionHelper} to provide access the compiler state.
  *
+ * <p>A subset of options is relevant to the source launcher implementation
+ * located in {@link com.sun.tools.javac.launcher} package. When an option is
+ * added, changed, or removed, also update the {@code RelevantJavacOptions} class
+ * in the launcher package accordingly.
  *
  * <p>Maintenance note: when adding new annotation processing related
  * options, the list of options regarded as requesting explicit
@@ -142,13 +146,7 @@ public enum Option {
         }
     },
 
-    // -nowarn is retained for command-line backward compatibility
-    NOWARN("-nowarn", "opt.nowarn", STANDARD, BASIC) {
-        @Override
-        public void process(OptionHelper helper, String option) {
-            helper.put("-Xlint:none", option);
-        }
-    },
+    NOWARN("-nowarn", "opt.nowarn", STANDARD, BASIC),
 
     VERBOSE("-verbose", "opt.verbose", STANDARD, BASIC),
 
@@ -376,6 +374,8 @@ public enum Option {
     },
 
     PREVIEW("--enable-preview", "opt.preview", STANDARD, BASIC),
+
+    DISABLE_LINE_DOC_COMMENTS("--disable-line-doc-comments", "opt.lineDocComments", EXTENDED, BASIC),
 
     PROFILE("-profile", "opt.arg.profile", "opt.profile", STANDARD, BASIC) {
         @Override
@@ -1081,6 +1081,10 @@ public enum Option {
         return kind;
     }
 
+    public boolean isInBasicOptionGroup() {
+        return group == BASIC;
+    }
+
     public ArgKind getArgKind() {
         return argKind;
     }
@@ -1145,6 +1149,7 @@ public enum Option {
      * @implNote The return value is the opposite of that used by {@link #process}.
      */
     public void handleOption(OptionHelper helper, String arg, Iterator<String> rest) throws InvalidValueException {
+        helper.initialize();
         if (hasArg()) {
             String option;
             String operand;
@@ -1198,6 +1203,7 @@ public enum Option {
      * @throws InvalidValueException if an error occurred
      */
     public void process(OptionHelper helper, String option, String arg) throws InvalidValueException {
+        helper.initialize();
         if (choices != null) {
             if (choiceKind == ChoiceKind.ONEOF) {
                 // some clients like to see just one of option+choice set

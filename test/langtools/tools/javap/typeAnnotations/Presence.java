@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,18 +23,13 @@
 
 import java.io.*;
 import java.lang.annotation.ElementType;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 
 /*
  * @test Presence
  * @bug 6843077
  * @summary test that all type annotations are present in the classfile
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  */
 
 public class Presence {
@@ -46,7 +41,7 @@ public class Presence {
         File javaFile = writeTestFile();
         File classFile = compileTestFile(javaFile);
 
-        ClassModel cm = Classfile.of().parse(classFile.toPath());
+        ClassModel cm = ClassFile.of().parse(classFile.toPath());
         test(cm);
         for (FieldModel fm : cm.fields()) {
             test(fm);
@@ -63,8 +58,8 @@ public class Presence {
     }
 
     void test(AttributedElement m) {
-        test(m, Attributes.RUNTIME_VISIBLE_TYPE_ANNOTATIONS);
-        test(m, Attributes.RUNTIME_INVISIBLE_TYPE_ANNOTATIONS);
+        test(m, Attributes.runtimeVisibleTypeAnnotations());
+        test(m, Attributes.runtimeInvisibleTypeAnnotations());
     }
 
     // test the result of AttributedElement.findAttribute according to expectations
@@ -84,7 +79,7 @@ public class Presence {
             }
         }
         if (m instanceof MethodModel) {
-            attr_instance = m.findAttribute(Attributes.CODE).orElse(null);
+            attr_instance = m.findAttribute(Attributes.code()).orElse(null);
             if(attr_instance!= null) {
                 CodeAttribute cAttr = (CodeAttribute)attr_instance;
                 attr_instance = cAttr.findAttribute(attr_name).orElse(null);

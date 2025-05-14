@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,18 +27,13 @@
  * @summary Stress test ldc to ensure HotSpot correctly manages oop maps
  * @library /java/lang/invoke/common
  * @build test.java.lang.invoke.lib.InstructionHelper
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  * @run testng CondyWithGarbageTest
  * @run testng/othervm -XX:+UnlockDiagnosticVMOptions -XX:UseBootstrapCallInfo=3 CondyWithGarbageTest
  */
 
 
-import jdk.internal.classfile.Classfile;
-import jdk.internal.classfile.CodeBuilder;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.CodeBuilder;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -70,10 +65,10 @@ public class CondyWithGarbageTest {
 
     static MethodHandle lcdStringBasher() throws Exception {
         ClassDesc cd = classDesc(L.lookupClass(), "$Code$String");
-        byte[] bytes = Classfile.of().build(cd, classBuilder -> classBuilder
+        byte[] bytes = ClassFile.of().build(cd, classBuilder -> classBuilder
                 .withVersion(55, 0)
                 .withSuperclass(ConstantDescs.CD_Object)
-                .withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, Classfile.ACC_PUBLIC,
+                .withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, ClassFile.ACC_PUBLIC,
                         methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .aload(0)
@@ -81,7 +76,7 @@ public class CondyWithGarbageTest {
                                                 ConstantDescs.MTD_void, false)
                                         .return_()))
                 .withMethod("m", MethodTypeDesc.of(ConstantDescs.CD_String),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> {
                                             codeBuilder
                                                     .new_(classDesc(StringBuilder.class))
@@ -149,10 +144,10 @@ public class CondyWithGarbageTest {
 
     static MethodHandle lcdStringArrayBasher() throws Exception {
         ClassDesc cd = classDesc(L.lookupClass(), "$Code$StringArray");
-        byte[] bytes = Classfile.of().build(cd, classBuilder -> classBuilder
+        byte[] bytes = ClassFile.of().build(cd, classBuilder -> classBuilder
                 .withVersion(55, 0)
                 .withSuperclass(ConstantDescs.CD_Object)
-                .withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, Classfile.ACC_PUBLIC,
+                .withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, ClassFile.ACC_PUBLIC,
                         methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .aload(0)
@@ -160,7 +155,7 @@ public class CondyWithGarbageTest {
                                                 ConstantDescs.MTD_void, false)
                                         .return_()))
                 .withMethod("m", MethodTypeDesc.of(classDesc(String.class)),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> {
                                             codeBuilder
                                                     .new_(classDesc(StringBuilder.class))

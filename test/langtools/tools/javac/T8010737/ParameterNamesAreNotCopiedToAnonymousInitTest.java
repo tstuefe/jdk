@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,13 +26,7 @@
  * @bug 8010737
  * @summary javac, known parameter's names should be copied to automatically
  * generated constructors for inner classes
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
- *          jdk.compiler/com.sun.tools.javac.api
+ * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.code
  *          jdk.compiler/com.sun.tools.javac.tree
  *          jdk.compiler/com.sun.tools.javac.util
@@ -66,7 +60,7 @@ import com.sun.tools.javac.util.Assert;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Names;
-import jdk.internal.classfile.*;
+import java.lang.classfile.*;
 
 public class ParameterNamesAreNotCopiedToAnonymousInitTest {
 
@@ -116,7 +110,7 @@ public class ParameterNamesAreNotCopiedToAnonymousInitTest {
     }
 
     void checkClassFile(final File cfile, int numberOfParams) throws Exception {
-        ClassModel classFile = Classfile.of().parse(cfile.toPath());
+        ClassModel classFile = ClassFile.of().parse(cfile.toPath());
         boolean methodFound = false;
         for (MethodModel method : classFile.methods()) {
             if (method.methodName().equalsString("<init>")) {
@@ -147,12 +141,6 @@ public class ParameterNamesAreNotCopiedToAnonymousInitTest {
                     Arrays.asList(new File(System.getProperty("test.src"),
                     this.getClass().getName() + ".java")));
             java.util.List<String> options = Arrays.asList(
-                "--add-exports", "java.base/jdk.internal.classfile=ALL-UNNAMED",
-                "--add-exports", "java.base/jdk.internal.classfile.attribute=ALL-UNNAMED",
-                "--add-exports", "java.base/jdk.internal.classfile.constantpool=ALL-UNNAMED",
-                "--add-exports", "java.base/jdk.internal.classfile.instruction=ALL-UNNAMED",
-                "--add-exports", "java.base/jdk.internal.classfile.components=ALL-UNNAMED",
-                "--add-exports", "java.base/jdk.internal.classfile.impl=ALL-UNNAMED",
                 "--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
                 "--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
                 "--add-exports", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",

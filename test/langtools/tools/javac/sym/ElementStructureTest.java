@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,7 +21,7 @@
  * questions.
  */
 
-/**
+/*
  * @test
  * @bug 8072480 8203814
  * @summary Check the platform classpath contains the correct elements.
@@ -31,12 +31,6 @@
  *          jdk.compiler/com.sun.tools.javac.main
  *          jdk.compiler/com.sun.tools.javac.platform
  *          jdk.compiler/com.sun.tools.javac.util
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  *          jdk.jdeps/com.sun.tools.javap
  * @build toolbox.ToolBox ElementStructureTest
  * @run main ElementStructureTest
@@ -98,7 +92,7 @@ import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
 
 import com.sun.source.util.JavacTask;
-import jdk.internal.classfile.Classfile;
+import java.lang.classfile.ClassFile;
 import com.sun.tools.javac.api.JavacTaskImpl;
 import com.sun.tools.javac.code.Symbol.CompletionFailure;
 import com.sun.tools.javac.platform.PlatformProvider;
@@ -289,7 +283,7 @@ public class ElementStructureTest {
                 }
                 JavaFileObject file = new ByteArrayJavaFileObject(data.toByteArray());
                 try (InputStream in = new ByteArrayInputStream(data.toByteArray())) {
-                    String name = Classfile.of().parse(in.readAllBytes()).thisClass().name().stringValue();
+                    String name = ClassFile.of().parse(in.readAllBytes()).thisClass().name().stringValue();
                     className2File.put(name, file);
                     file2ClassName.put(file, name);
                 } catch (IOException ex) {

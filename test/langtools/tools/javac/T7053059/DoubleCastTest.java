@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,23 +25,17 @@
  * @test
  * @bug 8015499
  * @summary javac, Gen is generating extra checkcast instructions in some corner cases
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
- *          jdk.compiler/com.sun.tools.javac.util
+ * @modules jdk.compiler/com.sun.tools.javac.util
  * @run main DoubleCastTest
  */
 
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.CodeAttribute;
-import jdk.internal.classfile.constantpool.ClassEntry;
-import jdk.internal.classfile.instruction.TypeCheckInstruction;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.CodeAttribute;
+import java.lang.classfile.constantpool.ClassEntry;
+import java.lang.classfile.instruction.TypeCheckInstruction;
 import com.sun.tools.javac.util.Assert;
 
 public class DoubleCastTest {
@@ -64,7 +58,7 @@ public class DoubleCastTest {
 
     public static void main(String... cmdline) throws Exception {
 
-        ClassModel cls = Classfile.of().parse(Objects.requireNonNull(DoubleCastTest.class.getResourceAsStream("DoubleCastTest$C.class")).readAllBytes());
+        ClassModel cls = ClassFile.of().parse(Objects.requireNonNull(DoubleCastTest.class.getResourceAsStream("DoubleCastTest$C.class")).readAllBytes());
         for (MethodModel m: cls.methods())
             check(m);
     }
@@ -72,7 +66,7 @@ public class DoubleCastTest {
     static void check(MethodModel m) throws Exception {
         boolean last_is_cast = false;
         ClassEntry last_ref = null;
-        CodeAttribute ea = m.findAttribute(Attributes.CODE).orElseThrow();
+        CodeAttribute ea = m.findAttribute(Attributes.code()).orElseThrow();
         for (int i = 0; i < ea.elementList().size(); ++i) {
             CodeElement ce = ea.elementList().get(i);
             if (ce instanceof TypeCheckInstruction ins && ins.opcode() == Opcode.CHECKCAST) {

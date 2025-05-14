@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,10 +30,10 @@
 #include "jfr/utilities/jfrTypes.hpp"
 
 class JavaThread;
-class JfrCheckpointWriter;
 class JfrChunkWriter;
 
 class JfrStackTraceRepository : public JfrCHeapObj {
+  friend class JfrDeprecatedEdge;
   friend class JfrRecorder;
   friend class JfrRecorderService;
   friend class JfrThreadSampleClosure;
@@ -51,11 +51,11 @@ class JfrStackTraceRepository : public JfrCHeapObj {
 
   JfrStackTraceRepository();
   static JfrStackTraceRepository& instance();
+  static JfrStackTraceRepository& leak_profiler_instance();
   static JfrStackTraceRepository* create();
   static void destroy();
   bool initialize();
 
-  bool is_modified() const;
   static size_t clear();
   static size_t clear(JfrStackTraceRepository& repo);
   size_t write(JfrChunkWriter& cw, bool clear);
@@ -63,6 +63,11 @@ class JfrStackTraceRepository : public JfrCHeapObj {
   static const JfrStackTrace* lookup_for_leak_profiler(traceid hash, traceid id);
   static void record_for_leak_profiler(JavaThread* thread, int skip = 0);
   static void clear_leak_profiler();
+
+  template <typename Callback>
+  static void iterate_leakprofiler(Callback& cb);
+
+  static traceid next_id();
 
   traceid add_trace(const JfrStackTrace& stacktrace);
   static traceid add(JfrStackTraceRepository& repo, const JfrStackTrace& stacktrace);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,19 +27,13 @@ import java.lang.annotation.RetentionPolicy;
 import java.net.URL;
 import java.util.List;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 
 /*
  * @test NoTargetAnnotations
  * @summary test that annotations with no Target meta type is emitted
  *          only once as declaration annotation
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  */
 public class NoTargetAnnotations extends ClassfileTestHelper {
 
@@ -69,14 +63,14 @@ public class NoTargetAnnotations extends ClassfileTestHelper {
         URL url = getClass().getResource(name);
         assert url != null;
         try (InputStream in = url.openStream()) {
-            return Classfile.of().parse(in.readAllBytes());
+            return ClassFile.of().parse(in.readAllBytes());
         }
     }
 
 
     void testDeclaration(AttributedElement m) {
-        testDecl(m, Attributes.RUNTIME_VISIBLE_ANNOTATIONS);
-        testDecl(m, Attributes.RUNTIME_INVISIBLE_ANNOTATIONS);
+        testDecl(m, Attributes.runtimeVisibleAnnotations());
+        testDecl(m, Attributes.runtimeInvisibleAnnotations());
     }
 
     // test the result of AttributedElement.findAttribute according to expectations

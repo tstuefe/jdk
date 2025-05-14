@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,11 +23,12 @@
 
 /*
  * @test
- * @summary Compile Classfile API snippets
+ * @summary Compile ClassFile API snippets
  * @run junit SnippetsTest
  */
 
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
@@ -40,8 +41,11 @@ public class SnippetsTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-        "src/java.base/share/classes/jdk/internal/classfile/snippet-files/PackageSnippets.java",
-        "src/java.base/share/classes/jdk/internal/classfile/components/snippet-files/PackageSnippets.java"})
+        "src/java.base/share/classes/java/lang/classfile/snippet-files/PackageSnippets.java",
+        "src/java.base/share/classes/java/lang/classfile/attribute/snippet-files/PackageSnippets.java",
+        "src/java.base/share/classes/java/lang/classfile/constantpool/snippet-files/PackageSnippets.java",
+        "src/java.base/share/classes/jdk/internal/classfile/components/snippet-files/PackageSnippets.java"
+    })
     void testSnippet(String source) throws Exception {
         var p = Paths.get(System.getProperty("test.src", ".")).toAbsolutePath();
         while ((p = p.getParent()) != null) {
@@ -52,12 +56,13 @@ public class SnippetsTest {
                     var compilationUnits = fileManager.getJavaFileObjectsFromFiles(List.of(src));
                     fileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                             List.of(Paths.get(System.getProperty("test.classes", ".")).toFile()));
-                    var task = compiler.getTask(null, fileManager, null, List.of(
-                            "--add-exports", "java.base/jdk.internal.classfile=ALL-UNNAMED",
-                            "--add-exports", "java.base/jdk.internal.classfile.attribute=ALL-UNNAMED",
-                            "--add-exports", "java.base/jdk.internal.classfile.components=ALL-UNNAMED",
-                            "--add-exports", "java.base/jdk.internal.classfile.constantpool=ALL-UNNAMED",
-                            "--add-exports", "java.base/jdk.internal.classfile.instruction=ALL-UNNAMED"),
+                    List<String> flags = List.of();
+                    if (source.contains("jdk/internal/classfile/components")) {
+                        flags = new ArrayList<>(flags);
+                        flags.add("--add-exports");
+                        flags.add("java.base/jdk.internal.classfile.components=ALL-UNNAMED");
+                    }
+                    var task = compiler.getTask(null, fileManager, null, flags,
                             null, compilationUnits);
                     if (task.call()) return;
                     throw new RuntimeException("Error compiling " + source);

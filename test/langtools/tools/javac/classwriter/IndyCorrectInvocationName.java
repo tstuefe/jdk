@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,12 +34,6 @@
  *          jdk.compiler/com.sun.tools.javac.main
  *          jdk.compiler/com.sun.tools.javac.tree
  *          jdk.compiler/com.sun.tools.javac.util
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  *          jdk.jdeps/com.sun.tools.javap
  * @build toolbox.JarTask toolbox.JavacTask toolbox.JavapTask toolbox.ToolBox
  * @run main IndyCorrectInvocationName
@@ -59,10 +53,10 @@ import com.sun.source.util.Plugin;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
-import jdk.internal.classfile.constantpool.*;
-import jdk.internal.classfile.instruction.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
+import java.lang.classfile.constantpool.*;
+import java.lang.classfile.instruction.*;
 
 import com.sun.tools.javac.api.BasicJavacTask;
 import com.sun.tools.javac.code.Symbol;
@@ -168,13 +162,13 @@ public class IndyCorrectInvocationName implements Plugin {
         }
 
         Path testClass = classes.resolve("Test.class");
-        ClassModel cf = Classfile.of().parse(testClass);
-        BootstrapMethodsAttribute bootAttr = cf.findAttribute(Attributes.BOOTSTRAP_METHODS).orElseThrow();
+        ClassModel cf = ClassFile.of().parse(testClass);
+        BootstrapMethodsAttribute bootAttr = cf.findAttribute(Attributes.bootstrapMethods()).orElseThrow();
         if (bootAttr.bootstrapMethodsSize() != 1) {
             throw new AssertionError("Incorrect number of bootstrap methods: " +
                                      bootAttr.bootstrapMethodsSize());
         }
-        CodeAttribute codeAttr = cf.methods().get(1).findAttribute(Attributes.CODE).orElseThrow();
+        CodeAttribute codeAttr = cf.methods().get(1).findAttribute(Attributes.code()).orElseThrow();
         Set<BootstrapMethodEntry> seenBootstraps = new HashSet<>();
         Set<NameAndTypeEntry> seenNameAndTypes = new HashSet<>();
         Set<String> seenNames = new HashSet<>();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,18 +25,13 @@
  * @test
  * @bug 7165659
  * @summary javac incorrectly sets strictfp access flag on inner-classes
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          jdk.compiler/com.sun.tools.javac.util
+ * @modules jdk.compiler/com.sun.tools.javac.util
  */
 
 import java.io.File;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 import com.sun.tools.javac.util.Assert;
 
 public class InnerClassAttrMustNotHaveStrictFPFlagTest {
@@ -51,11 +46,11 @@ public class InnerClassAttrMustNotHaveStrictFPFlagTest {
     }
 
     void analyzeClassFile(File path) throws Exception {
-        ClassModel classFile = Classfile.of().parse(path.toPath());
-        InnerClassesAttribute innerClasses = classFile.findAttribute(Attributes.INNER_CLASSES).orElse(null);
+        ClassModel classFile = ClassFile.of().parse(path.toPath());
+        InnerClassesAttribute innerClasses = classFile.findAttribute(Attributes.innerClasses()).orElse(null);
         assert innerClasses != null;
         for (InnerClassInfo classInfo : innerClasses.classes()) {
-            Assert.check(classInfo.flagsMask() != Classfile.ACC_STRICT,
+            Assert.check(classInfo.flagsMask() != ClassFile.ACC_STRICT,
                     "Inner classes attribute must not have the ACC_STRICT flag set");
         }
     }

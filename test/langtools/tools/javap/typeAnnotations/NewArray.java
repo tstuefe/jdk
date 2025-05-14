@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,18 +22,13 @@
  */
 
 import java.io.*;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 
 /*
  * @test NewArray
  * @bug 6843077
  * @summary Test type annotations on local array are in method's code attribute.
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  */
 
 public class NewArray {
@@ -45,7 +40,7 @@ public class NewArray {
         File javaFile = writeTestFile();
         File classFile = compileTestFile(javaFile);
 
-        ClassModel cm = Classfile.of().parse(classFile.toPath());
+        ClassModel cm = ClassFile.of().parse(classFile.toPath());
         for (MethodModel mm: cm.methods()) {
             test(mm);
         }
@@ -56,8 +51,8 @@ public class NewArray {
     }
 
     void test(MethodModel mm) {
-        test(mm, Attributes.RUNTIME_VISIBLE_TYPE_ANNOTATIONS);
-        test(mm, Attributes.RUNTIME_INVISIBLE_TYPE_ANNOTATIONS);
+        test(mm, Attributes.runtimeVisibleTypeAnnotations());
+        test(mm, Attributes.runtimeInvisibleTypeAnnotations());
     }
 
     // test the result of Attributes.getIndex according to expectations
@@ -66,7 +61,7 @@ public class NewArray {
         Attribute<T> attr_instance;
         CodeAttribute cAttr;
 
-        cAttr = mm.findAttribute(Attributes.CODE).orElse(null);
+        cAttr = mm.findAttribute(Attributes.code()).orElse(null);
         if (cAttr != null) {
             attr_instance = cAttr.findAttribute(attr_name).orElse(null);
             if (attr_instance != null) {

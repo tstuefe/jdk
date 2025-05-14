@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,18 +26,12 @@ import java.io.*;
 import java.net.URL;
 import java.util.List;
 
-import jdk.internal.classfile.*;
+import java.lang.classfile.*;
 
 /*
  * @test
  * @bug 6917130 8006775
  * @summary test that optimized away annotations are not emited to classfile
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  */
 
 public class DeadCode extends ClassfileTestHelper {

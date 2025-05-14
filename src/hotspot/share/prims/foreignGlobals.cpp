@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,7 +21,6 @@
  * questions.
  */
 
-#include "precompiled.hpp"
 #include "foreignGlobals.hpp"
 #include "classfile/javaClasses.hpp"
 #include "memory/resourceArea.hpp"
@@ -140,7 +139,7 @@ int ForeignGlobals::compute_out_arg_bytes(const GrowableArray<VMStorage>& out_re
 
 int ForeignGlobals::java_calling_convention(const BasicType* signature, int num_args, GrowableArray<VMStorage>& out_regs) {
   VMRegPair* vm_regs = NEW_RESOURCE_ARRAY(VMRegPair, num_args);
-  int slots = SharedRuntime::java_calling_convention(signature, vm_regs, num_args);
+  int slots = align_up(SharedRuntime::java_calling_convention(signature, vm_regs, num_args), 2);
   for (int i = 0; i < num_args; i++) {
     VMRegPair pair = vm_regs[i];
     // note, we ignore second here. Signature should consist of register-size values. So there should be

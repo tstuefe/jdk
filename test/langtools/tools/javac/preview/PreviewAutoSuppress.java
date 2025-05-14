@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,16 +28,10 @@
  * @modules
  *      jdk.compiler/com.sun.tools.javac.api
  *      jdk.compiler/com.sun.tools.javac.main
- *      java.base/jdk.internal.classfile
- *      java.base/jdk.internal.classfile.attribute
- *      java.base/jdk.internal.classfile.constantpool
- *      java.base/jdk.internal.classfile.instruction
- *      java.base/jdk.internal.classfile.components
- *      java.base/jdk.internal.classfile.impl
  * @build toolbox.ToolBox toolbox.JavacTask
  * @run main PreviewAutoSuppress
  */
-import jdk.internal.classfile.*;
+import java.lang.classfile.*;
 import java.io.InputStream;
 import java.nio.file.Files;
 import toolbox.JavacTask;
@@ -196,8 +190,8 @@ public class PreviewAutoSuppress extends TestRunner {
                 .getOutputLines(Task.OutputKind.DIRECT);
 
         expected =
-                List.of("Use.java:5:13: compiler.warn.is.preview: preview.api.Outer",
-                        "Use.java:7:35: compiler.warn.is.preview: preview.api.Outer",
+                List.of("Use.java:7:35: compiler.warn.is.preview: preview.api.Outer",
+                        "Use.java:5:13: compiler.warn.is.preview: preview.api.Outer",
                         "2 warnings");
 
         if (!log.equals(expected))
@@ -211,7 +205,7 @@ public class PreviewAutoSuppress extends TestRunner {
 
     private void checkPreviewClassfile(Path p, boolean preview) throws Exception {
         try (InputStream in = Files.newInputStream(p)) {
-            ClassModel cf = Classfile.of().parse(in.readAllBytes());
+            ClassModel cf = ClassFile.of().parse(in.readAllBytes());
             if (preview && cf.minorVersion() != 65535) {
                 throw new IllegalStateException("Expected preview class, but got: " + cf.minorVersion());
             } else if (!preview && cf.minorVersion() != 0) {

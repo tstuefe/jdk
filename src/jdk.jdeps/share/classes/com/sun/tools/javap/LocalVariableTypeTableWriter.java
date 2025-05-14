@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,11 +29,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import jdk.internal.classfile.Attributes;
-import jdk.internal.classfile.CodeModel;
-import jdk.internal.classfile.Instruction;
-import jdk.internal.classfile.Signature;
-import jdk.internal.classfile.attribute.LocalVariableTypeInfo;
+import java.lang.classfile.Attributes;
+import java.lang.classfile.CodeModel;
+import java.lang.classfile.Instruction;
+import java.lang.classfile.Signature;
+import java.lang.classfile.attribute.LocalVariableTypeInfo;
 
 /**
  * Annotate instructions with details about local variables.
@@ -80,7 +80,7 @@ public class LocalVariableTypeTableWriter extends  InstructionDetailWriter {
     public void reset(CodeModel attr) {
         codeAttr = attr;
         pcMap = new HashMap<>();
-        var lvt = attr.findAttribute(Attributes.LOCAL_VARIABLE_TYPE_TABLE);
+        var lvt = attr.findAttribute(Attributes.localVariableTypeTable());
 
         if (lvt.isEmpty())
             return;

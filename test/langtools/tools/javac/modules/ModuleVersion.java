@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,12 +27,6 @@
  * @library /tools/lib
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @build toolbox.ToolBox toolbox.JavacTask toolbox.ModuleBuilder ModuleTestBase
  * @run main ModuleVersion
  */
@@ -41,8 +35,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.ModuleAttribute;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.ModuleAttribute;
 import toolbox.JavacTask;
 import toolbox.Task.Expect;
 import toolbox.Task.OutputKind;
@@ -116,9 +110,9 @@ public class ModuleVersion extends ModuleTestBase {
     }
 
     private void checkModuleVersion(Path classfile, String version) throws IOException {
-        ClassModel cm = Classfile.of().parse(classfile);
+        ClassModel cm = ClassFile.of().parse(classfile);
 
-        ModuleAttribute moduleAttribute = cm.findAttribute(Attributes.MODULE).orElse(null);
+        ModuleAttribute moduleAttribute = cm.findAttribute(Attributes.module()).orElse(null);
 
         if (moduleAttribute == null) {
             throw new AssertionError("Version attribute missing!");

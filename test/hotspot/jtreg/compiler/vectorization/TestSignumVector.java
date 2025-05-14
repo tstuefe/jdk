@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,9 +24,11 @@
 /**
  * @test
  * @bug 8282711 8290249
- * @summary Accelerate Math.signum function for AVX, AVX512 and aarch64 (Neon and SVE)
+ * @summary Accelerate Math.signum function for AVX, AVX512, aarch64 (Neon and SVE)
+ *          and riscv64 (vector)
  * @requires vm.compiler2.enabled
- * @requires (os.simpleArch == "x64" & vm.cpu.features ~= ".*avx.*") | os.arch == "aarch64"
+ * @requires (os.simpleArch == "x64" & vm.cpu.features ~= ".*avx.*") | os.arch == "aarch64" |
+ *           (os.arch == "riscv64" & vm.cpu.features ~= ".*rvv.*")
  * @library /test/lib /
  * @run driver compiler.vectorization.TestSignumVector
  */

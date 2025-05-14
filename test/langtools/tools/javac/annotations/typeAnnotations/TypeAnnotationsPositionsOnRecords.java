@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,12 +27,6 @@
  * @summary Verify location of type annotations on records
  * @library /tools/lib
  * @modules
- *      java.base/jdk.internal.classfile
- *      java.base/jdk.internal.classfile.attribute
- *      java.base/jdk.internal.classfile.constantpool
- *      java.base/jdk.internal.classfile.instruction
- *      java.base/jdk.internal.classfile.components
- *      java.base/jdk.internal.classfile.impl
  *      jdk.compiler/com.sun.tools.javac.api
  *      jdk.compiler/com.sun.tools.javac.main
  *      jdk.compiler/com.sun.tools.javac.code
@@ -50,8 +44,8 @@ import java.nio.file.Paths;
 import java.lang.annotation.*;
 import java.util.Arrays;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 import com.sun.tools.javac.util.Assert;
 
 import toolbox.JavacTask;
@@ -115,7 +109,7 @@ public class TypeAnnotationsPositionsOnRecords {
     }
 
     void checkClassFile(final File cfile, int... taPositions) throws Exception {
-        ClassModel classFile = Classfile.of().parse(cfile.toPath());
+        ClassModel classFile = ClassFile.of().parse(cfile.toPath());
         int accessorPos = 0;
         int checkedAccessors = 0;
         for (MethodModel method : classFile.methods()) {
@@ -201,15 +195,15 @@ public class TypeAnnotationsPositionsOnRecords {
 
     // utility methods
     void findAnnotations(ClassModel cm, AttributedElement m, List<TypeAnnotation> annos) {
-        findAnnotations(cm, m, Attributes.RUNTIME_VISIBLE_TYPE_ANNOTATIONS, annos);
-        findAnnotations(cm, m, Attributes.RUNTIME_INVISIBLE_TYPE_ANNOTATIONS, annos);
+        findAnnotations(cm, m, Attributes.runtimeVisibleTypeAnnotations(), annos);
+        findAnnotations(cm, m, Attributes.runtimeInvisibleTypeAnnotations(), annos);
     }
 
     <T extends Attribute<T>> void findAnnotations(ClassModel cf, AttributedElement m, AttributeMapper<T> attrName, List<TypeAnnotation> annos) {
         Attribute<T> attr = m.findAttribute(attrName).orElse(null);
         addAnnos(annos, attr);
         if (m instanceof MethodModel) {
-            CodeAttribute cattr = m.findAttribute(Attributes.CODE).orElse(null);
+            CodeAttribute cattr = m.findAttribute(Attributes.code()).orElse(null);
             if (cattr != null) {
                 attr = cattr.findAttribute(attrName).orElse(null);
                 addAnnos(annos, attr);

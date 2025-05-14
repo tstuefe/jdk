@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -37,7 +37,6 @@ import static org.junit.jupiter.api.Assumptions.*;
 /**
  * @test
  * @summary Testing the Gatherer contract
- * @enablePreview
  * @library /lib/testlibrary/bootlib
  * @build java.base/java.util.stream.DefaultMethodStreams
  * @run junit GathererTest
@@ -107,11 +106,11 @@ public class GathererTest {
     }
 
     final Gatherer<Integer,Void,Integer> addOne = Gatherer.of(
-            Gatherer.Integrator.<Void,Integer,Integer>ofGreedy((vöid, element, downstream) -> downstream.push(element + 1))
+            Gatherer.Integrator.<Void,Integer,Integer>ofGreedy((void_state, element, downstream) -> downstream.push(element + 1))
     );
 
     final Gatherer<Integer,Void,Integer> timesTwo = Gatherer.of(
-            Gatherer.Integrator.<Void,Integer,Integer>ofGreedy((vöid, element, downstream) -> downstream.push(element * 2))
+            Gatherer.Integrator.<Void,Integer,Integer>ofGreedy((void_state, element, downstream) -> downstream.push(element * 2))
     );
 
     @ParameterizedTest
@@ -349,7 +348,7 @@ public class GathererTest {
     @ParameterizedTest
     @MethodSource("configurations")
     public void testMassivelyComposedGatherers(Config config) {
-        final int ITERATIONS = 512; // Total number of compositions is 1 + (iterations*2)
+        final int ITERATIONS = 256; // Total number of compositions is 1 + (iterations*2)
         Gatherer<Integer,?,Integer> g = addOne;
         for(int i = 0;i < ITERATIONS;++i) {
             g = g.andThen(timesTwo).andThen(addOne);

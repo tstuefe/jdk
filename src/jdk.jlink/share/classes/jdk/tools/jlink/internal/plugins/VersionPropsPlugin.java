@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,13 +27,13 @@ package jdk.tools.jlink.internal.plugins;
 
 import java.util.Locale;
 import java.util.Map;
-import jdk.internal.classfile.Classfile;
-import jdk.internal.classfile.ClassTransform;
-import jdk.internal.classfile.CodeBuilder;
-import jdk.internal.classfile.CodeElement;
-import jdk.internal.classfile.Instruction;
-import jdk.internal.classfile.instruction.FieldInstruction;
-import jdk.internal.classfile.CodeTransform;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassTransform;
+import java.lang.classfile.CodeBuilder;
+import java.lang.classfile.CodeElement;
+import java.lang.classfile.Instruction;
+import java.lang.classfile.instruction.FieldInstruction;
+import java.lang.classfile.CodeTransform;
 
 import jdk.tools.jlink.plugin.ResourcePool;
 import jdk.tools.jlink.plugin.ResourcePoolBuilder;
@@ -99,9 +99,8 @@ abstract class VersionPropsPlugin extends AbstractPlugin {
 
     private boolean redefined = false;
 
-    @SuppressWarnings("deprecation")
     private byte[] redefine(String path, byte[] classFile) {
-        return Classfile.of().transform(newClassReader(path, classFile),
+        return ClassFile.of().transformClass(newClassReader(path, classFile),
             ClassTransform.transformingMethodBodies(
                 mm -> mm.methodName().equalsString("<clinit>"),
                 new CodeTransform() {
@@ -143,7 +142,7 @@ abstract class VersionPropsPlugin extends AbstractPlugin {
                                         // forget about it
                                         pendingLDC = null;
                                         // and add an ldc for the new value
-                                        cob.constantInstruction(value);
+                                        cob.loadConstant(value);
                                         redefined = true;
                                     } else {
                                         flushPendingLDC(cob);

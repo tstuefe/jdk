@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,9 +32,10 @@ import java.util.Objects;
 import jdk.jfr.internal.Logger;
 import jdk.jfr.internal.LogLevel;
 import jdk.jfr.internal.LogTag;
-import jdk.internal.classfile.CodeBuilder;
-import jdk.internal.classfile.ClassModel;
-import jdk.internal.classfile.Classfile;
+import java.lang.classfile.CodeBuilder;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.ClassFile;
 import jdk.internal.classfile.components.ClassPrinter;
 
 /**
@@ -74,6 +75,12 @@ public final class Bytecode {
             MethodTypeDesc mtd = MethodTypeDesc.of(returnDesc, parameterDesc);
             return new MethodDesc(methodName, mtd);
         }
+
+        public boolean matches(MethodModel m) {
+            return this.descriptor().equals(m.methodTypeSymbol()) && m.methodName().equalsString(this.name());
+        }
+    }
+    public record SettingDesc(ClassDesc paramType, String methodName) {
     }
 
     public static ClassDesc classDesc(ValueDescriptor v) {
@@ -158,7 +165,7 @@ public final class Bytecode {
             StringBuilder out = new StringBuilder();
             out.append("Bytecode:");
             out.append(System.lineSeparator());
-            ClassModel classModel = Classfile.of().parse(bytes);
+            ClassModel classModel = ClassFile.of().parse(bytes);
             ClassPrinter.toYaml(classModel, ClassPrinter.Verbosity.TRACE_ALL, out::append);
             Logger.log(LogTag.JFR_SYSTEM_BYTECODE, LogLevel.TRACE, out.toString());
         }

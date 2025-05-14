@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,9 +27,6 @@
  * @summary Verify correct module versions are recorded when --release is used.
  * @library /tools/lib
  * @modules
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
  *          jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
  *          jdk.compiler/com.sun.tools.javac.platform
@@ -43,11 +40,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import jdk.internal.classfile.Attributes;
-import jdk.internal.classfile.ClassModel;
-import jdk.internal.classfile.Classfile;
-import jdk.internal.classfile.attribute.ModuleAttribute;
-import jdk.internal.classfile.attribute.ModuleRequireInfo;
+import java.lang.classfile.Attributes;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.attribute.ModuleAttribute;
+import java.lang.classfile.attribute.ModuleRequireInfo;
 
 import org.junit.Test;
 
@@ -102,10 +99,10 @@ public class ModuleVersionTest {
             .writeAll();
 
         Path moduleInfo = classes.resolve("module-info.class");
-        ClassModel clazz = Classfile.of().parse(moduleInfo);
+        ClassModel clazz = ClassFile.of().parse(moduleInfo);
 
         assertTrue(clazz.isModuleInfo());
-        ModuleAttribute module = clazz.findAttribute(Attributes.MODULE).get();
+        ModuleAttribute module = clazz.findAttribute(Attributes.module()).get();
         ModuleRequireInfo req = module.requires().get(0);
         assertEquals("java.base", req.requires().name().stringValue());
         assertEquals(expectedVersion, req.requiresVersion().get().stringValue());

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,18 +28,12 @@
  * @library /tools/lib /tools/javac/lib ../lib
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @build toolbox.ToolBox InMemoryFileManager TestBase
  * @run main NoInnerClassesTest
  */
 
-import jdk.internal.classfile.Attributes;
-import jdk.internal.classfile.ClassModel;
+import java.lang.classfile.Attributes;
+import java.lang.classfile.ClassModel;
 
 import java.io.IOException;
 
@@ -51,6 +45,6 @@ public class NoInnerClassesTest extends TestBase {
 
     public void test() throws IOException {
         ClassModel classModel = readClassFile("NoInnerClassesTest");
-        assertNull(classModel.findAttribute(Attributes.INNER_CLASSES).orElse(null), "Found inner class attribute");
+        assertNull(classModel.findAttribute(Attributes.innerClasses()).orElse(null), "Found inner class attribute");
     }
 }

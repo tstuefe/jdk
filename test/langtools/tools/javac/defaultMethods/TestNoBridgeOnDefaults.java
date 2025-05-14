@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,15 +25,9 @@
  * @test
  * @bug 7192246
  * @summary  check that javac does not generate bridge methods for defaults
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  */
 
-import jdk.internal.classfile.*;
+import java.lang.classfile.*;
 
 import java.io.*;
 
@@ -74,7 +68,7 @@ public class TestNoBridgeOnDefaults {
     void checkNoBridgeOnDefaults(File f) {
         System.err.println("check: " + f);
         try {
-            ClassModel cf = Classfile.of().parse(f.toPath());
+            ClassModel cf = ClassFile.of().parse(f.toPath());
             for (MethodModel m : cf.methods()) {
                 String mname = m.methodName().stringValue();
                 if (mname.equals(TEST_METHOD_NAME)) {

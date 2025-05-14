@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,18 +25,13 @@
  * @test
  * @bug 8272564
  * @summary Correct resolution of toString() (and other similar calls) on interfaces
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  * @compile NoObjectToString.java
  * @run main NoObjectToString
  */
 
 import java.io.*;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.constantpool.*;
+import java.lang.classfile.*;
+import java.lang.classfile.constantpool.*;
 
 public class NoObjectToString {
     public static void main(String... args) throws Exception {
@@ -48,7 +43,7 @@ public class NoObjectToString {
          //Verify there are no references to Object.toString() in a Test:
         try (InputStream in = NoObjectToString.class.getResourceAsStream("NoObjectToString$Test.class")) {
             assert in != null;
-            ClassModel cm = Classfile.of().parse(in.readAllBytes());
+            ClassModel cm = ClassFile.of().parse(in.readAllBytes());
             for (PoolEntry pe : cm.constantPool()) {
                 if (pe instanceof MethodRefEntry ref) {
                     String methodDesc = ref.owner().name() + "." + ref.nameAndType().name() + ":" + ref.nameAndType().type();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,12 +28,6 @@
  *          javac crash while creating LVT entry for a local variable defined in
  *          an inner block
  * @library /tools/javac/lib
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @build JavacTestingAbstractProcessor LVTHarness
  * @run main LVTHarness
  */
@@ -59,8 +53,8 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 
 import com.sun.source.util.JavacTask;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 
 import static javax.tools.StandardLocation.*;
 import static javax.tools.JavaFileObject.Kind.SOURCE;
@@ -126,7 +120,7 @@ public class LVTHarness {
     }
 
     void checkClassFile(File file) throws IOException {
-        ClassModel classFile = Classfile.of().parse(file.toPath());
+        ClassModel classFile = ClassFile.of().parse(file.toPath());
 
         //lets get all the methods in the class file.
         for (MethodModel method : classFile.methods()) {
@@ -142,8 +136,8 @@ public class LVTHarness {
     }
 
     void checkMethod(MethodModel method, AliveRanges ranges) {
-        CodeAttribute code = method.findAttribute(Attributes.CODE).orElseThrow();
-        LocalVariableTableAttribute lvt = code.findAttribute(Attributes.LOCAL_VARIABLE_TABLE).orElseThrow();
+        CodeAttribute code = method.findAttribute(Attributes.code()).orElseThrow();
+        LocalVariableTableAttribute lvt = code.findAttribute(Attributes.localVariableTable()).orElseThrow();
         List<String> infoFromRanges = convertToStringList(ranges);
         List<String> infoFromLVT = convertToStringList(lvt);
 
@@ -163,6 +157,7 @@ public class LVTHarness {
 
         if (i < infoFromRanges.size()) {
             error(infoFromLVT, infoFromRanges, method.methodName().stringValue());
+            System.err.println(method.toDebugString());
         }
     }
 

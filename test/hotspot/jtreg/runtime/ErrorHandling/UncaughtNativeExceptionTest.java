@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -54,8 +54,8 @@ public class UncaughtNativeExceptionTest {
     // and don't terminate abruptly due to stack overflow error
     @Test
     public void testNativeExceptionReporting() throws Exception {
-        OutputAnalyzer output = ProcessTools.executeTestJvm(
-                // executeTestJvm doesn't seem to forward 'java.library.path'
+        OutputAnalyzer output = ProcessTools.executeTestJava(
+                // executeTestJava doesn't seem to forward 'java.library.path'
                 "-Djava.library.path=" + System.getProperty("java.library.path"),
                 Crasher.class.getName());
 

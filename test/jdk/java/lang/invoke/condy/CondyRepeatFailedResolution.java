@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,16 +26,11 @@
  * @bug 8186211
  * @summary Test basic invocation of multiple ldc's of the same dynamic constant that fail resolution
  * @library /java/lang/invoke/common
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  * @run testng CondyRepeatFailedResolution
  * @run testng/othervm -XX:+UnlockDiagnosticVMOptions -XX:UseBootstrapCallInfo=3 CondyRepeatFailedResolution
  */
 
-import jdk.internal.classfile.Classfile;
+import java.lang.classfile.ClassFile;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -108,10 +103,10 @@ public class CondyRepeatFailedResolution {
                 bsmMethodName,
                 bsmDescriptor
         );
-        byte[] byteArray = Classfile.of().build(ClassDesc.of(genClassName), classBuilder -> classBuilder
+        byte[] byteArray = ClassFile.of().build(ClassDesc.of(genClassName), classBuilder -> classBuilder
                 .withVersion(55, 0)
                 .withSuperclass(ConstantDescs.CD_Object)
-                .withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, Classfile.ACC_PUBLIC,
+                .withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, ClassFile.ACC_PUBLIC,
                         methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .aload(0)
@@ -121,7 +116,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("B", MethodTypeDesc.of(ConstantDescs.CD_byte),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -132,7 +127,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("C", MethodTypeDesc.of(ConstantDescs.CD_char),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -143,7 +138,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("D", MethodTypeDesc.of(ConstantDescs.CD_double),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -154,7 +149,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("D_AsType", MethodTypeDesc.of(ConstantDescs.CD_double),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -165,7 +160,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("F", MethodTypeDesc.of(ConstantDescs.CD_float),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -176,7 +171,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("F_AsType", MethodTypeDesc.of(ConstantDescs.CD_float),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -187,7 +182,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("I", MethodTypeDesc.of(ConstantDescs.CD_int),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -198,7 +193,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("J", MethodTypeDesc.of(ConstantDescs.CD_long),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -209,7 +204,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("J_AsType", MethodTypeDesc.of(ConstantDescs.CD_long),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -220,7 +215,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("S", MethodTypeDesc.of(ConstantDescs.CD_short),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -231,7 +226,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("Z_F", MethodTypeDesc.of(ConstantDescs.CD_boolean),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -242,7 +237,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("Z_T", MethodTypeDesc.of(ConstantDescs.CD_boolean),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -253,7 +248,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("null", MethodTypeDesc.of(ConstantDescs.CD_Object),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -264,7 +259,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("string", MethodTypeDesc.of(ConstantDescs.CD_String),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,
@@ -275,7 +270,7 @@ public class CondyRepeatFailedResolution {
                                 )
                 )
                 .withMethod("stringArray", MethodTypeDesc.of(ConstantDescs.CD_String.arrayType()),
-                        Classfile.ACC_PUBLIC + Classfile.ACC_STATIC, methodBuilder -> methodBuilder
+                        ClassFile.ACC_PUBLIC + ClassFile.ACC_STATIC, methodBuilder -> methodBuilder
                                 .withCode(codeBuilder -> codeBuilder
                                         .ldc(DynamicConstantDesc.ofNamed(
                                                 bsmMhDesc,

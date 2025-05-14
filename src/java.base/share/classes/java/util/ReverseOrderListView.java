@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -43,9 +43,7 @@ class ReverseOrderListView<E> implements List<E> {
     final boolean modifiable;
 
     public static <T> List<T> of(List<T> list, boolean modifiable) {
-        if (list instanceof ReverseOrderListView<T> rolv) {
-            return rolv.base;
-        } else if (list instanceof RandomAccess) {
+        if (list instanceof RandomAccess) {
             return new ReverseOrderListView.Rand<>(list, modifiable);
         } else {
             return new ReverseOrderListView<>(list, modifiable);
@@ -286,7 +284,6 @@ class ReverseOrderListView<E> implements List<E> {
         return ArraysSupport.reverse(base.toArray());
     }
 
-    @SuppressWarnings("unchecked")
     public <T> T[] toArray(T[] a) {
         return ArraysSupport.toArrayReversed(base, a);
     }
@@ -394,6 +391,10 @@ class ReverseOrderListView<E> implements List<E> {
         int size = base.size();
         Objects.checkFromToIndex(fromIndex, toIndex, size);
         return new ReverseOrderListView<>(base.subList(size - toIndex, size - fromIndex), modifiable);
+    }
+
+    public List<E> reversed() {
+        return base;
     }
 
     static void checkClosedRange(int index, int size) {

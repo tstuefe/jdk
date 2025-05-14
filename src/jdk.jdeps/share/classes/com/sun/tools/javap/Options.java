@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 
-import static jdk.internal.classfile.Classfile.*;
+import static java.lang.classfile.ClassFile.*;
 
 /*
  *  Provides access to javap's options, set via the command line
@@ -86,6 +86,7 @@ public class Options {
     public boolean showConstants;
     public boolean sysInfo;
     public boolean showInnerClasses;
+    public boolean verify;
     public int indentWidth = 2;   // #spaces per indentWidth level; must be > 0
     public int tabColumn = 40;    // column number for comments; must be > 0
     public String moduleName;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -89,6 +89,7 @@ public:
 // They are filled concurrently, and concatenated at the end.
 class CodeSection {
   friend class CodeBuffer;
+  friend class AOTCodeReader;
  public:
   typedef int csize_t;  // code size type; would be size_t except for history
 
@@ -121,8 +122,8 @@ class CodeSection {
     _locs_own      = false;
     _scratch_emit  = false;
     _skipped_instructions_size = 0;
-    debug_only(_index = -1);
-    debug_only(_outer = (CodeBuffer*)badAddress);
+    DEBUG_ONLY(_index = -1);
+    DEBUG_ONLY(_outer = (CodeBuffer*)badAddress);
   }
 
   void initialize_outer(CodeBuffer* outer, int8_t index) {
@@ -209,7 +210,7 @@ class CodeSection {
   }
   void    set_locs_point(address pc) {
     assert(pc >= locs_point(), "relocation addr may not decrease");
-    assert(allocates2(pc),     "relocation addr must be in this section");
+    assert(allocates2(pc),     "relocation addr " INTPTR_FORMAT " must be in this section from " INTPTR_FORMAT " to " INTPTR_FORMAT, p2i(pc), p2i(_start), p2i(_limit));
     _locs_point = pc;
   }
 
@@ -283,7 +284,7 @@ class CodeSection {
 
 #ifndef PRODUCT
   void decode();
-  void print(const char* name);
+  void print_on(outputStream* st, const char* name);
 #endif //PRODUCT
 };
 
@@ -386,6 +387,7 @@ typedef GrowableArray<SharedStubToInterpRequest> SharedStubToInterpRequests;
 class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
   friend class CodeSection;
   friend class StubCodeGenerator;
+  friend class AOTCodeReader;
 
  private:
   // CodeBuffers must be allocated on the stack except for a single
@@ -433,6 +435,7 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
   Arena*       _overflow_arena;
 
   address      _last_insn;      // used to merge consecutive memory barriers, loads or stores.
+  address      _last_label;     // record last bind label address, it's also the start of current bb.
 
   SharedStubToInterpRequests* _shared_stub_to_interp_requests; // used to collect requests for shared iterpreter stubs
   SharedTrampolineRequests*   _shared_trampoline_requests;     // used to collect requests for shared trampolines
@@ -454,9 +457,12 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
     _name            = name;
     _before_expand   = nullptr;
     _blob            = nullptr;
+    _total_start     = nullptr;
+    _total_size      = 0;
     _oop_recorder    = nullptr;
     _overflow_arena  = nullptr;
     _last_insn       = nullptr;
+    _last_label      = nullptr;
     _finalize_stubs  = false;
     _shared_stub_to_interp_requests = nullptr;
     _shared_trampoline_requests = nullptr;
@@ -510,6 +516,9 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
   // moves code sections to new buffer (assumes relocs are already in there)
   void relocate_code_to(CodeBuffer* cb) const;
 
+  // adjust some internal address during expand
+  void adjust_internal_address(address from, address to);
+
   // set up a model of the final layout of my contents
   void compute_final_layout(CodeBuffer* dest) const;
 
@@ -528,7 +537,7 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
     assert(code_start != nullptr, "sanity");
     initialize_misc("static buffer");
     initialize(code_start, code_size);
-    debug_only(verify_section_allocation();)
+    DEBUG_ONLY(verify_section_allocation();)
   }
 
   // (2) CodeBuffer referring to pre-allocated CodeBlob.
@@ -602,7 +611,6 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
 
   // Properties
   const char* name() const                  { return _name; }
-  void set_name(const char* name)           { _name = name; }
   CodeBuffer* before_expand() const         { return _before_expand; }
   BufferBlob* blob() const                  { return _blob; }
   void    set_blob(BufferBlob* blob);
@@ -679,6 +687,9 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
   void set_last_insn(address a) { _last_insn = a; }
   void clear_last_insn() { set_last_insn(nullptr); }
 
+  address last_label() const { return _last_label; }
+  void set_last_label(address a) { _last_label = a; }
+
 #ifndef PRODUCT
   AsmRemarks &asm_remarks() { return _asm_remarks; }
   DbgStrings &dbg_strings() { return _dbg_strings; }
@@ -733,7 +744,7 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
   // Printing / Decoding
   // decodes from decode_begin() to code_end() and sets decode_begin to end
   void    decode();
-  void    print();
+  void    print_on(outputStream* st);
 #endif
   // Directly disassemble code buffer.
   void    decode(address start, address end);

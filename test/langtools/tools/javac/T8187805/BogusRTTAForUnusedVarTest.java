@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,13 +24,7 @@
 /*
  * @test 8187805
  * @summary bogus RuntimeVisibleTypeAnnotations for unused local in a block
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
- *          jdk.compiler/com.sun.tools.javac.util
+ * @modules jdk.compiler/com.sun.tools.javac.util
  * @run main BogusRTTAForUnusedVarTest
  */
 
@@ -40,9 +34,9 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.CodeAttribute;
-import jdk.internal.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.CodeAttribute;
+import java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
 import com.sun.tools.javac.util.Assert;
 
 public class BogusRTTAForUnusedVarTest {
@@ -71,7 +65,7 @@ public class BogusRTTAForUnusedVarTest {
         File testClasses = new File(System.getProperty("test.classes"));
         File file = new File(testClasses,
                 BogusRTTAForUnusedVarTest.class.getName() + "$Foo.class");
-        ClassModel classFile = Classfile.of().parse(file.toPath());
+        ClassModel classFile = ClassFile.of().parse(file.toPath());
         for (MethodModel m : classFile.methods()) {
             if (m.methodName().equalsString("something")) {
                 for (Attribute<?> a : m.attributes()) {

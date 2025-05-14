@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,12 +30,6 @@
  * @library /tools/lib
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @build toolbox.JavacTask toolbox.TestRunner toolbox.ToolBox
  * @run main SymLinkTest
  */
@@ -45,8 +39,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.SourceFileAttribute;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.SourceFileAttribute;
 import toolbox.JavacTask;
 import toolbox.TestRunner;
 import toolbox.TestRunner.Test;
@@ -98,8 +92,8 @@ public class SymLinkTest extends TestRunner {
             .run()
             .writeAll();
 
-        ClassModel cf = Classfile.of().parse(classes.resolve("HelloWorld.class"));
-        SourceFileAttribute sf = cf.findAttribute(Attributes.SOURCE_FILE).orElseThrow();
+        ClassModel cf = ClassFile.of().parse(classes.resolve("HelloWorld.class"));
+        SourceFileAttribute sf = cf.findAttribute(Attributes.sourceFile()).orElseThrow();
         String sourceFile = sf.sourceFile().stringValue();
 
         if (!"HelloWorld.java".equals(sourceFile)) {

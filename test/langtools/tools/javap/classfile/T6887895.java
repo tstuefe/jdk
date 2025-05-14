@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,19 +25,14 @@
  * @test
  * @bug 6887895
  * @summary test getting constantpool elements' basename through asInternalName() API
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  */
 
 import java.io.*;
 import java.net.*;
 import java.nio.file.Paths;
 import java.util.*;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.constantpool.*;
+import java.lang.classfile.*;
+import java.lang.classfile.constantpool.*;
 
 public class T6887895 {
     public static void main(String[] args) throws Exception {
@@ -62,7 +57,8 @@ public class T6887895 {
                 "java/lang/Object",
                 "java/lang/String",
                 "T6887895",
-                "T6887895$Test"
+                "T6887895$Test",
+                "java/util/Objects",
         };
 
         Set<String> expect = new TreeSet<String>(Arrays.asList(expectNames));
@@ -75,7 +71,7 @@ public class T6887895 {
 
     ClassModel getClassFile(String name) throws IOException, URISyntaxException {
         URL rsc = getClass().getResource(name);
-        return Classfile.of().parse(Paths.get(rsc.toURI()));
+        return ClassFile.of().parse(Paths.get(rsc.toURI()));
     }
 
     class Test {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,13 +26,7 @@
  * @bug 8067422
  * @summary Check that the lambda names are not unnecessarily unstable
  * @library /tools/lib
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
- *          jdk.compiler/com.sun.tools.javac.api
+ * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
  *          jdk.jdeps/com.sun.tools.javap
  * @build toolbox.ToolBox toolbox.JavacTask
@@ -45,7 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.tools.StandardLocation;
 
-import jdk.internal.classfile.*;
+import java.lang.classfile.*;
 
 import toolbox.JavacTask;
 import toolbox.ToolBox;
@@ -87,7 +81,7 @@ public class TestNonSerializableLambdaNameStability {
                 byte[] fileBytes = fm.getFileBytes(StandardLocation.CLASS_OUTPUT, file);
                 try (InputStream in = new ByteArrayInputStream(fileBytes)) {
                     boolean foundLambdaMethod = false;
-                    ClassModel cf = Classfile.of().parse(in.readAllBytes());
+                    ClassModel cf = ClassFile.of().parse(in.readAllBytes());
                     StringBuilder seenMethods = new StringBuilder();
                     String sep = "";
                     for (MethodModel m : cf.methods()) {

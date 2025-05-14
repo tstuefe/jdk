@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,12 +26,6 @@
  * @bug 8027789
  * @summary check that the direct superclass is used as the site when calling
  *          a superclass' method
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @compile Base.java NonDirectSuper.java
  * @run main test.NonDirectSuper
  */
@@ -40,11 +34,11 @@ package test;
 
 import java.io.File;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.CodeAttribute;
-import jdk.internal.classfile.constantpool.MemberRefEntry;
-import jdk.internal.classfile.instruction.FieldInstruction;
-import jdk.internal.classfile.instruction.InvokeInstruction;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.CodeAttribute;
+import java.lang.classfile.constantpool.MemberRefEntry;
+import java.lang.classfile.instruction.FieldInstruction;
+import java.lang.classfile.instruction.InvokeInstruction;
 
 public class NonDirectSuper {
     public static void main(String... args) {
@@ -63,9 +57,9 @@ public class NonDirectSuper {
 
     void verifyInvokeSpecialRefToObject(File clazz) {
         try {
-            final ClassModel cf = Classfile.of().parse(clazz.toPath());
+            final ClassModel cf = ClassFile.of().parse(clazz.toPath());
             for (MethodModel m : cf.methods()) {
-                CodeAttribute codeAttr = m.findAttribute(Attributes.CODE).orElseThrow();
+                CodeAttribute codeAttr = m.findAttribute(Attributes.code()).orElseThrow();
                 for (CodeElement ce : codeAttr.elementList()) {
                     if (ce instanceof InvokeInstruction instr && (instr.opcode() == Opcode.INVOKESPECIAL ||
                         instr.opcode() == Opcode.INVOKEVIRTUAL)) {

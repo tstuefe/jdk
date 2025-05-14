@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,18 +29,12 @@
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
  *          jdk.compiler/com.sun.tools.javac.util
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @build toolbox.ToolBox toolbox.JavacTask toolbox.ToolBox
  * @run main ModuleFlagTest
  */
 
-import jdk.internal.classfile.AccessFlags;
-import jdk.internal.classfile.Classfile;
+import java.lang.classfile.AccessFlags;
+import java.lang.classfile.ClassFile;
 import java.lang.reflect.AccessFlag;
 
 import java.io.IOException;
@@ -61,10 +55,10 @@ public class ModuleFlagTest {
                 .files(moduleInfo)
                 .run();
 
-        AccessFlags accessFlags = Classfile.of().parse(outdir.resolve("module-info.class"))
+        AccessFlags accessFlags = ClassFile.of().parse(outdir.resolve("module-info.class"))
                 .flags();
         if (!accessFlags.has(AccessFlag.MODULE)) {
-            throw new RuntimeException("Classfile doesn't have module access flag");
+            throw new RuntimeException("ClassFile doesn't have module access flag");
         }
     }
 }

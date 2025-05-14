@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
+ *  Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
  *  DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  *  This code is free software; you can redistribute it and/or modify it
@@ -46,7 +46,7 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 10, time = 500, timeUnit = TimeUnit.MILLISECONDS)
 @State(org.openjdk.jmh.annotations.Scope.Thread)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(value = 1, jvmArgsAppend = {
+@Fork(value = 1, jvmArgs = {
         "--add-modules=jdk.incubator.vector",
         "--enable-native-access", "ALL-UNNAMED"})
 public class TestLoadSegmentVarious {
@@ -54,6 +54,9 @@ public class TestLoadSegmentVarious {
     private static final VectorSpecies<Byte> BYTE_SPECIES = VectorSpecies.ofLargestShape(byte.class);
     private static final VectorSpecies<Integer> INTEGER_SPECIES = VectorSpecies.ofLargestShape(int.class);
     private static final VectorSpecies<Double> DOUBLE_SPECIES = VectorSpecies.ofLargestShape(double.class);
+
+    private static final VectorMask<Integer> INTEGER_MASK = VectorMask.fromLong(INTEGER_SPECIES, (1 << (INTEGER_SPECIES.length() / 2)) - 1);
+    private static final VectorMask<Double> DOUBLE_MASK = VectorMask.fromLong(DOUBLE_SPECIES, (1 << (DOUBLE_SPECIES.length() / 2)) - 1);
 
     // Must be evenly dividable by Double.BYTES
     @Param("1024")
@@ -253,4 +256,27 @@ public class TestLoadSegmentVarious {
         }
     }
 
+    @Benchmark
+    public void intVectorFromIntBackedSegmentMasked(Blackhole bh) {
+        for (int i = 0; i < INTEGER_SPECIES.loopBound(intSrcArray.length); i += INTEGER_SPECIES.vectorByteSize()) {
+            var v = IntVector.fromMemorySegment(INTEGER_SPECIES, doubleSegment, i, ByteOrder.nativeOrder(), INTEGER_MASK);
+            bh.consume(v);
+        }
+    }
+
+    @Benchmark
+    public void intVectorFromDoubleBackedSegmentMasked(Blackhole bh) {
+        for (int i = 0; i < INTEGER_SPECIES.loopBound(intSrcArray.length); i += INTEGER_SPECIES.vectorByteSize()) {
+            var v = IntVector.fromMemorySegment(INTEGER_SPECIES, doubleSegment, i, ByteOrder.nativeOrder(), INTEGER_MASK);
+            bh.consume(v);
+        }
+    }
+
+    @Benchmark
+    public void doubleVectorFromIntBackedSegmentMasked(Blackhole bh) {
+        for (int i = 0; i < DOUBLE_SPECIES.loopBound(doubleSrcArray.length); i += DOUBLE_SPECIES.vectorByteSize()) {
+            var v = DoubleVector.fromMemorySegment(DOUBLE_SPECIES, intSegment, i, ByteOrder.nativeOrder(), DOUBLE_MASK);
+            bh.consume(v);
+        }
+    }
 }

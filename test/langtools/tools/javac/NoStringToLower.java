@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,19 +25,13 @@
  * @test
  * @bug 8029800
  * @summary String.toLowerCase()/toUpperCase is generally dangerous, check it is not used in langtools
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  */
 
 import java.io.*;
 import java.util.*;
 import javax.tools.*;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.constantpool.*;
+import java.lang.classfile.*;
+import java.lang.classfile.constantpool.*;
 
 public class NoStringToLower {
     public static void main(String... args) throws Exception {
@@ -67,6 +61,7 @@ public class NoStringToLower {
                 "javax.lang.model",
                 "javax.tools",
                 "com.sun.source",
+                "java.lang.classfile",
                 "jdk.internal.classfile",
                 "com.sun.tools.doclint",
                 "com.sun.tools.javac",
@@ -108,7 +103,7 @@ public class NoStringToLower {
      */
     void scan(JavaFileObject fo) throws IOException {
         try (InputStream in = fo.openInputStream()) {
-            ClassModel cf = Classfile.of().parse(in.readAllBytes());
+            ClassModel cf = ClassFile.of().parse(in.readAllBytes());
             for (PoolEntry pe : cf.constantPool()) {
                 if (pe instanceof MethodRefEntry ref) {
                     String methodDesc = ref.owner().name().stringValue() + "." + ref.name().stringValue() + ":" + ref.type().stringValue();

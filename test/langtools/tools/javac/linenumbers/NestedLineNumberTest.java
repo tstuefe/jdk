@@ -2,16 +2,11 @@
  * @test /nodynamiccopyright/
  * @bug 8061778
  * @summary  Wrong LineNumberTable for default constructors
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  */
 
 import java.util.List;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 
 import java.io.IOException;
 
@@ -25,16 +20,16 @@ public class NestedLineNumberTest {
         }
 
         int line = lines.get(0).lineNumber();
-        if (line != 54) {
-            error(String.format("LineNumberTable contains wrong line number - expected %d, found %d", 54, line));
+        if (line != 49) {
+            error(String.format("LineNumberTable contains wrong line number - expected %d, found %d", 49, line));
         }
     }
 
     static List<LineNumberInfo> findEntries() throws IOException {
-        ClassModel self = Classfile.of().parse(NestedLineNumberTest.Test.class.getResourceAsStream("NestedLineNumberTest$Test.class").readAllBytes());
+        ClassModel self = ClassFile.of().parse(NestedLineNumberTest.Test.class.getResourceAsStream("NestedLineNumberTest$Test.class").readAllBytes());
         for (MethodModel m : self.methods()) {
             if ("<init>".equals(m.methodName().stringValue())) {
-                CodeAttribute code_attribute = m.findAttribute(Attributes.CODE).orElseThrow();
+                CodeAttribute code_attribute = m.findAttribute(Attributes.code()).orElseThrow();
                 for (Attribute<?> at : code_attribute.attributes()) {
                     if (at instanceof LineNumberTableAttribute lineAt) {
                         return lineAt.lineNumbers();

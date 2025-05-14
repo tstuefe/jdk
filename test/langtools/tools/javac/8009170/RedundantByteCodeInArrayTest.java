@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,17 +26,12 @@
  * @bug 8009170
  * @summary Regression: javac generates redundant bytecode in assignop involving
  * arrays
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  * @run main RedundantByteCodeInArrayTest
  */
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.CodeAttribute;
-import jdk.internal.classfile.constantpool.ConstantPool;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.CodeAttribute;
+import java.lang.classfile.constantpool.ConstantPool;
 import java.io.File;
 import java.io.IOException;
 
@@ -54,13 +49,13 @@ public class RedundantByteCodeInArrayTest {
 
     void checkClassFile(File file)
             throws IOException {
-        ClassModel classFile = Classfile.of().parse(file.toPath());
+        ClassModel classFile = ClassFile.of().parse(file.toPath());
         ConstantPool constantPool = classFile.constantPool();
 
         //lets get all the methods in the class file.
         for (MethodModel method : classFile.methods()) {
             if (method.methodName().equalsString("arrMethod")) {
-                CodeAttribute code = method.findAttribute(Attributes.CODE).orElse(null);
+                CodeAttribute code = method.findAttribute(Attributes.code()).orElse(null);
                 assert code != null;
                 if (code.maxLocals() > 4)
                     throw new AssertionError("Too many locals for method arrMethod");

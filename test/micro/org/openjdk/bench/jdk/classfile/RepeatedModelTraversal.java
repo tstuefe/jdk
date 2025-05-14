@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,15 +29,14 @@ import java.nio.file.Files;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.List;
-import jdk.internal.classfile.ClassModel;
-import jdk.internal.classfile.Classfile;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.ClassFile;
 import jdk.internal.classfile.components.ClassPrinter;
 import org.openjdk.jmh.annotations.*;
 
 @BenchmarkMode(Mode.Throughput)
 @State(Scope.Benchmark)
-@Fork(value = 1, jvmArgsAppend = {
-        "--add-exports", "java.base/jdk.internal.classfile=ALL-UNNAMED",
+@Fork(value = 1, jvmArgs = {
         "--add-exports", "java.base/jdk.internal.classfile.components=ALL-UNNAMED"})
 @Warmup(iterations = 3)
 @Measurement(iterations = 4)
@@ -49,7 +48,7 @@ public class RepeatedModelTraversal {
     @Setup(Level.Trial)
     public void setup() throws IOException {
         models = new ArrayList<>();
-        var cc = Classfile.of();
+        var cc = ClassFile.of();
         Files.walk(FileSystems.getFileSystem(URI.create("jrt:/")).getPath("modules/java.base/java/util")).forEach(p -> {
             if (Files.isRegularFile(p) && p.toString().endsWith(".class")) try {
                 var clm = cc.parse(p);

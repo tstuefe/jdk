@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,12 +25,6 @@
  * @test
  * @bug 8025998 8026749 8054220 8058227
  * @summary Missing LV table in lambda bodies
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @compile -g LocalVariableTable.java
  * @run main LocalVariableTable
  */
@@ -38,8 +32,8 @@
 import java.io.*;
 import java.lang.annotation.*;
 import java.util.*;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
 
 /*
  * The test checks that a LocalVariableTable attribute is generated for the
@@ -87,20 +81,20 @@ public class LocalVariableTable {
             return;
         }
 
-        ClassModel cm = Classfile.of().parse(Objects.requireNonNull(getClass().getResource(c.getName() + ".class")).openStream().readAllBytes());
+        ClassModel cm = ClassFile.of().parse(Objects.requireNonNull(getClass().getResource(c.getName() + ".class")).openStream().readAllBytes());
         MethodModel m = getLambdaMethod(cm);
         if (m == null) {
             error("lambda method not found");
             return;
         }
 
-        CodeAttribute code = m.findAttribute(Attributes.CODE).orElse(null);
+        CodeAttribute code = m.findAttribute(Attributes.code()).orElse(null);
         if (code == null) {
             error("Code attribute not found");
             return;
         }
 
-        LocalVariableTableAttribute lvt = code.findAttribute(Attributes.LOCAL_VARIABLE_TABLE).orElse(null);
+        LocalVariableTableAttribute lvt = code.findAttribute(Attributes.localVariableTable()).orElse(null);
         if (lvt == null) {
             error("LocalVariableTable attribute not found");
             return;

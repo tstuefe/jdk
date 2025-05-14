@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -39,7 +39,7 @@
  *         <li><a href="#Conf_CF_SP">User-defined Configuration File</a></li>
  *         </ul>
  *     </li>
- *     <li><a href="#PP">Property Precedence</a></li>
+ *     <li><a href="#Conf_PP">Property Precedence</a></li>
  *     </ul>
  * </li>
  * <li><a href="#LookupMechanism">JAXP Lookup Mechanism</a>
@@ -101,7 +101,7 @@
  * <a href="#Conf_Properties">JAXP Properties</a>,
  * <a href="#Conf_SystemProperties">System Properties</a>,
  * and the <a href="#Conf_CF">JAXP Configuration File</a>, and sets the values
- * following the <a href="#PP">Property Precedence</a>. The terminologies and
+ * following the <a href="#Conf_PP">Property Precedence</a>. The terminologies and
  * process are defined below.
  *
  * <h3 id="Conf_Properties">JAXP Properties</h3>
@@ -168,7 +168,7 @@
  * proceeds as if the {@code java.xml.config.file} property was not set.
  * Implementations may optionally issue a warning message.
  *
- * <h3 id="PP">Property Precedence</h3>
+ * <h3 id="Conf_PP">Property Precedence</h3>
  * JAXP properties can be set in multiple ways, including by API methods, system
  * properties, and the <a href="#Conf_CF">JAXP Configuration File</a>. When not
  * explicitly set, they will be initialized with default values or more restrictive
@@ -262,7 +262,7 @@
  * <td style="text-align:center">{@link javax.xml.datatype.DatatypeFactory#newDefaultInstance() newDefaultInstance()}</td>
  * </tr>
  * <tr>
- * <th scope="row" style="font-weight:normal" id="DOM">
+ * <th scope="row" style="font-weight:normal" id="DocumentBuilderFactory">
  *     {@link javax.xml.parsers.DocumentBuilderFactory DocumentBuilderFactory}
  * </th>
  * <td style="text-align:center">{@link javax.xml.parsers.DocumentBuilderFactory#newInstance() newInstance()}</td>
@@ -270,7 +270,7 @@
  * <td style="text-align:center">{@link javax.xml.parsers.DocumentBuilderFactory#newDefaultInstance() newDefaultInstance()}</td>
  * </tr>
  * <tr>
- * <th scope="row" style="font-weight:normal" id="SAX">
+ * <th scope="row" style="font-weight:normal" id="SAXParserFactory">
  *     {@link javax.xml.parsers.SAXParserFactory SAXParserFactory}
  * </th>
  * <td style="text-align:center">{@link javax.xml.parsers.SAXParserFactory#newInstance() newInstance()}</td>
@@ -310,7 +310,7 @@
  * <td style="text-align:center">{@link javax.xml.transform.TransformerFactory#newDefaultInstance() newDefaultInstance()}</td>
  * </tr>
  * <tr>
- * <th scope="row" style="font-weight:normal" id="Validation">
+ * <th scope="row" style="font-weight:normal" id="SchemaFactory">
  *     {@link javax.xml.validation.SchemaFactory SchemaFactory}
  * </th>
  * <td style="text-align:center">{@link javax.xml.validation.SchemaFactory#newInstance(java.lang.String) newInstance(schemaLanguage)}</td>
@@ -318,7 +318,7 @@
  * <td style="text-align:center">{@link javax.xml.validation.SchemaFactory#newDefaultInstance() newDefaultInstance()}</td>
  * </tr>
  * <tr>
- * <th scope="row" style="font-weight:normal" id="XPath">
+ * <th scope="row" style="font-weight:normal" id="XPathFactory">
  *     {@link javax.xml.xpath.XPathFactory XPathFactory}
  * </th>
  * <td style="text-align:center">{@link javax.xml.xpath.XPathFactory#newInstance(java.lang.String) newInstance(uri)}</td>
@@ -417,11 +417,97 @@
  * </ul>
  *
  * <h2 id="JDKCATALOG">JDK built-in Catalog</h2>
- * The JDK has a built-in catalog that hosts the following DTDs defined by the Java Platform:
- * <ul>
- * <li>DTD for {@link java.util.prefs.Preferences java.util.prefs.Preferences}, preferences.dtd</li>
- * <li>DTD for {@link java.util.Properties java.util.Properties}, properties.dtd</li>
- * </ul>
+ * The JDK has a built-in catalog that hosts DTDs and XSDs list in the following table.
+ * <table class="plain" id="JDKCatalog">
+ * <caption>DTDs and XSDs in JDK built-in Catalog</caption>
+ * <thead>
+ * <tr>
+ * <th scope="col">Source</th>
+ * <th scope="col">Files</th>
+ * </tr>
+ * </thead>
+ *
+ * <tbody>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="util_preferences">
+ * {@link java.util.prefs.Preferences java.util.prefs.Preferences}</th>
+ * <td style="text-align:center">
+ * preferences.dtd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="util_properties">
+ * {@link java.util.Properties java.util.Properties}</th>
+ * <td style="text-align:center">
+ * properties.dtd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="XMLSchema">
+ * XML Schema Part 1: Structures Second Edition<br>
+ * XML Schema Part 2: Datatypes Second Edition
+ * </th>
+ * <td style="text-align:center">
+ * XMLSchema.dtd<br>
+ * datatypes.dtd<br>
+ * XMLSchema.xsd<br>
+ * datatypes.xsd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="XHTML10">
+ * XHTML&trade; 1.0 The Extensible HyperText Markup Language
+ * </th>
+ * <td style="text-align:center">
+ * xhtml1-frameset.dtd<br>
+ * xhtml1-strict.dtd<br>
+ * xhtml1-transitional.dtd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="XHTML10Schema">
+ * XHTML&trade; 1.0 in XML Schema
+ * </th>
+ * <td style="text-align:center">
+ * xhtml1-frameset.xsd<br>
+ * xhtml1-strict.xsd<br>
+ * xhtml1-transitional.xsd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="XHTML11">
+ * XHTML&trade; 1.1 - Module-based XHTML - Second Edition
+ * </th>
+ * <td style="text-align:center">
+ * xhtml11.dtd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="XHTML11Schema">
+ * XHTML 1.1 XML Schema Definition
+ * </th>
+ * <td style="text-align:center">
+ * xhtml11.xsd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="XMLSPEC">
+ * XML DTD for W3C specifications
+ * </th>
+ * <td style="text-align:center">
+ * xmlspec.dtd
+ * </td>
+ * </tr>
+ * <tr>
+ * <th scope="row" style="font-weight:normal" id="Namespace">
+ * The "xml:" Namespace
+ * </th>
+ * <td style="text-align:center">
+ * xml.xsd
+ * </td>
+ * </tr>
+ * </tbody>
+ * </table>
  * <p>
  * The catalog is loaded once when the first JAXP processor factory is created.
  *
@@ -602,8 +688,8 @@
  * A positive integer. A value less than or equal to 0 indicates no limit.
  * If the value is not an integer, a NumberFormatException is thrown.
  * </td>
- * <td style="text-align:center">64000</td>
- * <td style="text-align:center">64000</td>
+ * <td style="text-align:center">2500</td>
+ * <td style="text-align:center">2500</td>
  * <td style="text-align:center" rowspan="9">Yes</td>
  * <td style="text-align:center" rowspan="9">
  *     <a href="#DOM">DOM</a><br>
@@ -619,8 +705,8 @@
  * <td id="EALimit">{@systemProperty jdk.xml.elementAttributeLimit}</td>
  * <td>Limits the number of attributes an element can have.
  * </td>
- * <td style="text-align:center">10000</td>
- * <td style="text-align:center">10000</td>
+ * <td style="text-align:center">200</td>
+ * <td style="text-align:center">200</td>
  * </tr>
  * <tr>
  * <td id="OccurLimit">{@systemProperty jdk.xml.maxOccurLimit}</td>
@@ -636,37 +722,37 @@
  * <td>Limits the total size of all entities that include general and parameter
  * entities. The size is calculated as an aggregation of all entities.
  * </td>
- * <td style="text-align:center">5x10^7</td>
- * <td style="text-align:center">5x10^7</td>
+ * <td style="text-align:center">100000</td>
+ * <td style="text-align:center">100000</td>
  * </tr>
  * <tr>
  * <td id="GELimit">{@systemProperty jdk.xml.maxGeneralEntitySizeLimit}</td>
  * <td>Limits the maximum size of any general entities.
  * </td>
- * <td style="text-align:center">0</td>
- * <td style="text-align:center">0</td>
+ * <td style="text-align:center">100000</td>
+ * <td style="text-align:center">100000</td>
  * </tr>
  * <tr>
  * <td id="PELimit">{@systemProperty jdk.xml.maxParameterEntitySizeLimit}</td>
  * <td>Limits the maximum size of any parameter entities, including the result
  * of nesting multiple parameter entities.
  * </td>
- * <td style="text-align:center">10^6</td>
- * <td style="text-align:center">10^6</td>
+ * <td style="text-align:center">15000</td>
+ * <td style="text-align:center">15000</td>
  * </tr>
  * <tr>
  * <td id="ERLimit">{@systemProperty jdk.xml.entityReplacementLimit}</td>
  * <td>Limits the total number of nodes in all entity references.
  * </td>
- * <td style="text-align:center">3x10^6</td>
- * <td style="text-align:center">3x10^6</td>
+ * <td style="text-align:center">100000</td>
+ * <td style="text-align:center">100000</td>
  * </tr>
  * <tr>
  * <td id="ElementDepth">{@systemProperty jdk.xml.maxElementDepth}</td>
  * <td>Limits the maximum element depth.
  * </td>
- * <td style="text-align:center">0</td>
- * <td style="text-align:center">0</td>
+ * <td style="text-align:center">100</td>
+ * <td style="text-align:center">100</td>
  * </tr>
  * <tr>
  * <td id="NameLimit">{@systemProperty jdk.xml.maxXMLNameLimit}</td>
@@ -759,7 +845,7 @@
  * <td style="text-align:center" rowspan="3">Yes</td>
  * <td style="text-align:center" rowspan="2">
  *     <a href="#Transform">Transform</a><br>
- *     <a href="#XPath">XPath</a>
+ *     <a href="#XPATH">XPath</a>
  * </td>
  * <td style="text-align:center" rowspan="3">19</td>
  * </tr>
@@ -782,19 +868,19 @@
  * </tr>
  * <tr>
  * <td id="ExtFunc">{@systemProperty jdk.xml.enableExtensionFunctions}</td>
- * <td>Determines if XSLT and XPath extension functions are to be allowed.
+ * <td>Determines whether extension functions in the Transform API are to be allowed.
+ * The extension functions in the XPath API are not affected by this property.
  * </td>
  * <td style="text-align:center" rowspan="5">yes</td>
  * <td style="text-align:center" rowspan="3">Boolean</td>
  * <td>
  * true or false. True indicates that extension functions are allowed; False otherwise.
  * </td>
- * <td style="text-align:center">true</td>
+ * <td style="text-align:center">false</td>
  * <td style="text-align:center">false</td>
  * <td style="text-align:center">Yes</td>
  * <td style="text-align:center">
  *     <a href="#Transform">Transform</a><br>
- *     <a href="#XPAth">XPath</a>
  * </td>
  * <td style="text-align:center"><a href="#Processor">Method 2</a></td>
  * <td style="text-align:center">8</td>
@@ -816,7 +902,7 @@
  * <td style="text-align:center">
  *     <a href="#Transform">Transform</a><br>
  *     <a href="#Validation">Validation</a><br>
- *     <a href="#XPAth">XPath</a>
+ *     <a href="#XPATH">XPath</a>
  * </td>
  * <td style="text-align:center"><a href="#Processor">Method 2</a></td>
  * <td style="text-align:center">9</td>
@@ -929,7 +1015,7 @@
  *
  * <p id="Note4">
  * <b>[4]</b> A value "yes" indicates the property is a Security Property. As indicated
- * in the <a href="#PP">Property Precedence</a>, the values listed in the column
+ * in the <a href="#Conf_PP">Property Precedence</a>, the values listed in the column
  * {@code enforced} will be used to initialize these properties when
  * {@link javax.xml.XMLConstants#FEATURE_SECURE_PROCESSING FSP} is true.
  *
@@ -957,7 +1043,7 @@
  * These legacy property names are <b>deprecated</b> as of JDK 17 and may be removed
  * in future releases. If both new and legacy properties are set, the new property
  * names take precedence regardless of how and where they are set. The overriding order
- * as defined in <a href="#PropPrec">Property Precedence</a> thus becomes:
+ * as defined in <a href="#Conf_PP">Property Precedence</a> thus becomes:
  *
  * <ul>
  * <li>Value set on factories or processors using new property names.</li>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,12 +27,6 @@
  * @library /tools/lib
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  *          jdk.jdeps/com.sun.tools.javap
  * @build toolbox.ToolBox toolbox.JavacTask toolbox.ModuleBuilder ModuleTestBase
  * @run main OpenModulesTest
@@ -47,8 +41,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.ModuleAttribute;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.ModuleAttribute;
 import toolbox.JavacTask;
 import toolbox.JavapTask;
 import toolbox.Task;
@@ -236,10 +230,10 @@ public class OpenModulesTest extends ModuleTestBase {
             .writeAll();
 
         Path miClass = m1Classes.resolve("module-info.class");
-        ClassModel cm = Classfile.of().parse(miClass);
-        ModuleAttribute module = cm.findAttribute(Attributes.MODULE).orElseThrow();
+        ClassModel cm = ClassFile.of().parse(miClass);
+        ModuleAttribute module = cm.findAttribute(Attributes.module()).orElseThrow();
         ModuleAttribute newModule = ModuleAttribute.of(module.moduleName(),
-                                                          module.moduleFlagsMask() | Classfile.ACC_OPEN,
+                                                          module.moduleFlagsMask() | ClassFile.ACC_OPEN,
                                                           module.moduleVersion().orElse(null),
                                                           module.requires(),
                                                           module.exports(),
@@ -247,7 +241,7 @@ public class OpenModulesTest extends ModuleTestBase {
                                                           module.uses(),
                                                           module.provides());
 
-        byte[] newBytes = Classfile.of().transform(cm, ClassTransform.dropping(ce -> ce instanceof ModuleAttribute).
+        byte[] newBytes = ClassFile.of().transformClass(cm, ClassTransform.dropping(ce -> ce instanceof ModuleAttribute).
                 andThen(ClassTransform.endHandler(classBuilder -> classBuilder.with(newModule))));
         try (OutputStream out = Files.newOutputStream(miClass)) {
             out.write(newBytes);

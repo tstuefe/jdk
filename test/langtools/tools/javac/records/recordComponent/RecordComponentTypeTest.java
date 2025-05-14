@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,18 +28,12 @@
  * @library /tools/lib
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @compile GenerateTypeProcessor.java
  * @run main RecordComponentTypeTest
  */
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -143,7 +137,7 @@ public class RecordComponentTypeTest extends TestRunner {
                 .options("-processor", "GenerateTypeProcessor")
                 .outdir(curPath)
                 .run();
-        cf = Classfile.of().parse(curPath.resolve("RecordComponentUsingGeneratedTypeWithAnnotation.class"));
+        cf = ClassFile.of().parse(curPath.resolve("RecordComponentUsingGeneratedTypeWithAnnotation.class"));
 
         for (FieldModel field : cf.fields()) {
             if (field.fieldName().equalsString("generatedType")){
@@ -159,7 +153,7 @@ public class RecordComponentTypeTest extends TestRunner {
     }
 
     private void checkRuntimeVisibleAnnotation(AttributedElement attributedElement) throws Exception {
-        RuntimeVisibleAnnotationsAttribute annotations = attributedElement.findAttribute(Attributes.RUNTIME_VISIBLE_ANNOTATIONS).orElseThrow();
+        RuntimeVisibleAnnotationsAttribute annotations = attributedElement.findAttribute(Attributes.runtimeVisibleAnnotations()).orElseThrow();
         boolean hasAnnotation = false;
         for (Annotation annotation : annotations.annotations()) {
             if (annotation.classSymbol().descriptorString().equals("LTestAnnotation;")) {

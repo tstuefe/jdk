@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.internal.classfile.Classfile;
+import java.lang.classfile.ClassFile;
 import jdk.test.lib.util.ForceGC;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,16 +39,13 @@ import java.util.Comparator;
 import static java.lang.constant.ConstantDescs.*;
 import static java.lang.invoke.MethodHandleProxies.*;
 import static java.lang.invoke.MethodType.methodType;
-import static jdk.internal.classfile.Classfile.*;
+import static java.lang.classfile.ClassFile.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /*
  * @test
  * @bug 6983726
  * @library /test/lib
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
  * @summary Tests on implementation hidden classes spinned by MethodHandleProxies
  * @build WrapperHiddenClassTest Client jdk.test.lib.util.ForceGC
  * @run junit WrapperHiddenClassTest
@@ -85,7 +82,7 @@ public class WrapperHiddenClassTest {
     // Update this template when the MHP template is updated
     @SuppressWarnings("unchecked")
     private Comparator<Integer> createHostileInstance() throws Throwable {
-        var cf = Classfile.of();
+        var cf = ClassFile.of();
         var bytes = cf.build(CD_HostileWrapper, clb -> {
             clb.withSuperclass(CD_Object);
             clb.withFlags(ACC_FINAL | ACC_SYNTHETIC);
@@ -97,7 +94,7 @@ public class WrapperHiddenClassTest {
 
             // <clinit>
             clb.withMethodBody(CLASS_INIT_NAME, MTD_void, ACC_STATIC, cob -> {
-                cob.constantInstruction(CD_Comparator);
+                cob.loadConstant(CD_Comparator);
                 cob.putstatic(CD_HostileWrapper, TYPE, CD_Class);
                 cob.return_();
             });

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,19 +26,13 @@
  * @bug 8237528
  * @summary Verify there are no unnecessary checkcasts and conditions generated
  *          for the pattern matching in instanceof.
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @compile NoUnnecessaryCast.java
  * @run main NoUnnecessaryCast
  */
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.CodeAttribute;
-import jdk.internal.classfile.constantpool.ConstantPool;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.CodeAttribute;
+import java.lang.classfile.constantpool.ConstantPool;
 import java.io.File;
 import java.io.IOException;
 
@@ -54,7 +48,7 @@ public class NoUnnecessaryCast {
     }
 
     void checkClassFile(File file) throws IOException {
-        ClassModel classFile = Classfile.of().parse(file.toPath());
+        ClassModel classFile = ClassFile.of().parse(file.toPath());
 
         MethodModel method = classFile.methods().stream()
                               .filter(m -> getName(m).equals("test"))
@@ -75,7 +69,7 @@ public class NoUnnecessaryCast {
                                       ICONST_0
                                       IRETURN
                                       """;
-        CodeAttribute code = method.findAttribute(Attributes.CODE).orElseThrow();
+        CodeAttribute code = method.findAttribute(Attributes.code()).orElseThrow();
         String actualInstructions = printCode(code);
         if (!expectedInstructions.equals(actualInstructions)) {
             throw new AssertionError("Unexpected instructions found:\n" +

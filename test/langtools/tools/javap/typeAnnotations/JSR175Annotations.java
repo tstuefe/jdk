@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,19 +22,14 @@
  */
 
 import java.io.*;
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.Attributes;
-import jdk.internal.classfile.attribute.*;
+import java.lang.classfile.*;
+import java.lang.classfile.Attributes;
+import java.lang.classfile.attribute.*;
 
 /*
  * @test JSR175Annotations
  * @bug 6843077
  * @summary test that only type annotations are recorded as such in classfile
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
  */
 
 public class JSR175Annotations {
@@ -46,7 +41,7 @@ public class JSR175Annotations {
         File javaFile = writeTestFile();
         File classFile = compileTestFile(javaFile);
 
-        ClassModel cm = Classfile.of().parse(classFile.toPath());
+        ClassModel cm = ClassFile.of().parse(classFile.toPath());
         for (MethodModel mm: cm.methods()) {
             test(mm);
         }
@@ -62,12 +57,12 @@ public class JSR175Annotations {
     }
 
     void test(AttributedElement m) {
-        test(m, Attributes.RUNTIME_VISIBLE_TYPE_ANNOTATIONS);
-        test(m, Attributes.RUNTIME_INVISIBLE_TYPE_ANNOTATIONS);
+        test(m, Attributes.runtimeVisibleTypeAnnotations());
+        test(m, Attributes.runtimeInvisibleTypeAnnotations());
     }
 
     // test the result of AttributedElement.findAttribute according to expectations
-    <T extends jdk.internal.classfile.Attribute<T>> void test(AttributedElement m, AttributeMapper<T> attr_name) {
+    <T extends java.lang.classfile.Attribute<T>> void test(AttributedElement m, AttributeMapper<T> attr_name) {
         Attribute<T> attr_instance = m.findAttribute(attr_name).orElse(null);
         if (attr_instance != null) {
             switch (attr_instance) {

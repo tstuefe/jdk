@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,20 +28,14 @@
  * @library /tools/lib
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @build toolbox.ToolBox toolbox.JavacTask
  * @run main T8255757
  */
 
 import java.nio.file.Path;
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.constantpool.*;
+import java.lang.classfile.*;
+import java.lang.classfile.constantpool.*;
 
 import toolbox.JavacTask;
 import toolbox.ToolBox;
@@ -79,7 +73,7 @@ public class T8255757 extends TestRunner {
                 .outdir(curPath)
                 .run();
 
-        ClassModel cf = Classfile.of().parse(curPath.resolve("Test.class"));
+        ClassModel cf = ClassFile.of().parse(curPath.resolve("Test.class"));
         int num = 0;
         for (PoolEntry pe : cf.constantPool()) {
             if (pe instanceof MethodRefEntry methodRefEntry) {

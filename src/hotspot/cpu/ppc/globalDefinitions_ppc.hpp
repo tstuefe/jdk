@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2024, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2012, 2016 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -48,8 +48,11 @@ const bool CCallingConventionRequiresIntsAsLongs = true;
 // PPC64 is not specified as multi-copy-atomic
 // So we must not #define CPU_MULTI_COPY_ATOMIC
 
-// The expected size in bytes of a cache line, used to pad data structures.
+// The expected size in bytes of a cache line.
 #define DEFAULT_CACHE_LINE_SIZE 128
+
+// The default padding size for data structures to avoid false sharing.
+#define DEFAULT_PADDING_SIZE DEFAULT_CACHE_LINE_SIZE
 
 #define SUPPORT_RESERVED_STACK_AREA
 

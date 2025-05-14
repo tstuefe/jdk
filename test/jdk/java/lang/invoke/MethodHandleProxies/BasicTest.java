@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,8 +21,8 @@
  * questions.
  */
 
-import jdk.internal.classfile.ClassHierarchyResolver;
-import jdk.internal.classfile.Classfile;
+import java.lang.classfile.ClassHierarchyResolver;
+import java.lang.classfile.ClassFile;
 import org.junit.jupiter.api.Test;
 
 import java.io.Closeable;
@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandleProxies;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.AccessFlag;
@@ -45,20 +46,18 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntSupplier;
 import java.util.function.ToLongFunction;
+import java.util.stream.Stream;
 
 import static java.lang.constant.ConstantDescs.*;
 import static java.lang.invoke.MethodHandleProxies.*;
 import static java.lang.invoke.MethodType.genericMethodType;
 import static java.lang.invoke.MethodType.methodType;
-import static jdk.internal.classfile.Classfile.*;
+import static java.lang.classfile.ClassFile.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /*
  * @test
- * @bug 6983726 8206955 8269351
- * @modules java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
+ * @bug 6983726 8206955 8269351 8350549
  * @summary Basic sanity tests for MethodHandleProxies
  * @build BasicTest Client
  * @run junit BasicTest
@@ -254,6 +253,32 @@ public class BasicTest {
         assertThrows(ClassCastException.class, proxy::iterator);
     }
 
+    /**
+     * Verifies {@code isWrapperInstance} works under race and is thread safe
+     * like {@code Class} objects are.
+     */
+    @Test
+    public void testRacyWrapperCheck() {
+        MethodHandle noop = MethodHandles.zero(void.class);
+        var lookup = MethodHandles.lookup();
+        AtomicInteger counter = new AtomicInteger();
+        Stream.generate(() -> {
+            String name = "MHPRaceIface" + counter.getAndIncrement();
+            var bytes = ClassFile.of().build(ClassDesc.of(name), clb ->
+                    clb.withFlags(ACC_PUBLIC | ACC_ABSTRACT | ACC_INTERFACE)
+                       .withMethod("sam", MTD_void, ACC_PUBLIC | ACC_ABSTRACT, _ -> {}));
+            try {
+                return lookup.defineClass(bytes);
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }).parallel()
+                .map(cl -> MethodHandleProxies.asInterfaceInstance(cl, noop))
+                .limit(100)
+                .forEach(inst -> assertTrue(MethodHandleProxies.isWrapperInstance(inst),
+                        () -> Objects.toIdentityString(inst) + " should pass wrapper test"));
+    }
+
     private static <T extends Throwable> Closeable throwing(Class<T> clz, T value) {
         return asInterfaceInstance(Closeable.class, MethodHandles.throwException(void.class, clz).bindTo(value));
     }
@@ -287,7 +312,7 @@ public class BasicTest {
         var objMtd = MethodTypeDesc.of(CD_Object);
         var integerMtd = MethodTypeDesc.of(CD_Integer);
         var intMtd = MethodTypeDesc.of(CD_int);
-        var classfile = Classfile.of(Classfile.ClassHierarchyResolverOption.of(ClassHierarchyResolver.defaultResolver().orElse(
+        var classfile = ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(ClassHierarchyResolver.defaultResolver().orElse(
                 ClassHierarchyResolver.of(List.of(baseCd, childCd), Map.ofEntries(Map.entry(baseCd, CD_Object),
                         Map.entry(childCd, CD_Object))))));
 

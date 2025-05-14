@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,18 +29,12 @@
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
  *          jdk.compiler/com.sun.tools.javac.code
- *          java.base/jdk.internal.classfile
- *          java.base/jdk.internal.classfile.attribute
- *          java.base/jdk.internal.classfile.constantpool
- *          java.base/jdk.internal.classfile.instruction
- *          java.base/jdk.internal.classfile.components
- *          java.base/jdk.internal.classfile.impl
  * @run main ImplicitParameters
  */
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.MethodParameterInfo;
-import jdk.internal.classfile.attribute.MethodParametersAttribute;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.MethodParameterInfo;
+import java.lang.classfile.attribute.MethodParametersAttribute;
 import com.sun.tools.javac.code.Flags;
 import toolbox.Assert;
 import toolbox.JavacTask;
@@ -58,7 +52,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 public class ImplicitParameters extends TestRunner {
-    private static final int CHECKED_FLAGS = Classfile.ACC_MANDATED | Classfile.ACC_SYNTHETIC;
+    private static final int CHECKED_FLAGS = ClassFile.ACC_MANDATED | ClassFile.ACC_SYNTHETIC;
     private static final int NO_FLAGS = 0;
 
     public ImplicitParameters() {
@@ -130,7 +124,7 @@ public class ImplicitParameters extends TestRunner {
     private ClassModel readClassFile(Path classes, Method method) {
         String className = method.getAnnotation(ClassName.class).value();
         try {
-            return Classfile.of().parse(classes.resolve("Outer$" + className + ".class"));
+            return ClassFile.of().parse(classes.resolve("Outer$" + className + ".class"));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -144,7 +138,7 @@ public class ImplicitParameters extends TestRunner {
     @Test
     @ClassName("Inner")
     public void testInnerClassConstructor(ClassModel classFile) {
-        checkParameters(classFile.methods().get(0), Classfile.ACC_MANDATED, 0);
+        checkParameters(classFile.methods().get(0), ClassFile.ACC_MANDATED, 0);
     }
 
     @Test
@@ -152,7 +146,7 @@ public class ImplicitParameters extends TestRunner {
     public void testLocalClassConstructor(ClassModel classFile) {
         for (MethodModel method : classFile.methods()) {
             if (method.methodName().equalsString(ConstantDescs.INIT_NAME)) {
-                checkParameters(method, Classfile.ACC_MANDATED, NO_FLAGS, Classfile.ACC_SYNTHETIC);
+                checkParameters(method, ClassFile.ACC_MANDATED, NO_FLAGS, ClassFile.ACC_SYNTHETIC);
                 break;
             }
         }
@@ -161,13 +155,13 @@ public class ImplicitParameters extends TestRunner {
     @Test
     @ClassName("1")
     public void testAnonymousClassExtendingInnerClassConstructor(ClassModel classFile) {
-        checkParameters(classFile.methods().get(0), Classfile.ACC_MANDATED, NO_FLAGS, NO_FLAGS);
+        checkParameters(classFile.methods().get(0), ClassFile.ACC_MANDATED, NO_FLAGS, NO_FLAGS);
     }
 
     @Test
     @ClassName("2")
     public void testAnonymousClassConstructor(ClassModel classFile) {
-        checkParameters(classFile.methods().get(0), Classfile.ACC_MANDATED);
+        checkParameters(classFile.methods().get(0), ClassFile.ACC_MANDATED);
     }
 
     @Test
@@ -175,7 +169,7 @@ public class ImplicitParameters extends TestRunner {
     public void testValueOfInEnum(ClassModel classFile) {
         for (MethodModel method : classFile.methods()) {
             if (method.methodName().equalsString("valueOf")) {
-                checkParameters(method, Classfile.ACC_MANDATED);
+                checkParameters(method, ClassFile.ACC_MANDATED);
                 break;
             }
         }
@@ -186,7 +180,7 @@ public class ImplicitParameters extends TestRunner {
     public void testEnumClassConstructor(ClassModel classFile) {
         for (MethodModel method : classFile.methods()) {
             if (method.methodName().equalsString(ConstantDescs.INIT_NAME)) {
-                checkParameters(method, Classfile.ACC_SYNTHETIC, Classfile.ACC_SYNTHETIC, NO_FLAGS, NO_FLAGS);
+                checkParameters(method, ClassFile.ACC_SYNTHETIC, ClassFile.ACC_SYNTHETIC, NO_FLAGS, NO_FLAGS);
                 break;
             }
         }
@@ -195,11 +189,11 @@ public class ImplicitParameters extends TestRunner {
     @Test
     @ClassName("MyRecord")
     public void testCompactConstructor(ClassModel classFile) {
-        checkParameters(classFile.methods().get(0), Classfile.ACC_MANDATED, Classfile.ACC_MANDATED);
+        checkParameters(classFile.methods().get(0), ClassFile.ACC_MANDATED, ClassFile.ACC_MANDATED);
     }
 
     private void checkParameters(MethodModel method, int... parametersFlags) {
-        MethodParametersAttribute methodParameters = method.findAttribute(Attributes.METHOD_PARAMETERS).orElseThrow();
+        MethodParametersAttribute methodParameters = method.findAttribute(Attributes.methodParameters()).orElseThrow();
         Assert.checkNonNull(methodParameters, "MethodParameters attribute must be present");
         List<MethodParameterInfo> table = methodParameters.parameters();
         Assert.check(table.size() == parametersFlags.length, () -> "Expected " + parametersFlags.length
@@ -213,6 +207,6 @@ public class ImplicitParameters extends TestRunner {
     }
 
     private static String convertFlags(int flags) {
-        return ((flags & Classfile.ACC_MANDATED) == Classfile.ACC_MANDATED) + " and " + ((flags & Classfile.ACC_SYNTHETIC) == Classfile.ACC_SYNTHETIC);
+        return ((flags & ClassFile.ACC_MANDATED) == ClassFile.ACC_MANDATED) + " and " + ((flags & ClassFile.ACC_SYNTHETIC) == ClassFile.ACC_SYNTHETIC);
     }
 }

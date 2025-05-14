@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,9 +21,9 @@
  * questions.
  */
 
-import jdk.internal.classfile.*;
-import jdk.internal.classfile.attribute.*;
-import jdk.internal.classfile.constantpool.*;
+import java.lang.classfile.*;
+import java.lang.classfile.attribute.*;
+import java.lang.classfile.constantpool.*;
 import jdk.internal.classfile.impl.BoundAttribute;
 
 import java.nio.file.Paths;
@@ -195,7 +195,7 @@ public abstract class InnerClassesTestBase extends TestResult {
             Map<String, Set<String>> class2Flags = test.getFlags();
             ClassModel cm = readClassFile(compile(getCompileOptions(), test.getSource())
                     .getClasses().get(classToTest));
-            InnerClassesAttribute innerClasses = cm.findAttribute(Attributes.INNER_CLASSES).orElse(null);
+            InnerClassesAttribute innerClasses = cm.findAttribute(Attributes.innerClasses()).orElse(null);
             int count = 0;
             for (Attribute<?> a : cm.attributes()) {
                 if (a instanceof InnerClassesAttribute) {
@@ -206,7 +206,7 @@ public abstract class InnerClassesTestBase extends TestResult {
             if (!checkNotNull(innerClasses, "InnerClasses attribute should not be null")) {
                 return;
             }
-            checkEquals(innerClasses.attributeName(), "InnerClasses",
+            checkEquals(innerClasses.attributeName().stringValue(), "InnerClasses",
                     "innerClasses.attribute_name_index");
             // Inner Classes attribute consists of length (2 bytes)
             // and 8 bytes for each inner class's entry.
