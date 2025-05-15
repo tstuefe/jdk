@@ -1014,7 +1014,7 @@ void CompilationMemoryStatistic::print_error_report(outputStream* st) {
   print_all_by_size(st, false, false, 0, 10);
 }
 
-void CompilationMemoryStatistic::print_final_report(outputStream* st) {
+void CompilationMemoryStatistic::print_brief_report(outputStream* st) {
   if (!check_before_reporting(st)) {
     return;
   }

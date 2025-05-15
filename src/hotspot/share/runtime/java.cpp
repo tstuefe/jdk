@@ -361,7 +361,7 @@ void print_statistics() {
   }
 
   if (PrintCompilerMemoryStatisticsAtExit) {
-    CompilationMemoryStatistic::print_final_report(tty);
+    CompilationMemoryStatistic::print_brief_report(tty);
   }
 
   ThreadsSMRSupport::log_statistics();

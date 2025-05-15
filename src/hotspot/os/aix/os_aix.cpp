@@ -1153,6 +1153,11 @@ void os::print_os_info(outputStream* st) {
   VM_Version::print_platform_virtualization_info(st);
 }
 
+
+void os::print_process_memory_info(outputStream* st) {
+  // os::rss unimplemented
+}
+
 void os::print_memory_info(outputStream* st) {
 
   st->print_cr("Memory:");
@@ -1218,9 +1223,6 @@ void os::print_memory_info(outputStream* st) {
   st->print_cr("internal virtual memory regions used by vm:");
   vmembk_print_on(st);
 }
-
-// Unimplemented
-size_t os::get_RSS() { return 0; }
 
 // Get a string for the cpuinfo that is a summary of the cpu type
 void os::get_summary_cpu_info(char* buf, size_t buflen) {

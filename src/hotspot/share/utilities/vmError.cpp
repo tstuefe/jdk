@@ -61,6 +61,7 @@
 #include "runtime/vmThread.hpp"
 #include "runtime/vm_version.hpp"
 #include "sanitizers/ub.hpp"
+#include "services/rsswatch.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
@@ -1296,6 +1297,10 @@ void VMError::report(outputStream* st, bool _verbose) {
     NativeHeapTrimmer::print_state(st);
     st->cr();
 
+  STEP_IF("printing rss watcher state", _verbose)
+    RssWatcher::print_state(st);
+    st->cr();
+
   STEP_IF("printing system", _verbose)
     st->print_cr("---------------  S Y S T E M  ---------------");
     st->cr();
@@ -1493,7 +1498,7 @@ void VMError::print_vm_info(outputStream* st) {
   st->cr();
 
   // STEP("Compiler Memory Statistic")
-  CompilationMemoryStatistic::print_final_report(st);
+  CompilationMemoryStatistic::print_brief_report(st);
 
   // STEP("printing periodic trim state")
   NativeHeapTrimmer::print_state(st);

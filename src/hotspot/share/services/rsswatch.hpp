@@ -29,6 +29,8 @@
 #include "memory/allStatic.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+class outputStream;
+
 // A facility that will periodically check RSS, and, if a threshold is
 // reached, stop the VM with a fatal error. Controlled by -XX:RssLimit=xxx
 // and -XX:RssWatchInterval
@@ -36,6 +38,7 @@
 struct RssWatcher: public AllStatic {
 
   static void initialize();
+  static void print_state(outputStream* st);
 
 };
 

@@ -2086,6 +2086,31 @@ void os::get_summary_cpu_info(char* buf, size_t buflen) {
   }
 }
 
+void os::win32::print_process_memory_info(outputStream* st) {
+  // extended memory statistics for a process
+  PROCESS_MEMORY_COUNTERS_EX pmex;
+  ZeroMemory(&pmex, sizeof(PROCESS_MEMORY_COUNTERS_EX));
+  pmex.cb = sizeof(pmex);
+  int r2 = GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*) &pmex, sizeof(pmex));
+
+  if (r2 != 0) {
+    st->print("\ncurrent process WorkingSet (physical memory assigned to process): " INT64_FORMAT "M, ",
+             (int64_t) pmex.WorkingSetSize >> 20);
+    st->print("peak: " INT64_FORMAT "M\n", (int64_t) pmex.PeakWorkingSetSize >> 20);
+
+    st->print("current process commit charge (\"private bytes\"): " INT64_FORMAT "M, ",
+             (int64_t) pmex.PrivateUsage >> 20);
+    st->print("peak: " INT64_FORMAT "M", (int64_t) pmex.PeakPagefileUsage >> 20);
+  } else {
+    st->print("\nGetProcessMemoryInfo did not succeed so we miss some memory values.");
+  }
+  st->cr();
+}
+
+void os::print_process_memory_info(outputStream* st) {
+  os::win32::print_process_memory_info(st);
+}
+
 void os::print_memory_info(outputStream* st) {
   st->print("Memory:");
   st->print(" %zuk page", os::vm_page_size()>>10);
@@ -2110,35 +2135,8 @@ void os::print_memory_info(outputStream* st) {
   }
 
   // extended memory statistics for a process
-  PROCESS_MEMORY_COUNTERS_EX pmex;
-  ZeroMemory(&pmex, sizeof(PROCESS_MEMORY_COUNTERS_EX));
-  pmex.cb = sizeof(pmex);
-  int r2 = GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*) &pmex, sizeof(pmex));
+  os::Windows::print_process_memory_info(st);
 
-  if (r2 != 0) {
-    st->print("\ncurrent process WorkingSet (physical memory assigned to process): " INT64_FORMAT "M, ",
-             (int64_t) pmex.WorkingSetSize >> 20);
-    st->print("peak: " INT64_FORMAT "M\n", (int64_t) pmex.PeakWorkingSetSize >> 20);
-
-    st->print("current process commit charge (\"private bytes\"): " INT64_FORMAT "M, ",
-             (int64_t) pmex.PrivateUsage >> 20);
-    st->print("peak: " INT64_FORMAT "M", (int64_t) pmex.PeakPagefileUsage >> 20);
-  } else {
-    st->print("\nGetProcessMemoryInfo did not succeed so we miss some memory values.");
-  }
-
-  st->cr();
-}
-
-size_t os::get_RSS() {
-  size_t result = 0;
-  PROCESS_MEMORY_COUNTERS pm;
-  ZeroMemory(&pm, sizeof(pm));
-  pm.cb = sizeof(pm);
-  if (GetProcessMemoryInfo(GetCurrentProcess(), &pm, sizeof(pm))) {
-    result = pm.WorkingSetSize;
-  }
-  return result;
 }
 
 bool os::signal_sent_by_kill(const void* siginfo) {

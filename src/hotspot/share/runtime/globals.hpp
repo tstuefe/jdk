@@ -1338,20 +1338,34 @@ const int ObjectAlignmentInBytes = 8;
           "-XX:MallocLimit=2g:oom"                                          \
           "-XX:MallocLimit=compiler:200m:oom,code:100m")                    \
                                                                             \
-  product(size_t, RssLimit, 0, DIAGNOSTIC,                                  \
+  product(ccstr, RssLimit, nullptr, DIAGNOSTIC,                             \
           "Limit to Resident Set Size. The JVM will periodically "          \
-          "check if that limit had been reached and, if true, "             \
-          "generate a fatal error. A value of 0 (default) disables the "    \
-          "limit.")                                                         \
-          range(0, SIZE_MAX)                                                \
+          "check if process rss reached that limit. Upon reaching that "    \
+          "limit, it will print out a report.\n"                            \
+          "Usage:\n"                                                        \
+          "\"-XX:RssLimit=<size>[:<flag>]\"\n"                              \
+          "<flag> defines additional actions to be done after printing "    \
+          "the report:\n"                                                   \
+          "- \"fatal\"  : print a report and end VM with a fatal error\n"   \
+          "Examples:\n"                                                     \
+          "-XX:RssLimit=2g\n"                                               \
+          "-XX:RssLimit=2g:fatal\n")                                        \
                                                                             \
-  product(uint, RssLimitPercent, 0, DIAGNOSTIC,                             \
-          "Limit to Resident Set Size, given as percent of the total "      \
-          "physical memory of the machine or the memory limit of the "      \
-          "container. A value of 0 (default) disables the limit.")          \
-          range(0, 100)                                                     \
+  product(ccstr, RssLimitPercent, nullptr, DIAGNOSTIC,                      \
+          "Limit to Resident Set Size in percent of physical memory size "  \
+          "of the system (0.01 .. 100.0). The JVM will periodically "       \
+          "check if process rss reached that limit. Upon reaching that "    \
+          "limit, it will print out a report.\n"                            \
+          "Usage:\n"                                                        \
+          "\"-XX:RssLimitPercent=<percent>[:<flag>]\"\n"                    \
+          "<flag> defines additional actions to be done after printing "    \
+          "the report:\n"                                                   \
+          "- \"fatal\"  : print a report and end VM with a fatal error\n"   \
+          "Examples:\n"                                                     \
+          "-XX:RssLimitPercent=0.1\n"                                       \
+          "-XX:RssLimitPercent=95:fatal\n")                                 \
                                                                             \
-  product(uint, RssLimitCheckInterval, 1000, DIAGNOSTIC,                    \
+  product(uint, RssLimitCheckInterval, 5000, DIAGNOSTIC,                    \
           "If RssLimit or RssLimitPercent are set, interval, in ms, at "    \
           "which the JVM will check the process resident set size.")        \
           range(10, INT_MAX)                                                \

@@ -57,7 +57,7 @@ public:
   static void on_arena_chunk_allocation(size_t size, int arenatag, uint64_t* stamp);
   static void on_arena_chunk_deallocation(size_t size, uint64_t stamp);
 
-  static void print_final_report(outputStream* st);
+  static void print_brief_report(outputStream* st);
   static void print_error_report(outputStream* st);
   static void print_jcmd_report(outputStream* st, bool verbose, bool legend, size_t minsize);
 

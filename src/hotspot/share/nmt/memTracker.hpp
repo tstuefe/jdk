@@ -312,7 +312,6 @@ class MemTracker : AllStatic {
     }
   };
 
- private:
   static void report(bool summary_only, outputStream* output, size_t scale);
 
  private:

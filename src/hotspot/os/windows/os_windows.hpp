@@ -59,6 +59,8 @@ class os::win32 {
 
   static bool register_code_area(char *low, char *high);
 
+  static void print_process_memory_info(outputStream* st);
+
  public:
   // Windows-specific interface:
   static void   initialize_system_info();

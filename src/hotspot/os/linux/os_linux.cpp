@@ -2548,13 +2548,8 @@ void os::print_memory_info(outputStream* st) {
   st->cr();
 }
 
-size_t os::get_RSS() {
-  size_t result = 0;
-  os::Linux::meminfo_t mi;
-  if (os::Linux::query_process_memory_info(&mi) && mi.vmrss != -1) {
-    result = (size_t)mi.vmrss * K;
-  }
-  return result;
+void os::print_process_memory_info(outputStream* st) {
+  os::Linux::print_process_memory_info(st);
 }
 
 // Print the first "model name" line and the first "flags" line

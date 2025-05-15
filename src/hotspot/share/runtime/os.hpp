@@ -809,9 +809,6 @@ class os: AllStatic {
   // Get host name in buffer provided
   static bool get_host_name(char* buf, size_t buflen);
 
-  // Returns the process working set size (rss); 0 if unsupported.
-  static size_t get_RSS();
-
   // Print out system information; they are called by fatal error handler.
   // Output format may be different on different platforms.
   static void print_os_info(outputStream* st);
@@ -820,6 +817,7 @@ class os: AllStatic {
   static void pd_print_cpu_info(outputStream* st, char* buf, size_t buflen);
   static void print_summary_info(outputStream* st, char* buf, size_t buflen);
   static void print_memory_info(outputStream* st);
+  static void print_process_memory_info(outputStream* st);
   static void print_dll_info(outputStream* st);
   static void print_jvmti_agent_info(outputStream* st);
   static void print_environment_variables(outputStream* st, const char** env_list);

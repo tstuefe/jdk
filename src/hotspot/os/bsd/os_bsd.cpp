@@ -1469,16 +1469,8 @@ void os::print_memory_info(outputStream* st) {
   st->cr();
 }
 
-size_t os::get_RSS() {
-  size_t result = 0;
-#ifdef __APPLE__
-  mach_task_basic_info info;
-  mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-  if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count) == KERN_SUCCESS) {
-    result = info.resident_size;
-  }
-#endif // __APPLE__
-  return result;
+void os::print_process_memory_info(outputStream* st) {
+  st->print_cr("Resident Set Size: %zu", rss());
 }
 
 static char saved_jvm_path[MAXPATHLEN] = {0};
