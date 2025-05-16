@@ -1470,7 +1470,7 @@ void os::print_memory_info(outputStream* st) {
 }
 
 void os::print_process_memory_info(outputStream* st) {
-  st->print_cr("Resident Set Size: %zu", rss());
+  st->print_cr("Resident Set Size: %zuK", rss() / K);
 }
 
 static char saved_jvm_path[MAXPATHLEN] = {0};
