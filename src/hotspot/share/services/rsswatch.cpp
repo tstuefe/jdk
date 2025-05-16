@@ -278,7 +278,7 @@ public:
     st->print_cr("RssLimit:                    %s", RssLimit != nullptr ? RssLimit : "not set");
     st->print_cr("RssLimitPercent:             %s", RssLimitPercent != nullptr ? RssLimitPercent : "not set");
     st->print_cr("RssLimitCheckInterval:       %ums", RssLimitCheckInterval);
-    st->print_cr("physical memory:             %zu", os::physical_memory());
+    st->print_cr("physical memory:             %zu", (size_t) os::physical_memory());
     st->print_cr("abs limit:                   %zu", _absolute_limit);
     st->print_cr("rel limit percent:           %.3f", _percent_limit);
     st->print_cr("limit threshold:             %zu", _threshold_100);
