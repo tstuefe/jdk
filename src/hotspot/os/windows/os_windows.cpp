@@ -2135,7 +2135,7 @@ void os::print_memory_info(outputStream* st) {
   }
 
   // extended memory statistics for a process
-  os::Windows::print_process_memory_info(st);
+  os::win32::print_process_memory_info(st);
 
 }
 
