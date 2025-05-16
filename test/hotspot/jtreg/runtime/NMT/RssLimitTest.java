@@ -245,7 +245,6 @@ public class RssLimitTest {
             limitoption += ":fatal";
         }
         OutputAnalyzer o = runWithSettings(limitoption);
-        o.reportDiagnosticSummary();
         o.shouldContain("RssLimit watcher enabled");
         testExpectedSettingsRelLimit(o, percent, fatal);
         testReport(o);
