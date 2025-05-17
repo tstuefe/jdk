@@ -174,7 +174,7 @@ public class RssLimitTest {
 
         output.shouldContain("Process Memory Info:");
         if (Platform.isLinux() || Platform.isOSX()) {
-            output.shouldMatch("Resident Set Size: \\d+K .*");
+            output.shouldMatch("Resident Set Size: \\d+K");
         } else if (Platform.isWindows()) {
             output.shouldContain("WorkingSet");
         }
