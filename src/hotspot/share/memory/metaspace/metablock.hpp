@@ -69,8 +69,8 @@ public:
   void print_on(outputStream* st) const;
 };
 
-#define METABLOCKFORMAT                 "block (@" PTR_FORMAT " word size %zu)"
-#define METABLOCKFORMATARGS(__block__)  p2i((__block__).base()), (__block__).word_size()
+#define METABLOCKFORMAT                 "block (@" RANGEFMT ", word size %zu)"
+#define METABLOCKFORMATARGS(__block__)  RANGEFMTARGS( (__block__).base(), (__block__).word_size() ), (__block__).word_size()
 
 } // namespace metaspace
 
