@@ -119,7 +119,7 @@ class BlockTree: public CHeapObj<mtMetaspace> {
         _word_size < chunklevel::MAX_CHUNK_WORD_SIZE &&
         // We check the first and last location of the Node for being correctly zapped.
         Zapper::is_zapped_location(_canary) &&
-        Zapper::is_zapped_location((MetaWord*)this + _word_size);
+        Zapper::is_zapped_location((MetaWord*)this + _word_size - 1);
     }
 #endif
   };
