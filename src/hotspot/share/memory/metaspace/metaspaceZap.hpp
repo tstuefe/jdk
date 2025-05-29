@@ -60,23 +60,23 @@ private:
   static uint64_t _salt;
   static uint64_t _presalted_metaspace_zap;
 
-  static uint64_t salted_value(const uint64_t pure, uint64_t salt) {
+  static inline uint64_t salted_value(const uint64_t pure, uint64_t salt) {
     return pure ^ salt;
   }
 
-  static uint64_t desalted_value(const uint64_t salted, uint64_t salt) {
+  static inline uint64_t desalted_value(const uint64_t salted, uint64_t salt) {
     return salted ^ salt;
   }
 
-  static bool is_alternate_location(const uint64_t* p) {
+  static inline bool is_alternate_location(const uint64_t* p) {
     return (uintptr_t)p & (1 << LogBytesPerWord);
   }
 
-  static uint64_t location_salt(const uint64_t* p) {
+  static inline uint64_t location_salt(const uint64_t* p) {
     return (uint64_t)p;
   }
 
-  static bool is_salted_location_interleaving(const uint64_t* p) {
+  static inline bool is_salted_location_interleaving(const uint64_t* p) {
     if (is_alternate_location(p)) {
       return (*p) == desalted_value(location_salt(p), _presalted_metaspace_zap);
     } else {
@@ -84,13 +84,13 @@ private:
     }
   }
 
-  static void do_salt_location_interleaving(uint64_t* p) {
+  static inline void do_salt_location_interleaving(uint64_t* p) {
     (*p) = is_alternate_location(p) ?
            salted_value(location_salt(p), _presalted_metaspace_zap) :
            metaspace_zap;
   }
 
-  static void assert_range(MetaWord* from, MetaWord* to) {
+  static inline void assert_range(MetaWord* from, MetaWord* to) {
     assert(is_aligned(from, BytesPerWord) && is_aligned(to, BytesPerWord),
            "range not word aligned? " RANGEFMT, RANGE2FMTARGS(from, to));
     assert(from < to, "Zero or negative range? " RANGEFMT, RANGE2FMTARGS(from, to));
@@ -100,28 +100,28 @@ public:
 
   static void initialize();
 
-  static void zap_range(MetaWord* from, MetaWord* to) {
+  static inline void zap_range(MetaWord* from, MetaWord* to) {
     assert_range(from, to);
     for (MetaWord* p = from; p < to; p++) {
       do_salt_location_interleaving((uint64_t*)p);
     }
   }
 
-  static void zap_range(MetaWord* from, size_t word_size) {
+  static inline void zap_range(MetaWord* from, size_t word_size) {
     zap_range(from, from + word_size);
   }
 
-  static void zap_metablock(MetaBlock blk) {
+  static inline void zap_metablock(MetaBlock blk) {
     zap_range(blk.base(), blk.end());
   }
 
-  static bool is_zapped_location(const MetaWord* p) {
+  static inline bool is_zapped_location(const MetaWord* p) {
     return is_salted_location_interleaving((uint64_t*)p);
   }
 
   // Given a pointer p and a word size, returns the number of consecutive zapped words
   // found at that location.
-  static size_t num_zapped_words_at(const MetaWord* p, size_t word_size) {
+  static inline size_t num_zapped_words_at(const MetaWord* p, size_t word_size) {
     size_t result = 0;
     while (result < word_size && is_zapped_location(p + result)) {
       result ++;
@@ -134,15 +134,18 @@ public:
 
   // Given a location p, returns true if it had been zapped with
   // at least min_significance number of words.
-  static bool zap_check_min_significance(const MetaWord* p) {
+  static inline bool location_looks_zapped(const MetaWord* p, size_t word_size) {
     assert(is_aligned(p, BytesPerWord), "Sanity");
+    if (word_size < min_significance) {
+      return false; // too small to say for sure
+    }
     return num_zapped_words_at(p, min_significance) == min_significance;
   }
 
   // Given a pointer p and a word size, returns true if the full range is zapped.
   // Returns false if not fully zapped, and the position of the first non-zapped
   // word. Used for checking zapped memory for overwriters.
-  static bool range_is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {
+  static inline bool range_is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {
     constexpr size_t portion = 8; // 64 bytes
     size_t num_zapped = 0;
     if (word_size <= portion * 2) {
@@ -185,18 +188,18 @@ public:
   // uninitialized marking is different from zapping. Zapping is for marking free memory,
   // uninitialized marking is for initializing memory with a non-zero pattern after allocation
   // to remove the zap pattern and to flush out uses of-uninitialized-members.
-  static void mark_range_uninitialized(MetaWord* from, MetaWord* to) {
+  static inline void mark_range_uninitialized(MetaWord* from, MetaWord* to) {
     assert_range(from, to);
     for (MetaWord* p = from; p < to; p++) {
       (*(uint64_t*)p) = metaspace_uninitialized;
     }
   }
 
-  static void mark_range_uninitialized(MetaWord* from, size_t word_size) {
+  static inline void mark_range_uninitialized(MetaWord* from, size_t word_size) {
     mark_range_uninitialized(from, from + word_size);
   }
 
-  static void mark_metablock_uninitialized(MetaBlock blk) {
+  static inline void mark_metablock_uninitialized(MetaBlock blk) {
     mark_range_uninitialized(blk.base(), blk.end());
   }
 
@@ -205,19 +208,19 @@ public:
 #else
 
 struct Zapper {
-  static void initialize() {}
-  static void zap_range(MetaWord* from, MetaWord* to) {}
-  static void zap_range(MetaWord* from, size_t word_size) {}
-  static void zap_metablock(MetaBlock blk) {}
-  static bool is_zapped_location(const MetaWord* p) {}
-  static size_t num_zapped_words_at(const MetaWord* p, size_t word_size) {}
-  static bool is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {}
+  static inline void initialize() {}
+  static inline void zap_range(MetaWord* from, MetaWord* to) {}
+  static inline void zap_range(MetaWord* from, size_t word_size) {}
+  static inline void zap_metablock(MetaBlock blk) {}
+  static inline bool is_zapped_location(const MetaWord* p) {}
+  static inline size_t num_zapped_words_at(const MetaWord* p, size_t word_size) {}
+  static inline bool is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {}
   template <class HEADER>
-  static inline bool is_fully_zapped_with_header(const HEADER* hdr, size_t word_size, size_t& first_nonzapped) {}
-  static void mark_range_uninitialized(MetaWord* from, MetaWord* to) {}
-  static void mark_range_uninitialized(MetaWord* from, size_t word_size) {}
-  static void mark_metablock_uninitialized(MetaBlock blk) {}
-  static void mark_metablock_uninitialized(MetaBlock blk) {}
+  static inline inline bool is_fully_zapped_with_header(const HEADER* hdr, size_t word_size, size_t& first_nonzapped) {}
+  static inline void mark_range_uninitialized(MetaWord* from, MetaWord* to) {}
+  static inline void mark_range_uninitialized(MetaWord* from, size_t word_size) {}
+  static inline void mark_metablock_uninitialized(MetaBlock blk) {}
+  static inline void mark_metablock_uninitialized(MetaBlock blk) {}
 };
 
 #endif // defined(ASSERT) && defined(_LP64)
