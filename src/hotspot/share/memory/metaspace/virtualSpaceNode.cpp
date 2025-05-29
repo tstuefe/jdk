@@ -36,6 +36,7 @@
 #include "memory/metaspace/metachunk.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "memory/metaspace/metaspaceSettings.hpp"
+#include "memory/metaspace/metaspaceZap.hpp"
 #include "memory/metaspace/rootChunkArea.hpp"
 #include "memory/metaspace/runningCounters.hpp"
 #include "memory/metaspace/virtualSpaceNode.hpp"
@@ -113,9 +114,14 @@ bool VirtualSpaceNode::commit_range(MetaWord* p, size_t word_size) {
     vm_exit_out_of_memory(word_size * BytesPerWord, OOM_MMAP_ERROR, "Failed to commit metaspace.");
   }
 
+  // On debug builds, zap area with uninitialized marker
+#ifdef ASSERT
+  Zapper::mark_range_uninitialized(p, word_size);
+#else
   if (AlwaysPreTouch) {
     os::pretouch_memory(p, p + word_size);
   }
+#endif
 
   UL2(debug, "... committed %zu additional words.", commit_increase_words);
 

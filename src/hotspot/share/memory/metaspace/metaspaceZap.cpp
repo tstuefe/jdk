@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2020 SAP SE. All rights reserved.
+ * Copyright (c) 2025 Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,36 +23,24 @@
  *
  */
 
-#include "memory/metaspace/freeBlocks.hpp"
 #include "memory/metaspace/metaspaceZap.hpp"
-#include "utilities/debug.hpp"
+#include "runtime/os.hpp"
 #include "utilities/globalDefinitions.hpp"
+
+#if defined(ASSERT) && defined(_LP64)
+
 
 namespace metaspace {
 
-void FreeBlocks::add_block(MetaBlock bl) {
-  DEBUG_ONLY(Zapper::zap_metablock(bl);)
-  if (bl.word_size() > _small_blocks.MaxWordSize) {
-    _tree.add_block(bl);
-  } else {
-    _small_blocks.add_block(bl);
-  }
+uint64_t Zapper::_salt = 0;
+uint64_t Zapper::_presalted_metaspace_zap = 0;
+
+void Zapper::initialize() {
+  // Calculate the presalted zap value
+  _salt = os::random();
+  _salt = _salt | (((uint64_t)os::next_random(_salt)) << 32);
+  _presalted_metaspace_zap = salted_value(metaspace_zap, _salt);
 }
 
-MetaBlock FreeBlocks::remove_block(size_t requested_word_size) {
-  size_t real_size = 0;
-  MetaBlock bl;
-  if (requested_word_size > _small_blocks.MaxWordSize) {
-    bl = _tree.remove_block(requested_word_size);
-  } else {
-    bl = _small_blocks.remove_block(requested_word_size);
-  }
-#ifdef ASSERT
-  if (bl.is_nonempty()) {
-    Zapper::mark_metablock_uninitialized(bl);
-  }
-#endif // ASSERT
-  return bl;
 }
-
-} // namespace metaspace
+#endif // #if defined(ASSERT) && defined(_LP64)

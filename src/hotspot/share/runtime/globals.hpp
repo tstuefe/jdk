@@ -487,8 +487,13 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   develop(bool, ZapTLAB, trueInDebug,                                       \
           "Zap allocated TLABs")                                            \
+                                                                            \
+  develop(bool, ZapMetaspace, trueInDebug,                                  \
+          "Zap freed metaspace and class space")                            \
+                                                                            \
   develop(bool, TestingAsyncLoggingDeathTest, false,                        \
           "Recursive logging death test")                                   \
+                                                                            \
   develop(bool, TestingAsyncLoggingDeathTestNoCrash, false,                 \
           "Recursive logging death test (no crash)")                        \
                                                                             \

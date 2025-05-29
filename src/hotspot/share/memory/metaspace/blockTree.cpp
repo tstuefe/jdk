@@ -25,6 +25,7 @@
 
 #include "memory/metaspace/chunklevel.hpp"
 #include "memory/metaspace/blockTree.hpp"
+#include "memory/metaspace/metaspaceZap.hpp"
 #include "memory/resourceArea.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -38,7 +39,7 @@ const size_t BlockTree::MinWordSize;
 
 #define NODE_FORMAT \
   "@" PTR_FORMAT \
-  ": canary " INTPTR_FORMAT \
+  ", _canary[0] " PTR_FORMAT \
   ", parent " PTR_FORMAT \
   ", left " PTR_FORMAT \
   ", right " PTR_FORMAT \
@@ -47,7 +48,7 @@ const size_t BlockTree::MinWordSize;
 
 #define NODE_FORMAT_ARGS(n) \
   p2i(n), \
-  (n)->_canary, \
+  p2i((n)->_canary), \
   p2i((n)->_parent), \
   p2i((n)->_left), \
   p2i((n)->_right), \
@@ -87,18 +88,14 @@ struct BlockTree::walkinfo {
 void BlockTree::verify_node_pointer(const Node* n) const {
   tree_assert(os::is_readable_pointer(n),
               "Invalid node: @" PTR_FORMAT " is unreadable.", p2i(n));
-  // If the canary is broken, this is either an invalid node pointer or
-  // the node has been overwritten. Either way, print a hex dump, then
-  // assert away.
-  if (n->_canary != Node::_canary_value) {
-    os::print_hex_dump(tty, (address)n, (address)n + sizeof(Node), 1);
-    tree_assert(false, "Invalid node: @" PTR_FORMAT " canary broken or pointer invalid", p2i(n));
-  }
 }
 
 void BlockTree::verify() const {
-  // Traverse the tree and test that all nodes are in the correct order.
 
+  STATIC_ASSERT(offsetof(Node, _canary) == 0);
+  STATIC_ASSERT(is_aligned(sizeof(Node), BytesPerWord));
+
+  // Traverse the tree and test that all nodes are in the correct order.
   MemRangeCounter counter;
   if (_root != nullptr) {
 
@@ -135,6 +132,20 @@ void BlockTree::verify() const {
       tree_assert_invalid_node(n->_word_size <= chunklevel::MAX_CHUNK_WORD_SIZE, n);
       tree_assert_invalid_node(n->_word_size > info.lim1, n);
       tree_assert_invalid_node(n->_word_size < info.lim2, n);
+
+      // Do a full zap check for the header canary area
+      size_t first_nonzapped = 0;
+      if (!Zapper::range_is_fully_zapped(n->_canary, Node::zap_slots, first_nonzapped)) {
+        tree_assert(false, "Invalid node: @" PTR_FORMAT " canary area in header broken at slot ", p2i(n));
+      }
+
+      // Do a full zap check for the area following the node header
+      if (!Zapper::range_with_header_is_fully_zapped<Node>(n, n->_word_size, first_nonzapped)) {
+        const address corruption_point = (address)(n->_canary + first_nonzapped);
+        os::print_hex_dump(tty, corruption_point, corruption_point + 64, 1);
+        tree_assert(false, "Invalid node: @" PTR_FORMAT " area not fully zapped (corruption "
+                    "point around " PTR_FORMAT ")", p2i(n), p2i(corruption_point));
+      }
 
       // Check children
       if (n->_left != nullptr) {
@@ -177,10 +188,6 @@ void BlockTree::verify() const {
   // (which also verifies that we visited every node, or at least
   //  as many nodes as are in this tree)
   _counter.check(counter);
-}
-
-void BlockTree::zap_block(MetaBlock bl) {
-  memset(bl.base(), 0xF3, bl.word_size() * sizeof(MetaWord));
 }
 
 void BlockTree::print_tree(outputStream* st) const {

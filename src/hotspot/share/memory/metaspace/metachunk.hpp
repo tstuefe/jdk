@@ -340,6 +340,7 @@ public:
   void verify() const;
   // Verifies linking with neighbors in virtual space. Needs expand lock protection.
   void verify_neighborhood() const;
+  // Zap the header
   void zap_header(uint8_t c = 0x17);
 
   // Returns true if given pointer points into the payload area of this chunk.

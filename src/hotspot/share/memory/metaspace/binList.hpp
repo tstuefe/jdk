@@ -30,6 +30,7 @@
 #include "memory/metaspace/counters.hpp"
 #include "memory/metaspace/metablock.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
+#include "memory/metaspace/metaspaceZap.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -122,19 +123,6 @@ private:
     return i2 == num_lists ? -1 : i2;
   }
 
-#ifdef ASSERT
-  static const uintptr_t canary = 0xFFEEFFEE;
-  static void write_canary(MetaWord* p, size_t word_size) {
-    if (word_size > 1) { // 1-word-sized blocks have no space for a canary
-      ((uintptr_t*)p)[word_size - 1] = canary;
-    }
-  }
-  static bool check_canary(const Block* b, size_t word_size) {
-    return word_size == 1 || // 1-word-sized blocks have no space for a canary
-           ((const uintptr_t*)b)[word_size - 1] == canary;
-  }
-#endif
-
 public:
 
   BinListImpl() {
@@ -149,7 +137,6 @@ public:
     MetaWord* const p = mb.base();
     assert(word_size >= MinWordSize &&
            word_size <= MaxWordSize, "bad block size");
-    DEBUG_ONLY(write_canary(p, word_size);)
     const int index = index_for_word_size(word_size);
     Block* old_head = _blocks[index];
     Block* new_head = new (p) Block(old_head);
@@ -169,8 +156,6 @@ public:
       Block* b = _blocks[index];
       const size_t real_word_size = word_size_for_index(index);
       assert(b != nullptr, "Sanity");
-      assert(check_canary(b, real_word_size),
-             "bad block in list[%d] (" BLOCK_FORMAT ")", index, BLOCK_FORMAT_ARGS(b, real_word_size));
       _blocks[index] = b->_next;
       _counter.sub(real_word_size);
       result = MetaBlock((MetaWord*)b, real_word_size);
@@ -187,14 +172,22 @@ public:
   bool is_empty() const { return count() == 0; }
 
 #ifdef ASSERT
+  static void verify_block(const Block* b, size_t word_size) {
+    if (word_size > 1) {
+      size_t first_nonzapped = 0;
+      assert(Zapper::range_with_header_is_fully_zapped<Block>(b, word_size, first_nonzapped),
+             "Corrupted block in BinList (" BLOCK_FORMAT "), corruption around " PTR_FORMAT,
+             BLOCK_FORMAT_ARGS(b, word_size), p2i((const MetaWord*)b + first_nonzapped));
+    }
+  }
   void verify() const {
     MemRangeCounter local_counter;
     for (int i = 0; i < num_lists; i++) {
       const size_t s = word_size_for_index(i);
       int pos = 0;
-      Block* b_last = nullptr; // catch simple circularities
-      for (Block* b = _blocks[i]; b != nullptr; b = b->_next, pos++) {
-        assert(check_canary(b, s), "");
+      const Block* b_last = nullptr; // catch simple circularities
+      for (const Block* b = _blocks[i]; b != nullptr; b = b->_next, pos++) {
+        verify_block(b, s);
         assert(b != b_last, "Circle");
         local_counter.add(s);
         b_last = b;

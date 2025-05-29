@@ -46,6 +46,7 @@ public:
 
   MetaWord* base() const { return _base; }
   const MetaWord* end() const { return _base + _word_size; }
+  MetaWord* end() { return _base + _word_size; }
   size_t word_size() const { return _word_size; }
   bool is_empty() const { return _base == nullptr; }
   bool is_nonempty() const { return _base != nullptr; }
