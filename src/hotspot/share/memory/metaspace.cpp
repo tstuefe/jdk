@@ -42,6 +42,7 @@
 #include "memory/metaspace/metaspaceContext.hpp"
 #include "memory/metaspace/metaspaceReporter.hpp"
 #include "memory/metaspace/metaspaceSettings.hpp"
+#include "memory/metaspace/metaspaceZap.hpp"
 #include "memory/metaspace/runningCounters.hpp"
 #include "memory/metaspace/virtualSpaceList.hpp"
 #include "memory/metaspaceCriticalAllocation.hpp"
@@ -716,6 +717,9 @@ void Metaspace::ergo_initialize() {
 }
 
 void Metaspace::global_initialize() {
+
+  metaspace::Zapper::initialize();
+
   MetaspaceGC::initialize(); // <- since we do not prealloc init chunks anymore is this still needed?
 
   metaspace::ChunkHeaderPool::initialize();

@@ -351,6 +351,7 @@ public:
 
   // Add a memory block to the tree. Its content will be overwritten.
   void add_block(MetaBlock block) {
+    DEBUG_ONLY(Zapper::zap_metablock(block);)
     const size_t word_size = block.word_size();
     assert(word_size >= MinWordSize, "invalid block size %zu", word_size);
     Node* n = new(block.base()) Node(word_size);
@@ -387,6 +388,7 @@ public:
       const size_t node_word_size = n->_word_size;
 
       result = MetaBlock((MetaWord*)n, node_word_size);
+      DEBUG_ONLY(Zapper::mark_metablock_uninitialized(result);)
 
       _counter.sub(node_word_size);
     }

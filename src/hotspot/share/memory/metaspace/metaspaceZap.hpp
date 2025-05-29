@@ -147,22 +147,23 @@ public:
   // word. Used for checking zapped memory for overwriters.
   static inline bool range_is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {
     constexpr size_t portion = 8; // 64 bytes
-    size_t num_zapped = 0;
     if (word_size <= portion * 2) {
-      num_zapped = num_zapped_words_at(start, word_size);
-      return num_zapped_words_at(start, word_size) == word_size;
+      first_nonzapped = num_zapped_words_at(start, word_size);
+      return word_size == first_nonzapped;
     } else {
       // Large range; we just check at certain intervals
-      constexpr int interval = 16; // 1 KB
-      const MetaWord* scanpoint = start;
-      const MetaWord* const last_scanpoint = start + word_size - portion;
-      while (scanpoint < last_scanpoint) {
-        if (num_zapped_words_at(MIN2(scanpoint, last_scanpoint), portion) != portion) {
-          // found something off. Do full scan to find first non-zapped position.
-          num_zapped = num_zapped_words_at(start, word_size);
-          return false;
-        }
-        scanpoint += interval;
+      constexpr int interval = 64; // 4 KB
+      const MetaWord* const end = start + word_size - portion;
+      bool found_nonzapped = false;
+      for (const MetaWord* scanpoint = start; scanpoint < end && !found_nonzapped; scanpoint += interval) {
+        found_nonzapped = num_zapped_words_at(scanpoint, portion) != portion;
+      }
+      if (!found_nonzapped) { // Also scan the very end
+        found_nonzapped = num_zapped_words_at(end, portion) != portion;
+      }
+      if (found_nonzapped) { // found something off. Do full scan to find first non-zapped position.
+        first_nonzapped = num_zapped_words_at(start, word_size);
+        return false;
       }
     }
     return true;

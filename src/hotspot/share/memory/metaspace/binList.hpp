@@ -132,6 +132,7 @@ public:
   }
 
   void add_block(MetaBlock mb) {
+    DEBUG_ONLY(Zapper::zap_metablock(mb);)
     assert(!mb.is_empty(), "Don't add empty blocks");
     const size_t word_size = mb.word_size();
     MetaWord* const p = mb.base();
@@ -159,6 +160,7 @@ public:
       _blocks[index] = b->_next;
       _counter.sub(real_word_size);
       result = MetaBlock((MetaWord*)b, real_word_size);
+      DEBUG_ONLY(Zapper::mark_metablock_uninitialized(result);)
     }
     return result;
   }

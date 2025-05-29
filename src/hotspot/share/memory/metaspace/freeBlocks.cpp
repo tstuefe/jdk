@@ -31,7 +31,6 @@
 namespace metaspace {
 
 void FreeBlocks::add_block(MetaBlock bl) {
-  DEBUG_ONLY(Zapper::zap_metablock(bl);)
   if (bl.word_size() > _small_blocks.MaxWordSize) {
     _tree.add_block(bl);
   } else {
@@ -47,11 +46,6 @@ MetaBlock FreeBlocks::remove_block(size_t requested_word_size) {
   } else {
     bl = _small_blocks.remove_block(requested_word_size);
   }
-#ifdef ASSERT
-  if (bl.is_nonempty()) {
-    Zapper::mark_metablock_uninitialized(bl);
-  }
-#endif // ASSERT
   return bl;
 }
 

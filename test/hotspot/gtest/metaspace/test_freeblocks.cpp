@@ -61,5 +61,4 @@ TEST_VM(metaspace, freeblocks_basics) {
   ASSERT_EQ(bl, bl2);
   DEBUG_ONLY(fbl.verify();)
   CHECK_CONTENT(fbl, 0, 0);
-
 }
