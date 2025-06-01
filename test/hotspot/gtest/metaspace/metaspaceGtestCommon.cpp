@@ -23,8 +23,10 @@
  *
  */
 
+#include "memory/metaspace/metaspaceZap.hpp"
 #include "metaspaceGtestCommon.hpp"
 #include "metaspaceGtestRangeHelpers.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/os.hpp"
 
 void zap_range(MetaWord* p, size_t word_size) {
@@ -95,3 +97,20 @@ void check_marked_range(const MetaWord* p, size_t word_size) {
   check_marked_range(p, word_size, pattern);
 }
 
+void ZapperChecks::check_zap(const MetaWord* p, size_t wordsize) {
+#ifdef ASSERT
+  if (ZapMetaspace && wordsize > 0) {
+    size_t dummy;
+    ASSERT_TRUE(metaspace::Zapper::range_is_fully_zapped(p, wordsize, dummy));
+  }
+#endif
+}
+
+void ZapperChecks::check_uninit(const MetaWord* p, size_t wordsize) {
+#ifdef ASSERT
+  if (ZapMetaspace && wordsize > 0) {
+    ASSERT_EQ((*(uint64_t*)p), metaspace::Zapper::metaspace_uninitialized);
+    ASSERT_EQ((*(uint64_t*)(p + wordsize - 1)), metaspace::Zapper::metaspace_uninitialized);
+  }
+#endif
+}

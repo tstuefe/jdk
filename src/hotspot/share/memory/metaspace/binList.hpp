@@ -161,6 +161,7 @@ public:
     if (index != -1) {
       Block* b = _blocks[index];
       const size_t real_word_size = word_size_for_index(index);
+      DEBUG_ONLY(verify_block(b, real_word_size);)
       assert(b != nullptr, "Sanity");
       _blocks[index] = b->_next;
       _counter.sub(real_word_size);
