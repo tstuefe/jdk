@@ -38,8 +38,6 @@ namespace metaspace {
 
 class Zapper : public AllStatic {
 public:
-  enum class YesNoMaybe { yes, no, maybe };
-
   // canary indicates free metaspace memory
   static constexpr uint64_t metaspace_zap =  0x4D4554414154454DULL; // "METAATEM"
 
@@ -58,7 +56,6 @@ private:
   // chance. We can live with false negatives.
 
   static uint64_t _salt;
-  static uint64_t _presalted_metaspace_zap;
 
   static inline uint64_t salted_value(const uint64_t pure, uint64_t salt) {
     return pure ^ salt;
@@ -78,7 +75,7 @@ private:
 
   static inline bool is_salted_location_interleaving(const uint64_t* p) {
     if (is_alternate_location(p)) {
-      return (*p) == desalted_value(location_salt(p), _presalted_metaspace_zap);
+      return (*p) == desalted_value(location_salt(p), metaspace_zap);
     } else {
       return (*p) == metaspace_zap;
     }
@@ -86,8 +83,8 @@ private:
 
   static inline void do_salt_location_interleaving(uint64_t* p) {
     (*p) = is_alternate_location(p) ?
-           salted_value(location_salt(p), _presalted_metaspace_zap) :
-           metaspace_zap;
+        salted_value(location_salt(p), metaspace_zap) :
+        metaspace_zap;
   }
 
   static inline void assert_range(MetaWord* from, MetaWord* to) {
@@ -117,6 +114,21 @@ public:
 
   static inline bool is_zapped_location(const MetaWord* p) {
     return is_salted_location_interleaving((uint64_t*)p);
+  }
+
+  // Given a pointer to a header hdr leading an area of word_size words, returns true if the area following
+  // the header is fully zapped.
+  template <class HEADER>
+  static inline void zap_range_with_header(HEADER* hdr, size_t word_size) {
+    STATIC_ASSERT(is_aligned(sizeof(HEADER), BytesPerWord));
+    constexpr size_t hdr_word_size = sizeof(HEADER) / BytesPerWord;
+    assert(word_size >= hdr_word_size, "Sanity");
+    if (word_size > hdr_word_size) {
+      assert(is_aligned(hdr, BytesPerWord), "Sanity");
+      MetaWord* range_start = (MetaWord*)(hdr + 1);
+      const size_t range_size = word_size - hdr_word_size;
+      zap_range(range_start, range_size);
+    }
   }
 
   // Given a pointer p and a word size, returns the number of consecutive zapped words

@@ -33,8 +33,10 @@
 #include "memory/metaspace/metaspaceContext.hpp"
 #include "memory/metaspace/metaspaceSettings.hpp"
 #include "memory/metaspace/metaspaceStatistics.hpp"
+#include "memory/metaspace/metaspaceZap.hpp"
 #include "memory/metaspace/virtualSpaceList.hpp"
 #include "memory/metaspace/virtualSpaceNode.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "sanitizers/address.hpp"
 #include "utilities/debug.hpp"
@@ -243,6 +245,11 @@ Metachunk* ChunkManager::get_chunk_locked(chunklevel_t preferred_level, chunklev
 // !! Note: this may invalidate the chunk. Do not access the chunk after
 //    this function returns !!
 void ChunkManager::return_chunk(Metachunk* c) {
+#ifdef ASSERT
+  if (ZapMetaspace && c->committed_words() > 0) {
+    Zapper::zap_range(c->base(), c->committed_words());
+  }
+#endif // ASSERT
   // It is valid to poison the chunk payload area at this point since its physically separated from
   // the chunk meta info.
   ASAN_POISON_MEMORY_REGION(c->base(), c->word_size() * BytesPerWord);

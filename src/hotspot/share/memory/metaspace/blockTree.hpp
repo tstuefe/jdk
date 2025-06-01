@@ -31,6 +31,7 @@
 #include "memory/metaspace/counters.hpp"
 #include "memory/metaspace/metablock.hpp"
 #include "memory/metaspace/metaspaceZap.hpp"
+#include "runtime/globals.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -108,18 +109,18 @@ class BlockTree: public CHeapObj<mtMetaspace> {
       _right(nullptr),
       _next(nullptr),
       _word_size(word_size)
-    {
-      DEBUG_ONLY(Zapper::zap_range(_canary, zap_slots);)
-    }
+    {}
 
 #ifdef ASSERT
-    bool valid() const { // quick validity check
+    bool valid() const {
+      // Function is called often; we only do very basic tests here.
+      const bool zap_intact = ZapMetaspace ?
+          Zapper::is_zapped_location(_canary) &&
+          Zapper::is_zapped_location((MetaWord*)this + _word_size - 1) : true;
       return
         _word_size >= sizeof(Node) &&
         _word_size < chunklevel::MAX_CHUNK_WORD_SIZE &&
-        // We check the first and last location of the Node for being correctly zapped.
-        Zapper::is_zapped_location(_canary) &&
-        Zapper::is_zapped_location((MetaWord*)this + _word_size - 1);
+        zap_intact;
     }
 #endif
   };
@@ -351,7 +352,6 @@ public:
 
   // Add a memory block to the tree. Its content will be overwritten.
   void add_block(MetaBlock block) {
-    DEBUG_ONLY(Zapper::zap_metablock(block);)
     const size_t word_size = block.word_size();
     assert(word_size >= MinWordSize, "invalid block size %zu", word_size);
     Node* n = new(block.base()) Node(word_size);
@@ -361,6 +361,12 @@ public:
       insert(_root, n);
     }
     _counter.add(word_size);
+#ifdef ASSERT
+    if (ZapMetaspace) {
+      Zapper::zap_range(n->_canary, Node::zap_slots);
+      Zapper::zap_range_with_header<Node>(n, n->_word_size);
+    }
+#endif // ASSERT
   }
 
   // Given a word_size, search and return the smallest block that is equal or

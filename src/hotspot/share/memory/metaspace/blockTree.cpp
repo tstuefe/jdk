@@ -39,7 +39,7 @@ const size_t BlockTree::MinWordSize;
 
 #define NODE_FORMAT \
   "@" PTR_FORMAT \
-  ", _canary[0] " PTR_FORMAT \
+  ", canary[0] " PTR_FORMAT \
   ", parent " PTR_FORMAT \
   ", left " PTR_FORMAT \
   ", right " PTR_FORMAT \
@@ -135,12 +135,12 @@ void BlockTree::verify() const {
 
       // Do a full zap check for the header canary area
       size_t first_nonzapped = 0;
-      if (!Zapper::range_is_fully_zapped(n->_canary, Node::zap_slots, first_nonzapped)) {
+      if (ZapMetaspace && !Zapper::range_is_fully_zapped(n->_canary, Node::zap_slots, first_nonzapped)) {
         tree_assert(false, "Invalid node: @" PTR_FORMAT " canary area in header broken at slot ", p2i(n));
       }
 
       // Do a full zap check for the area following the node header
-      if (!Zapper::range_with_header_is_fully_zapped<Node>(n, n->_word_size, first_nonzapped)) {
+      if (ZapMetaspace && !Zapper::range_with_header_is_fully_zapped<Node>(n, n->_word_size, first_nonzapped)) {
         const address corruption_point = (address)(n->_canary + first_nonzapped);
         os::print_hex_dump(tty, corruption_point, corruption_point + 64, 1);
         tree_assert(false, "Invalid node: @" PTR_FORMAT " area not fully zapped (corruption "

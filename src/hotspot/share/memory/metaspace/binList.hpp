@@ -31,6 +31,7 @@
 #include "memory/metaspace/metablock.hpp"
 #include "memory/metaspace/metaspaceCommon.hpp"
 #include "memory/metaspace/metaspaceZap.hpp"
+#include "runtime/globals.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -132,7 +133,6 @@ public:
   }
 
   void add_block(MetaBlock mb) {
-    DEBUG_ONLY(Zapper::zap_metablock(mb);)
     assert(!mb.is_empty(), "Don't add empty blocks");
     const size_t word_size = mb.word_size();
     MetaWord* const p = mb.base();
@@ -143,6 +143,11 @@ public:
     Block* new_head = new (p) Block(old_head);
     _blocks[index] = new_head;
     _counter.add(word_size);
+#ifdef ASSERT
+    if (ZapMetaspace) {
+      Zapper::zap_range_with_header<Block>(new_head, word_size);
+    }
+#endif
   }
 
   // Given a word_size, searches and returns a block of at least that size.
@@ -177,9 +182,11 @@ public:
   static void verify_block(const Block* b, size_t word_size) {
     if (word_size > 1) {
       size_t first_nonzapped = 0;
-      assert(Zapper::range_with_header_is_fully_zapped<Block>(b, word_size, first_nonzapped),
-             "Corrupted block in BinList (" BLOCK_FORMAT "), corruption around " PTR_FORMAT,
-             BLOCK_FORMAT_ARGS(b, word_size), p2i((const MetaWord*)b + first_nonzapped));
+      if (ZapMetaspace) {
+        assert(Zapper::range_with_header_is_fully_zapped<Block>(b, word_size, first_nonzapped),
+               "Corrupted block in BinList (" BLOCK_FORMAT "), corruption around " PTR_FORMAT,
+               BLOCK_FORMAT_ARGS(b, word_size), p2i((const MetaWord*)b + first_nonzapped));
+      }
     }
   }
   void verify() const {

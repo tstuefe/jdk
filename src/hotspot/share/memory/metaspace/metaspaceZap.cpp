@@ -33,17 +33,14 @@
 namespace metaspace {
 
 uint64_t Zapper::_salt = 0;
-uint64_t Zapper::_presalted_metaspace_zap = 0;
 
 // Pre C++17, we need to define static constexpr members
 constexpr uint64_t Zapper::metaspace_uninitialized;
 constexpr uint64_t Zapper::metaspace_zap;
 
 void Zapper::initialize() {
-  // Calculate the presalted zap value
   _salt = os::random();
   _salt = _salt | (((uint64_t)os::next_random(_salt)) << 32);
-  _presalted_metaspace_zap = salted_value(metaspace_zap, _salt);
 }
 
 }

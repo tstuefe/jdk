@@ -114,8 +114,13 @@ bool VirtualSpaceNode::commit_range(MetaWord* p, size_t word_size) {
     vm_exit_out_of_memory(word_size * BytesPerWord, OOM_MMAP_ERROR, "Failed to commit metaspace.");
   }
 
-  // On debug builds, zap area with uninitialized marker
 #ifdef ASSERT
+  // On debug builds, zap area with uninitialized marker
+  // We only commit memory that belongs to a chunk that is currently in use
+  // or will be in use shortly; not all of the committed memory will be handed
+  // out immediately, since we commit in portions of commit granules (64K), but
+  // the assumption is that the rest of these 64K will be handed out in the immediate
+  // future.
   Zapper::mark_range_uninitialized(p, word_size);
 #else
   if (AlwaysPreTouch) {
