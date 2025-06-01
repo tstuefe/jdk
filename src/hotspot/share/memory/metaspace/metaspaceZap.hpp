@@ -158,13 +158,13 @@ public:
   // Returns false if not fully zapped, and the position of the first non-zapped
   // word. Used for checking zapped memory for overwriters.
   static inline bool range_is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {
-    constexpr size_t portion = 8; // 64 bytes
+    constexpr size_t portion = 4;
     if (word_size <= portion * 2) {
       first_nonzapped = num_zapped_words_at(start, word_size);
       return word_size == first_nonzapped;
     } else {
       // Large range; we just check at certain intervals
-      constexpr int interval = 64; // 4 KB
+      constexpr int interval = 32;
       const MetaWord* const end = start + word_size - portion;
       bool found_nonzapped = false;
       for (const MetaWord* scanpoint = start; scanpoint < end && !found_nonzapped; scanpoint += interval) {

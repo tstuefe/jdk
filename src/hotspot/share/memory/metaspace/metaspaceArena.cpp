@@ -37,6 +37,7 @@
 #include "memory/metaspace/metaspaceContext.hpp"
 #include "memory/metaspace/metaspaceSettings.hpp"
 #include "memory/metaspace/metaspaceStatistics.hpp"
+#include "memory/metaspace/metaspaceZap.hpp"
 #include "memory/metaspace/virtualSpaceList.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/init.hpp"
@@ -259,6 +260,11 @@ MetaBlock MetaspaceArena::allocate(size_t requested_word_size, MetaBlock& wastag
         ls.print("wastage " METABLOCKFORMAT, METABLOCKFORMATARGS(wastage));
       }
     }
+#ifdef ASSERT
+    if (ZapMetaspace) {
+      Zapper::mark_metablock_uninitialized(result);
+    }
+#endif
   } else {
     UL(info, "allocation failed, returned null.");
   }

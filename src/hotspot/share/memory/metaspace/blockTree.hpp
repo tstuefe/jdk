@@ -394,7 +394,6 @@ public:
       const size_t node_word_size = n->_word_size;
 
       result = MetaBlock((MetaWord*)n, node_word_size);
-      DEBUG_ONLY(Zapper::mark_metablock_uninitialized(result);)
 
       _counter.sub(node_word_size);
     }

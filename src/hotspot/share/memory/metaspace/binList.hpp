@@ -165,7 +165,6 @@ public:
       _blocks[index] = b->_next;
       _counter.sub(real_word_size);
       result = MetaBlock((MetaWord*)b, real_word_size);
-      DEBUG_ONLY(Zapper::mark_metablock_uninitialized(result);)
     }
     return result;
   }
