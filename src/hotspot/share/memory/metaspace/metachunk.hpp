@@ -342,6 +342,10 @@ public:
   void verify_neighborhood() const;
   // Zap the header
   void zap_header(uint8_t c = 0x17);
+  // zap committed portion of payload
+  void zap_payload();
+  // check that committed portion of payload is zapped
+  void check_payload_is_zapped() const;
 
   // Returns true if given pointer points into the payload area of this chunk.
   bool is_valid_pointer(const MetaWord* p) const {

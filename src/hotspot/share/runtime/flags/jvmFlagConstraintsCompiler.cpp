@@ -424,3 +424,13 @@ JVMFlag::Error ControlIntrinsicConstraintFunc(ccstrlist value, bool verbose) {
   return JVMFlag::SUCCESS;
 }
 
+JVMFlag::Error ZapMetaspaceConstraintFunc(bool value, bool verbose) {
+#ifdef ADDRESS_SANITIZER
+  if (value) {
+    JVMFlag::printError(verbose, "ZapMetaspace not available in ASAN builds.\n");
+    return JVMFlag::VIOLATES_CONSTRAINT;
+  }
+#endif
+  return JVMFlag::SUCCESS;
+}
+

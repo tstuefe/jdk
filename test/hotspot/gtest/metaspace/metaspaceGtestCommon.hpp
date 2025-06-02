@@ -217,8 +217,8 @@ public:
 };
 
 struct ZapperChecks {
-  static void check_zap(const MetaWord* p, size_t wordsize);
-  static void check_uninit(const MetaWord* p, size_t wordsize);
+  static bool is_zapped(const MetaWord* p, size_t wordsize);
+  static bool is_uninited(const MetaWord* p, size_t wordsize);
 };
 
 #endif // GTEST_METASPACE_METASPACEGTESTCOMMON_HPP

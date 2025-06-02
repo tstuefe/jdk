@@ -490,6 +490,7 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   develop(bool, ZapMetaspace, trueInDebug,                                  \
           "Zap freed metaspace and class space")                            \
+		      constraint(ZapMetaspaceConstraintFunc, AfterErgo)                 \
                                                                             \
   develop(bool, TestingAsyncLoggingDeathTest, false,                        \
           "Recursive logging death test")                                   \

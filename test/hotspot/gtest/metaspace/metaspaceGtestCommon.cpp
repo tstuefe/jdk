@@ -44,7 +44,7 @@ void mark_address(MetaWord* p, uintx pattern) {
 // checks pattern at address
 void check_marked_address(const MetaWord* p, uintx pattern) {
   MetaWord x = (MetaWord)((uintx) p ^ pattern);
-  EXPECT_EQ(*p, x);
+  ASSERT_EQ(*p, x);
 }
 
 // "fill_range_with_pattern" fills a range of heap words with pointers to itself.
@@ -97,20 +97,22 @@ void check_marked_range(const MetaWord* p, size_t word_size) {
   check_marked_range(p, word_size, pattern);
 }
 
-void ZapperChecks::check_zap(const MetaWord* p, size_t wordsize) {
+bool ZapperChecks::is_zapped(const MetaWord* p, size_t wordsize) {
 #ifdef ASSERT
   if (ZapMetaspace && wordsize > 0) {
     size_t dummy;
-    ASSERT_TRUE(metaspace::Zapper::range_is_fully_zapped(p, wordsize, dummy));
+    return metaspace::Zapper::range_is_fully_zapped(p, wordsize, dummy);
   }
 #endif
+  return true;
 }
 
-void ZapperChecks::check_uninit(const MetaWord* p, size_t wordsize) {
+bool ZapperChecks::is_uninited(const MetaWord* p, size_t wordsize) {
 #ifdef ASSERT
   if (ZapMetaspace && wordsize > 0) {
-    ASSERT_EQ((*(uint64_t*)p), metaspace::Zapper::metaspace_uninitialized);
-    ASSERT_EQ((*(uint64_t*)(p + wordsize - 1)), metaspace::Zapper::metaspace_uninitialized);
+    return ((*(uint64_t*)p) == metaspace::Zapper::metaspace_uninitialized &&
+            (*(uint64_t*)(p + wordsize - 1)) == metaspace::Zapper::metaspace_uninitialized);
   }
 #endif
+  return true;
 }

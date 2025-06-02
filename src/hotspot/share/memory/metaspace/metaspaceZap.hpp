@@ -34,6 +34,8 @@
 
 #if defined(ASSERT) && defined(_LP64)
 
+#define ZAPMETASPACE_PARANOID 0
+
 namespace metaspace {
 
 class Zapper : public AllStatic {
@@ -93,12 +95,19 @@ private:
     assert(from < to, "Zero or negative range? " RANGEFMT, RANGE2FMTARGS(from, to));
   }
 
+  static inline void assert_not_asan() {
+#ifdef ADDRESS_SANITIZER
+    fatal("Zapper should not be used with ASAN builds");
+#endif
+  }
+
 public:
 
   static void initialize();
 
   static inline void zap_range(MetaWord* from, MetaWord* to) {
     assert_range(from, to);
+    assert_not_asan();
     for (MetaWord* p = from; p < to; p++) {
       do_salt_location_interleaving((uint64_t*)p);
     }
@@ -113,6 +122,7 @@ public:
   }
 
   static inline bool is_zapped_location(const MetaWord* p) {
+    assert_not_asan();
     return is_salted_location_interleaving((uint64_t*)p);
   }
 
@@ -159,12 +169,15 @@ public:
   // word. Used for checking zapped memory for overwriters.
   static inline bool range_is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {
     constexpr size_t portion = 4;
+#if ZAPMETASPACE_PARANOID
+    first_nonzapped = num_zapped_words_at(start, word_size);
+    return word_size == first_nonzapped;
+#else
     if (word_size <= portion * 2) {
       first_nonzapped = num_zapped_words_at(start, word_size);
       return word_size == first_nonzapped;
     } else {
-      // Large range; we just check at certain intervals
-      constexpr int interval = 32;
+      constexpr int interval = 128; // 1KB
       const MetaWord* const end = start + word_size - portion;
       bool found_nonzapped = false;
       for (const MetaWord* scanpoint = start; scanpoint < end && !found_nonzapped; scanpoint += interval) {
@@ -178,6 +191,7 @@ public:
         return false;
       }
     }
+#endif // ZAPMETASPACE_PARANOID
     return true;
   }
 

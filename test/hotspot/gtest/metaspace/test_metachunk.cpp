@@ -427,3 +427,62 @@ TEST_VM(metaspace, chunk_enlarge_in_place) {
 
 }
 
+#ifdef ASSERT
+
+static void overwriter_test(bool overwrite_head) {
+  if (!ZapMetaspace) {
+    // Disable test for !ZapMetaspace; "fail" with the expected message and a non-zero exit
+    fatal("failed: Invalid node (ignore this output, its fine");
+  }
+
+  const size_t granule_sz = Settings::commit_granule_words();
+  const size_t commit_limit = granule_sz * 3;
+  ChunkGtestContext context;
+
+  MetaWord* p;
+
+  // Allocate chunk and commit what we need
+  const chunklevel_t lvl = ROOT_CHUNK_LEVEL;
+  Metachunk* c = nullptr;
+  context.alloc_chunk_expect_success(&c, lvl, lvl, 0);
+
+  const size_t word_size = c->word_size();
+  c->ensure_committed(word_size);
+
+  context.allocate_from_chunk(&p, c, word_size); // Allocate the full chunk
+
+  // release chunk
+  context.return_chunk(c);
+
+  // The chunk should now be zapped but not yet uncommitted since we don't call ChunkManager::purge()
+  // Don't use ASSERT/EXPECT here, this is executed in a child process without us seeing the output
+  assert(ZapperChecks::is_zapped(p, word_size), "NOT ZAPPED");
+
+  // Overwrite
+  if (overwrite_head) {
+    memset(p, 0xFF, 4);
+  } else {
+    memset(p + word_size - 4, 0xFF, 4);
+  }
+
+  // Allocate a new chunk of the same level. We should be getting the same chunk back,
+  // and the overwrite should trigger an assert.
+  context.alloc_chunk_expect_success(&c, lvl, lvl, 0); // should crash
+
+  // release chunk (at this point the test failed, but failing to return the chunk
+  // yields a confusing message that has nothing to do with this test)
+  context.return_chunk(c);
+}
+
+// Test that overwriting chunk memory of a free chunk yields an assert
+TEST_VM_ASSERT_MSG(metaspace, MetaChunk_overwriter_test_head, ".*Free but committed portion of chunk.*overwriter.*") {
+  overwriter_test(true);
+}
+
+// Test that overwriting chunk memory of a free chunk yields an assert
+TEST_VM_ASSERT_MSG(metaspace, MetaChunk_overwriter_test_tail, ".*Free but committed portion of chunk.*overwriter.*") {
+  overwriter_test(false);
+}
+
+#endif
+

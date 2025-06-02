@@ -184,6 +184,23 @@ void Metachunk::zap_header(uint8_t c) {
   memset(this, c, sizeof(Metachunk));
 }
 
+// zap committed portion of payload
+void Metachunk::zap_payload() {
+  if (ZapMetaspace && committed_words() > 0) {
+    Zapper::zap_range(base(),  committed_words());
+  }
+}
+
+// check that committed portion of payload is zapped
+void Metachunk::check_payload_is_zapped() const {
+  if (ZapMetaspace && committed_words() > 0) {
+    size_t pos;
+    assert(Zapper::range_is_fully_zapped(base(), committed_words(), pos),
+           "Free but committed portion of chunk " METACHUNK_FORMAT " was not fully zapped, overwriter? "
+           "first unzapped position " PTR_FORMAT, METACHUNK_FORMAT_ARGS(this), p2i(base() + pos));
+  }
+}
+
 // Verifies linking with neighbors in virtual space.
 // Can only be done under expand lock protection.
 void Metachunk::verify_neighborhood() const {

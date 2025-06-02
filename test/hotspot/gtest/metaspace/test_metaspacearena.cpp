@@ -205,7 +205,7 @@ public:
       // Allocation succeeded. Should be correctly aligned.
       ASSERT_TRUE(result.is_aligned_base(_arena->allocation_alignment_words()));
 
-      ZapperChecks::check_uninit(result.base(), result.word_size());
+      ASSERT_TRUE(ZapperChecks::is_uninited(result.base(), result.word_size()));
 
       // used: may go up or may not (since our request may have been satisfied from the freeblocklist
       //   whose content already counts as used).

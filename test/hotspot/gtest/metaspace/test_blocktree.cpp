@@ -231,6 +231,10 @@ TEST_VM(metaspace, BlockTree_print_test) {
 
 // Test that an overwritten node would result in an assert and a printed tree
 TEST_VM_ASSERT_MSG(metaspace, BlockTree_overwriter_test, ".*failed: Invalid node") {
+  if (!ZapMetaspace) {
+    // Disable test for !ZapMetaspace; "fail" with the expected message and a non-zero exit
+    fatal("failed: Invalid node (ignore this output, its fine");
+  }
   static const size_t sizes1[] = { 30, 17, 0 };
   static const size_t sizes2[] = { 12, 12, 0 };
 

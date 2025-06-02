@@ -51,6 +51,7 @@
   f(intx,  InitArrayShortSizeConstraintFunc)            \
   f(ccstrlist, DisableIntrinsicConstraintFunc)          \
   f(ccstrlist, ControlIntrinsicConstraintFunc)          \
+  f(bool, ZapMetaspaceConstraintFunc)                   \
 COMPILER2_PRESENT(                                      \
   f(intx,  InteriorEntryAlignmentConstraintFunc)        \
   f(intx,  NodeLimitFudgeFactorConstraintFunc)          \
