@@ -22,13 +22,11 @@
  * questions.
  *
  */
+#ifdef _LP64
 
 #include "memory/metaspace/metaspaceZap.hpp"
 #include "runtime/os.hpp"
 #include "utilities/globalDefinitions.hpp"
-
-#if defined(ASSERT) && defined(_LP64)
-
 
 namespace metaspace {
 
@@ -44,4 +42,5 @@ void Zapper::initialize() {
 }
 
 }
-#endif // #if defined(ASSERT) && defined(_LP64)
+
+#endif // _LP64

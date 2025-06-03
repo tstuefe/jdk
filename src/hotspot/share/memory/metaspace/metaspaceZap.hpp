@@ -32,8 +32,6 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-#if defined(ASSERT) && defined(_LP64)
-
 #define ZAPMETASPACE_PARANOID 0
 
 namespace metaspace {
@@ -229,28 +227,7 @@ public:
   static inline void mark_metablock_uninitialized(MetaBlock blk) {
     mark_range_uninitialized(blk.base(), blk.end());
   }
-
 };
-
-#else
-
-struct Zapper {
-  static inline void initialize() {}
-  static inline void zap_range(MetaWord* from, MetaWord* to) {}
-  static inline void zap_range(MetaWord* from, size_t word_size) {}
-  static inline void zap_metablock(MetaBlock blk) {}
-  static inline bool is_zapped_location(const MetaWord* p) {}
-  static inline size_t num_zapped_words_at(const MetaWord* p, size_t word_size) {}
-  static inline bool is_fully_zapped(const MetaWord* start, size_t word_size, size_t& first_nonzapped) {}
-  template <class HEADER>
-  static inline inline bool is_fully_zapped_with_header(const HEADER* hdr, size_t word_size, size_t& first_nonzapped) {}
-  static inline void mark_range_uninitialized(MetaWord* from, MetaWord* to) {}
-  static inline void mark_range_uninitialized(MetaWord* from, size_t word_size) {}
-  static inline void mark_metablock_uninitialized(MetaBlock blk) {}
-  static inline void mark_metablock_uninitialized(MetaBlock blk) {}
-};
-
-#endif // defined(ASSERT) && defined(_LP64)
 
 } // namespace metaspace
 
