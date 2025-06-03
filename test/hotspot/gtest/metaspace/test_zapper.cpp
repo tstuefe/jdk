@@ -106,7 +106,7 @@ static void do_test_range_is_fully_zapped() {
   // But we should always catch overwriters at start and end of range.
 
   // Overwrite at start
-  for (size_t i = 0; i < MIN2(4UL, size); i++) {
+  for (size_t i = 0; i < MIN2((size_t)4, size); i++) {
     range.zap_and_check_guards();
     EXPECT_TRUE(Zapper::range_is_fully_zapped(range.d, size, first_nonzapped));
     range.d[i] = 0;
