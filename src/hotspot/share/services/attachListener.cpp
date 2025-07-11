@@ -395,7 +395,15 @@ static jint jcmd(AttachOperation* op, attachStream* out) {
     }
   } executor(DCmd_Source_AttachAPI, out, allow_streaming_output);
 
+  const double t1 = os::elapsedTime();
+
   executor.parse_and_execute(op->arg(0), ' ', THREAD);
+
+  const double t2 = os::elapsedTime();
+  char buf[64];
+  os::local_time_string(buf, sizeof(buf));
+  out->print_cr("%s (%.3fms)", buf, (t2 - t1) * 1000.0);
+
   if (HAS_PENDING_EXCEPTION) {
     // We can get an exception during command execution.
     // In the case _attach_stream->set_result() is already called and the operation result code
