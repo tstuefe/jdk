@@ -1145,7 +1145,7 @@ int ArchiveBuilder::precomputed_narrow_klass_shift() {
   //    either, since the encoding range spans over the whole 32-bit address space. We therefore have no way
   //    to use relative positions for Klass as precomputed narrowKlass values; and therefore we cannot use
   //    heap archives.
-  assert(CompressedKlassPointers::has_class_space(), "Only needed for 64-bit");
+  assert(CompressedKlassPointers::has_class_space(), "Not needed?");
 
   // Traditional compressed class pointers: We use a shift of zero, since the encoding base, at runtime,
   //    will be set to the start of the CDS archive, and using 0 gives us 4GB encoding range which is

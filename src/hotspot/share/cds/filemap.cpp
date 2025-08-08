@@ -224,7 +224,7 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
   }
   _compressed_oops = UseCompressedOops;
   _narrow_klass_pointer_bits = CompressedKlassPointers::narrow_klass_pointer_bits();
-  _narrow_klass_shift = ArchiveBuilder::precomputed_narrow_klass_shift();
+  _narrow_klass_shift = LP64_ONLY(ArchiveBuilder::precomputed_narrow_klass_shift()) NOT_LP64(0);
   // Which JIT compier is used
   _compiler_type = (u1)CompilerConfig::compiler_type();
   _type_profile_level = TypeProfileLevel;
