@@ -196,7 +196,7 @@ public:
   // by bit size of narrowKlass IDs and the shift. On 32-bit, we support compressed class pointer only
   // "pro-forma": narrowKlass have the same size as addresses (32 bits), and therefore the encoding range is
   // equal to the address space size. Here, we don't need a class space.
-  static constexpr bool needs_class_space() { return LP64_ONLY(true) NOT_LP64(false); }
+  static constexpr bool has_class_space() { return IS_64_BIT_PLATFORM; }
 
   // Reserve a range of memory that is to contain Klass strucutures which are referenced by narrow Klass IDs.
   // If optimize_for_zero_base is true, the implementation will attempt to reserve optimized for zero-based encoding.

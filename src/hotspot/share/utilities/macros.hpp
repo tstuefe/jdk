@@ -386,9 +386,13 @@
 #ifdef  _LP64
 #define LP64_ONLY(code) code
 #define NOT_LP64(code)
+#define IS_64_BIT_PLATFORM 1
+#define IS_32_BIT_PLATFORM 0
 #else  // !_LP64
 #define LP64_ONLY(code)
 #define NOT_LP64(code) code
+#define IS_64_BIT_PLATFORM 0
+#define IS_32_BIT_PLATFORM 1
 #endif // _LP64
 
 #ifdef LINUX

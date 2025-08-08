@@ -679,14 +679,8 @@ void ArchiveBuilder::make_shallow_copy(DumpRegion *dump_region, SourceObjInfo* s
       dump_region->allocate(sizeof(address));
     }
     // Allocate space for the future InstanceKlass with proper alignment
-    const size_t alignment =
-#ifdef _LP64
-      UCCP_ALWAYS_TRUE_TRUE ?
-        nth_bit(ArchiveBuilder::precomputed_narrow_klass_shift()) :
-        SharedSpaceObjectAlignment;
-#else
-      SharedSpaceObjectAlignment;
-#endif
+    const size_t alignment = LP64_ONLY(nth_bit(ArchiveBuilder::precomputed_narrow_klass_shift()))
+                             NOT_LP64(SharedSpaceObjectAlignment);
     dest = dump_region->allocate(bytes, alignment);
   } else {
     dest = dump_region->allocate(bytes);
@@ -1145,15 +1139,21 @@ class RelocateBufferToRequested : public BitMapClosure {
 
 #ifdef _LP64
 int ArchiveBuilder::precomputed_narrow_klass_shift() {
-  // Legacy Mode:
-  //    We use 32 bits for narrowKlass, which should cover the full 4G Klass range. Shift can be 0.
+  // 32-bit:
+  //    We use a "fake" compressed class pointer mode where we use "narrowKlass" but its really just the
+  //    32-bit Klass pointer with narrowKlass encoding base/shift set to NULL/0; we don't have a class space
+  //    either, since the encoding range spans over the whole 32-bit address space. We therefore have no way
+  //    to use relative positions for Klass as precomputed narrowKlass values; and therefore we cannot use
+  //    heap archives.
+  assert(CompressedKlassPointers::has_class_space(), "Only needed for 64-bit");
+
+  // Traditional compressed class pointers: We use a shift of zero, since the encoding base, at runtime,
+  //    will be set to the start of the CDS archive, and using 0 gives us 4GB encoding range which is
+  //    enough
   // CompactObjectHeader Mode:
   //    narrowKlass is much smaller, and we use the highest possible shift value to later get the maximum
-  //    Klass encoding range.
+  //    Klass encoding range (which will also result in a 4GB range)
   //
-  // Note that all of this may change in the future, if we decide to correct the pre-calculated
-  // narrow Klass IDs at archive load time.
-  assert(UCCP_ALWAYS_TRUE_TRUE, "Only needed for compressed class pointers");
   return UseCompactObjectHeaders ?  CompressedKlassPointers::max_shift() : 0;
 }
 #endif // _LP64

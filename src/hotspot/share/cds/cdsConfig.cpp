@@ -875,8 +875,8 @@ const char* CDSConfig::type_of_archive_being_written() {
 // If an incompatible VM options is found, return a text message that explains why
 static const char* check_options_incompatible_with_dumping_heap() {
 #if INCLUDE_CDS_JAVA_HEAP
-  if (!UCCP_ALWAYS_TRUE_TRUE) {
-    return "UCCP_ALWAYS_TRUE_TRUE must be true";
+  if (!CompressedKlassPointers::has_class_space()) {
+    return "only supported on platforms with class space";
   }
 
   // Almost all GCs support heap region dump, except ZGC (so far).

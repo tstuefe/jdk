@@ -95,7 +95,7 @@ void CompressedKlassPointers::sanity_check_after_initialization() {
 
   // We should need a class space if address space is larger than what narrowKlass can address
   const bool should_need_class_space = (BytesPerWord * BitsPerByte) > narrow_klass_pointer_bits();
-  ASSERT_HERE(should_need_class_space == needs_class_space());
+  ASSERT_HERE(should_need_class_space == has_class_space());
 
   const size_t klass_align = klass_alignment_in_bytes();
 

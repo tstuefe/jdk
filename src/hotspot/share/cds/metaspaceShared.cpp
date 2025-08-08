@@ -245,7 +245,7 @@ static bool shared_base_too_high(char* specified_base, char* aligned_base, size_
 static char* compute_shared_base(size_t cds_max) {
   char* specified_base = (char*)SharedBaseAddress;
   size_t alignment = MetaspaceShared::core_region_alignment();
-  if (UCCP_ALWAYS_TRUE_TRUE && CompressedKlassPointers::needs_class_space()) {
+  if (CompressedKlassPointers::has_class_space()) {
     alignment = MAX2(alignment, Metaspace::reserve_alignment());
   }
 
@@ -1665,8 +1665,9 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
 // (The gap may result from different alignment requirements between metaspace
 //  and CDS)
 //
-// If UCCP_ALWAYS_TRUE_TRUE is disabled, only one address space will be
-//  reserved:
+// On 32-bit, we don't care where in the address space the archive is located. We
+// cannot use narrowKlass precomputed at dumptime since we don't use a class space.
+// Here, we just reserve the archive and are done:
 //
 // +-- Base address             End
 // |                            |
@@ -1680,27 +1681,22 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
 //  use_archive_base_addr address is false, this base address is determined
 //  by the platform.
 //
-// If UCCP_ALWAYS_TRUE_TRUE=1, the range encompassing both spaces will be
-//  suitable to en/decode narrow Klass pointers: the base will be valid for
-//  encoding, the range [Base, End) and not surpass the max. range for that encoding.
-//
 // Return:
 //
 // - On success:
 //    - total_space_rs will be reserved as whole for archive_space_rs and
-//      class_space_rs if UCCP_ALWAYS_TRUE_TRUE is true.
+//      class_space_rs on 64-bit.
 //      On Windows, try reserve archive_space_rs and class_space_rs
 //      separately first if use_archive_base_addr is true.
 //    - archive_space_rs will be reserved and large enough to host static and
 //      if needed dynamic archive: [Base, A).
 //      archive_space_rs.base and size will be aligned to CDS reserve
 //      granularity.
-//    - class_space_rs: If UCCP_ALWAYS_TRUE_TRUE=1, class_space_rs will
-//      be reserved. Its start address will be aligned to metaspace reserve
-//      alignment, which may differ from CDS alignment. It will follow the cds
-//      archive space, close enough such that narrow class pointer encoding
-//      covers both spaces.
-//      If UCCP_ALWAYS_TRUE_TRUE=0, class_space_rs remains unreserved.
+//    - class_space_rs: On 64-bit, class_space_rs will be reserved. Its start
+//      address will be aligned to metaspace reserve alignment, which may
+//      differ from CDS alignment. It will follow the cds archive space, close
+//      enough such that narrow class pointer encoding covers both spaces.
+//    - on 32-bit, class_space_rs remains unreserved.
 // - On error: null is returned and the spaces remain unreserved.
 char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_mapinfo,
                                                           FileMapInfo* dynamic_mapinfo,
@@ -1716,7 +1712,7 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
   size_t archive_end_offset  = (dynamic_mapinfo == nullptr) ? static_mapinfo->mapping_end_offset() : dynamic_mapinfo->mapping_end_offset();
   size_t archive_space_size = align_up(archive_end_offset, archive_space_alignment);
 
-  if (!Metaspace::using_class_space()) {
+  if (!CompressedKlassPointers::has_class_space()) {
     // Get the simple case out of the way first:
     // no compressed class space, simple allocation.
 
