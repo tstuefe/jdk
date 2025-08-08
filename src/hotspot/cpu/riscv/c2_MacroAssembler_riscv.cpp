@@ -1386,8 +1386,7 @@ void C2_MacroAssembler::string_compare_long_same_encoding(Register result, Regis
   Label TAIL_CHECK, TAIL, NEXT_WORD, DIFFERENCE;
 
   const int base_offset = arrayOopDesc::base_offset_in_bytes(T_BYTE);
-  assert((base_offset % (UseCompactObjectHeaders ? 4 :
-                        (UCCP_ALWAYS_TRUE_TRUE ? 8 : 4))) == 0, "Must be");
+  assert(is_aligned(base_offset, UseCompactObjectHeaders ? 4 : 8));
 
   const int minCharsInWord = isLL ? wordSize : wordSize / 2;
 
@@ -1480,8 +1479,7 @@ void C2_MacroAssembler::string_compare_long_different_encoding(Register result, 
   Label TAIL, NEXT_WORD, DIFFERENCE;
 
   const int base_offset = arrayOopDesc::base_offset_in_bytes(T_BYTE);
-  assert((base_offset % (UseCompactObjectHeaders ? 4 :
-                          (UCCP_ALWAYS_TRUE_TRUE ? 8 : 4))) == 0, "Must be");
+  assert(is_aligned(base_offset, UseCompactObjectHeaders ? 4 : 8));
 
   Register strL = isLU ? str1 : str2;
   Register strU = isLU ? str2 : str1;
@@ -1696,8 +1694,7 @@ void C2_MacroAssembler::arrays_equals(Register a1, Register a2,
   int length_offset = arrayOopDesc::length_offset_in_bytes();
   int base_offset   = arrayOopDesc::base_offset_in_bytes(elem_size == 2 ? T_CHAR : T_BYTE);
 
-  assert((base_offset % (UseCompactObjectHeaders ? 4 :
-                         (UCCP_ALWAYS_TRUE_TRUE ? 8 : 4))) == 0, "Must be");
+  assert(is_aligned(base_offset, UseCompactObjectHeaders ? 4 : 8));
 
   Register cnt1 = tmp3;
   Register cnt2 = tmp1;  // cnt2 only used in array length compare
@@ -1822,8 +1819,7 @@ void C2_MacroAssembler::string_equals(Register a1, Register a2,
 
   int base_offset = arrayOopDesc::base_offset_in_bytes(T_BYTE);
 
-  assert((base_offset % (UseCompactObjectHeaders ? 4 :
-                         (UCCP_ALWAYS_TRUE_TRUE ? 8 : 4))) == 0, "Must be");
+  assert(is_aligned(base_offset, UseCompactObjectHeaders ? 4 : 8));
 
   BLOCK_COMMENT("string_equals {");
 
@@ -2690,8 +2686,7 @@ void C2_MacroAssembler::arrays_equals_v(Register a1, Register a2, Register resul
   int length_offset = arrayOopDesc::length_offset_in_bytes();
   int base_offset = arrayOopDesc::base_offset_in_bytes(elem_size == 2 ? T_CHAR : T_BYTE);
 
-  assert((base_offset % (UseCompactObjectHeaders ? 4 :
-                         (UCCP_ALWAYS_TRUE_TRUE ? 8 : 4))) == 0, "Must be");
+  assert(is_aligned(base_offset, UseCompactObjectHeaders ? 4 : 8));
 
   BLOCK_COMMENT("arrays_equals_v {");
 
