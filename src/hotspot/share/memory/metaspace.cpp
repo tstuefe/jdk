@@ -658,7 +658,7 @@ void Metaspace::ergo_initialize() {
 
   MaxMetaspaceSize = MAX2(MaxMetaspaceSize, commit_alignment());
 
-  if (UCCP_ALWAYS_TRUE_TRUE) {
+  if (CompressedKlassPointers::has_class_space()) {
     // Let Class Space not be larger than 80% of MaxMetaspaceSize. Note that is
     // grossly over-dimensioned for most usage scenarios; typical ratio of
     // class space : non class space usage is about 1:6. With many small classes,
@@ -724,7 +724,7 @@ void Metaspace::global_initialize() {
     MetaspaceShared::initialize_for_static_dump();
   }
 
-  // If UCCP_ALWAYS_TRUE_TRUE=1, we have two cases:
+  // If we work with a class space, we have two cases:
   // a) if CDS is active (runtime, Xshare=on), it will create the class space
   //    for us, initialize it and set up CompressedKlassPointers encoding.
   //    Class space will be reserved above the mapped archives.
@@ -835,12 +835,11 @@ void Metaspace::global_initialize() {
   }
 
 #else
-  // +UCCP_ALWAYS_TRUE_TRUE on 32-bit: does not need class space. Klass can live wherever.
-  if (UCCP_ALWAYS_TRUE_TRUE) {
-    const address start = (address)os::vm_min_address(); // but not in the zero page
-    const address end = (address)CompressedKlassPointers::max_klass_range_size();
-    CompressedKlassPointers::initialize(start, end - start);
-  }
+  // 32-bit: does not need class space. Klass can live anywhere in address space. We set up
+  // narrowKlass encoding as unscaled (base/shift null/0)
+  const address start = (address)os::vm_min_address(); // but not in the zero page
+  const address end = (address)CompressedKlassPointers::max_klass_range_size();
+  CompressedKlassPointers::initialize(start, end - start);
 #endif // __LP64
 
   // Initialize non-class virtual space list, and its chunk manager:
@@ -848,15 +847,12 @@ void Metaspace::global_initialize() {
 
   _tracer = new MetaspaceTracer();
 
-  if (UCCP_ALWAYS_TRUE_TRUE) {
-    // Note: "cds" would be a better fit but keep this for backward compatibility.
-    LogTarget(Info, gc, metaspace) lt;
-    if (lt.is_enabled()) {
-      LogStream ls(lt);
-      CDS_ONLY(MetaspaceShared::print_on(&ls);)
-      Metaspace::print_compressed_class_space(&ls);
-      CompressedKlassPointers::print_mode(&ls);
-    }
+  LogTarget(Info, gc, metaspace) lt;
+  if (lt.is_enabled()) {
+    LogStream ls(lt);
+    CDS_ONLY(MetaspaceShared::print_on(&ls);)
+    Metaspace::print_compressed_class_space(&ls);
+    CompressedKlassPointers::print_mode(&ls);
   }
 }
 
