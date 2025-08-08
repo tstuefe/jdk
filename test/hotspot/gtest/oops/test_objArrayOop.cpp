@@ -27,7 +27,7 @@
 
 TEST_VM(objArrayOop, osize) {
   static const struct {
-    int objal; bool ccp; bool coops; bool coh; int result;
+    int objal; bool coops; bool coh; int result;
   } x[] = {
 //    ObjAligInB, UseCCP, UseCoops, UseCOH, object size in heap words
 #ifdef _LP64
