@@ -75,7 +75,6 @@
 
   static bool narrow_klass_use_complex_address() {
     NOT_LP64(ShouldNotCallThis());
-    assert(UCCP_ALWAYS_TRUE_TRUE, "only for compressed klass code");
     return false;
   }
 
