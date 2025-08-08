@@ -705,11 +705,9 @@ int BarrierSetC2::arraycopy_payload_base_offset(bool is_array) {
                             instanceOopDesc::base_offset_in_bytes();
   // base_off:
   // 8  - 32-bit VM or 64-bit VM, compact headers
-  // 12 - 64-bit VM, compressed klass
-  // 16 - 64-bit VM, normal klass
-  if (base_off % BytesPerLong != 0) {
-    assert(UCCP_ALWAYS_TRUE_TRUE, "");
-    assert(!UseCompactObjectHeaders, "");
+  // 12 - 64-bit VM, traditional compressed klass pointers
+  if (!UseCompactObjectHeaders) {
+    assert(base_off == 12, "must be");
     if (is_array) {
       // Exclude length to copy by 8 bytes words.
       base_off += sizeof(int);
@@ -717,8 +715,8 @@ int BarrierSetC2::arraycopy_payload_base_offset(bool is_array) {
       // Include klass to copy by 8 bytes words.
       base_off = instanceOopDesc::klass_offset_in_bytes();
     }
-    assert(base_off % BytesPerLong == 0, "expect 8 bytes alignment");
   }
+  assert(is_aligned(base_off, BytesPerLong), "expect 8 bytes alignment");
   return base_off;
 }
 

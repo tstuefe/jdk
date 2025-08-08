@@ -78,9 +78,7 @@ public:
   static void assert_generational(const char* file, int line);
   static void assert_generations_reconciled(const char* file, int line);
 
-  // Given a possibly invalid oop, extract narrowKlass (if UCCP) and Klass*
-  // from it safely.
-  // Note: For -UCCP, returned nk is always 0.
+  // Given a possibly invalid oop, extract narrowKlass and Klass* from it safely.
   static bool extract_klass_safely(oop obj, narrowKlass& nk, const Klass*& k);
 
 #ifdef ASSERT
