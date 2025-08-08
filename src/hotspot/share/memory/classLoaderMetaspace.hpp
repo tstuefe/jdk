@@ -40,7 +40,7 @@ namespace metaspace {
 
 // A ClassLoaderMetaspace manages MetaspaceArena(s) for a CLD.
 //
-// A CLD owns one MetaspaceArena if UseCompressedClassPointers is false. Otherwise
+// A CLD owns one MetaspaceArena if UCCP_ALWAYS_TRUE_TRUE is false. Otherwise
 // it owns two - one for the Klass* objects from the class space, one for the other
 // types of MetaspaceObjs from the non-class space.
 //
@@ -67,11 +67,11 @@ class ClassLoaderMetaspace : public CHeapObj<mtClass> {
   const Metaspace::MetaspaceType _space_type;
 
   // Arena for allocations from non-class  metaspace
-  //  (resp. for all allocations if -XX:-UseCompressedClassPointers).
+  //  (resp. for all allocations if -XX:-UCCP_ALWAYS_TRUE_TRUE).
   metaspace::MetaspaceArena* _non_class_space_arena;
 
   // Arena for allocations from class space
-  //  (null if -XX:-UseCompressedClassPointers).
+  //  (null if -XX:-UCCP_ALWAYS_TRUE_TRUE).
   metaspace::MetaspaceArena* _class_space_arena;
 
   Mutex* lock() const                             { return _lock; }

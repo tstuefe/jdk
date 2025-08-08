@@ -2561,7 +2561,7 @@ class StubGenerator: public StubCodeGenerator {
 
     int base_offset = arrayOopDesc::base_offset_in_bytes(T_BYTE);
     assert((base_offset % (UseCompactObjectHeaders ? 4 :
-                           (UseCompressedClassPointers ? 8 : 4))) == 0, "Must be");
+                           (UCCP_ALWAYS_TRUE_TRUE ? 8 : 4))) == 0, "Must be");
 
 #ifdef ASSERT
     if (AvoidUnalignedAccesses) {
@@ -2619,7 +2619,7 @@ class StubGenerator: public StubCodeGenerator {
 
     int base_offset = arrayOopDesc::base_offset_in_bytes(T_BYTE);
     assert((base_offset % (UseCompactObjectHeaders ? 4 :
-                           (UseCompressedClassPointers ? 8 : 4))) == 0, "Must be");
+                           (UCCP_ALWAYS_TRUE_TRUE ? 8 : 4))) == 0, "Must be");
 
     Register strU = isLU ? str2 : str1,
              strL = isLU ? str1 : str2,

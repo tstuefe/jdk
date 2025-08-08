@@ -27,7 +27,7 @@
 
 /*
  * This class helps to avoid loading more than one flag in some
- * operations that require checking UseCompressedClassPointers,
+ * operations that require checking UCCP_ALWAYS_TRUE_TRUE,
  * UseCompactObjectHeaders and possibly more.
  *
  * This is important on some performance critical paths, e.g. where
@@ -37,11 +37,11 @@
 class ObjLayout {
 public:
   enum Mode {
-    // +UseCompactObjectHeaders (implies +UseCompressedClassPointers)
+    // +UseCompactObjectHeaders (implies +UCCP_ALWAYS_TRUE_TRUE)
     Compact,
-    // +UseCompressedClassPointers (-UseCompactObjectHeaders)
+    // +UCCP_ALWAYS_TRUE_TRUE (-UseCompactObjectHeaders)
     Compressed,
-    // -UseCompressedClassPointers (-UseCompactObjectHeaders)
+    // -UCCP_ALWAYS_TRUE_TRUE (-UseCompactObjectHeaders)
     Uncompressed,
     // Not yet initialized
     Undefined

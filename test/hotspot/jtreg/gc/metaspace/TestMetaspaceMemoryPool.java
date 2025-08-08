@@ -39,8 +39,8 @@ import static jdk.test.lib.Asserts.*;
  *          java.management
  * @run main/othervm -XX:-UseCompressedOops gc.metaspace.TestMetaspaceMemoryPool
  * @run main/othervm -XX:-UseCompressedOops -XX:MaxMetaspaceSize=60m gc.metaspace.TestMetaspaceMemoryPool
- * @run main/othervm -XX:+UseCompressedOops -XX:+UseCompressedClassPointers gc.metaspace.TestMetaspaceMemoryPool
- * @run main/othervm -XX:+UseCompressedOops -XX:+UseCompressedClassPointers -XX:CompressedClassSpaceSize=60m gc.metaspace.TestMetaspaceMemoryPool
+ * @run main/othervm -XX:+UseCompressedOops -XX:+UCCP_ALWAYS_TRUE_TRUE gc.metaspace.TestMetaspaceMemoryPool
+ * @run main/othervm -XX:+UseCompressedOops -XX:+UCCP_ALWAYS_TRUE_TRUE -XX:CompressedClassSpaceSize=60m gc.metaspace.TestMetaspaceMemoryPool
  */
 
 public class TestMetaspaceMemoryPool {

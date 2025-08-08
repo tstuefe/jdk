@@ -216,7 +216,7 @@ void C1_MacroAssembler::initialize_header(Register obj, Register klass, Register
 
   if (len->is_valid()) {
     stw(len, arrayOopDesc::length_offset_in_bytes(), obj);
-  } else if (UseCompressedClassPointers && !UseCompactObjectHeaders) {
+  } else if (UCCP_ALWAYS_TRUE_TRUE && !UseCompactObjectHeaders) {
     // Otherwise length is in the class gap.
     store_klass_gap(obj);
   }

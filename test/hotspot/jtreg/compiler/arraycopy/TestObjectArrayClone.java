@@ -34,7 +34,7 @@
  * @run main/othervm -XX:CompileCommand=compileonly,compiler.arraycopy.TestObjectArrayClone::testClone*
  *                   -XX:CompileCommand=compileonly,jdk.internal.reflect.GeneratedMethodAccessor*::invoke
  *                   compiler.arraycopy.TestObjectArrayClone
- * @run main/othervm -XX:+IgnoreUnrecognizedVMOptions -XX:-UseCompressedClassPointers -Xmx128m
+ * @run main/othervm -XX:+IgnoreUnrecognizedVMOptions -XX:-UCCP_ALWAYS_TRUE_TRUE -Xmx128m
  *                   -XX:CompileCommand=compileonly,compiler.arraycopy.TestObjectArrayClone::testClone*
  *                   -XX:CompileCommand=compileonly,jdk.internal.reflect.GeneratedMethodAccessor*::invoke
  *                   compiler.arraycopy.TestObjectArrayClone

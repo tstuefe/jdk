@@ -530,7 +530,7 @@ static SpecialFlag const special_jvm_flags[] = {
   { "UseSharedSpaces",              JDK_Version::jdk(18), JDK_Version::jdk(19), JDK_Version::undefined() },
   { "LockingMode",                  JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
 #ifdef _LP64
-  { "UseCompressedClassPointers",   JDK_Version::jdk(25),  JDK_Version::jdk(26), JDK_Version::undefined() },
+  { "UCCP_ALWAYS_TRUE_TRUE",   JDK_Version::jdk(25),  JDK_Version::jdk(26), JDK_Version::undefined() },
 #endif
   { "ParallelRefProcEnabled",       JDK_Version::jdk(26),  JDK_Version::jdk(27), JDK_Version::jdk(28) },
   { "ParallelRefProcBalancingEnabled", JDK_Version::jdk(26),  JDK_Version::jdk(27), JDK_Version::jdk(28) },
@@ -1560,7 +1560,7 @@ void Arguments::set_heap_size() {
     }
 
 #ifdef _LP64
-    if (UseCompressedOops || UseCompressedClassPointers) {
+    if (UseCompressedOops || UCCP_ALWAYS_TRUE_TRUE) {
       // HeapBaseMinAddress can be greater than default but not less than.
       if (!FLAG_IS_DEFAULT(HeapBaseMinAddress)) {
         if (HeapBaseMinAddress < DefaultHeapBaseMinAddress) {
@@ -3759,7 +3759,7 @@ jint Arguments::parse(const JavaVMInitArgs* initial_cmd_args) {
 
 void Arguments::set_compact_headers_flags() {
 #ifdef _LP64
-  if (UseCompactObjectHeaders && FLAG_IS_CMDLINE(UseCompressedClassPointers) && !UseCompressedClassPointers) {
+  if (UseCompactObjectHeaders && FLAG_IS_CMDLINE(UCCP_ALWAYS_TRUE_TRUE) && !UCCP_ALWAYS_TRUE_TRUE) {
     warning("Compact object headers require compressed class pointers. Disabling compact object headers.");
     FLAG_SET_DEFAULT(UseCompactObjectHeaders, false);
   }
@@ -3776,8 +3776,8 @@ void Arguments::set_compact_headers_flags() {
       FLAG_SET_DEFAULT(UseObjectMonitorTable, true);
     }
   }
-  if (UseCompactObjectHeaders && !UseCompressedClassPointers) {
-    FLAG_SET_DEFAULT(UseCompressedClassPointers, true);
+  if (UseCompactObjectHeaders && !UCCP_ALWAYS_TRUE_TRUE) {
+    FLAG_SET_DEFAULT(UCCP_ALWAYS_TRUE_TRUE, true);
   }
 #endif
 }
@@ -3794,7 +3794,7 @@ jint Arguments::apply_ergo() {
 
   set_compact_headers_flags();
 
-  if (UseCompressedClassPointers) {
+  if (UCCP_ALWAYS_TRUE_TRUE) {
     CompressedKlassPointers::pre_initialize();
   }
 
@@ -3841,7 +3841,7 @@ jint Arguments::apply_ergo() {
     DebugNonSafepoints = true;
   }
 
-  if (FLAG_IS_CMDLINE(CompressedClassSpaceSize) && !UseCompressedClassPointers) {
+  if (FLAG_IS_CMDLINE(CompressedClassSpaceSize) && !UCCP_ALWAYS_TRUE_TRUE) {
     warning("Setting CompressedClassSpaceSize has no effect when compressed class pointers are not used");
   }
 

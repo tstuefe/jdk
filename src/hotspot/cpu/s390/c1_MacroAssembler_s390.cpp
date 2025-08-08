@@ -189,7 +189,7 @@ void C1_MacroAssembler::initialize_header(Register obj, Register klass, Register
   if (len->is_valid()) {
     // Length will be in the klass gap, if one exists.
     z_st(len, Address(obj, arrayOopDesc::length_offset_in_bytes()));
-  } else if (UseCompressedClassPointers && !UseCompactObjectHeaders) {
+  } else if (UCCP_ALWAYS_TRUE_TRUE && !UseCompactObjectHeaders) {
     store_klass_gap(Rzero, obj);  // Zero klass gap for compressed oops.
   }
 }

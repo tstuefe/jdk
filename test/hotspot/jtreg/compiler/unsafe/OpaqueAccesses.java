@@ -247,28 +247,28 @@ public class OpaqueAccesses {
                 "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED",
                 "-XX:+IgnoreUnrecognizedVMOptions", "-XX:+UnlockDiagnosticVMOptions",
                 "-XX:-TieredCompilation", "-Xbatch",
-                "-XX:+UseCompressedOops", "-XX:+UseCompressedClassPointers",
+                "-XX:+UseCompressedOops", "-XX:+UCCP_ALWAYS_TRUE_TRUE",
                 "-XX:CompileCommand=dontinline,compiler.unsafe.OpaqueAccesses::test*"
         );
         TestFramework.runWithFlags(
                 "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED",
                 "-XX:+IgnoreUnrecognizedVMOptions", "-XX:+UnlockDiagnosticVMOptions",
                 "-XX:-TieredCompilation", "-Xbatch",
-                "-XX:+UseCompressedOops", "-XX:-UseCompressedClassPointers",
+                "-XX:+UseCompressedOops", "-XX:-UCCP_ALWAYS_TRUE_TRUE",
                 "-XX:CompileCommand=dontinline,compiler.unsafe.OpaqueAccesses::test*"
         );
         TestFramework.runWithFlags(
                 "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED",
                 "-XX:+IgnoreUnrecognizedVMOptions", "-XX:+UnlockDiagnosticVMOptions",
                 "-XX:-TieredCompilation", "-Xbatch",
-                "-XX:-UseCompressedOops", "-XX:+UseCompressedClassPointers",
+                "-XX:-UseCompressedOops", "-XX:+UCCP_ALWAYS_TRUE_TRUE",
                 "-XX:CompileCommand=dontinline,compiler.unsafe.OpaqueAccesses::test*"
         );
         TestFramework.runWithFlags(
                 "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED",
                 "-XX:+IgnoreUnrecognizedVMOptions", "-XX:+UnlockDiagnosticVMOptions",
                 "-XX:-TieredCompilation", "-Xbatch",
-                "-XX:-UseCompressedOops", "-XX:-UseCompressedClassPointers",
+                "-XX:-UseCompressedOops", "-XX:-UCCP_ALWAYS_TRUE_TRUE",
                 "-XX:CompileCommand=dontinline,compiler.unsafe.OpaqueAccesses::test*"
         );
     }

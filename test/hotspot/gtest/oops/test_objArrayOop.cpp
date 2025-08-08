@@ -55,7 +55,7 @@ TEST_VM(objArrayOop, osize) {
     { -1,         false,  false, false,  -1 }
   };
   for (int i = 0; x[i].result != -1; i++) {
-    if (x[i].objal == (int)ObjectAlignmentInBytes && x[i].ccp == UseCompressedClassPointers && x[i].coops == UseCompressedOops &&
+    if (x[i].objal == (int)ObjectAlignmentInBytes && x[i].ccp == UCCP_ALWAYS_TRUE_TRUE && x[i].coops == UseCompressedOops &&
         x[i].coh == UseCompactObjectHeaders) {
       EXPECT_EQ(objArrayOopDesc::object_size(1), (size_t)x[i].result);
     }

@@ -534,7 +534,7 @@ static void report_vm_version(outputStream* st, char* buf, int buflen) {
 #endif
                  UseCompressedOops ? ", compressed oops" : "",
                  UseCompactObjectHeaders ? ", compact obj headers"
-                                         : (UseCompressedClassPointers ? ", compressed class ptrs" : ""),
+                                         : (UCCP_ALWAYS_TRUE_TRUE ? ", compressed class ptrs" : ""),
                  GCConfig::hs_err_name(),
                  VM_Version::vm_platform_string()
                );
@@ -1198,7 +1198,7 @@ void VMError::report(outputStream* st, bool _verbose) {
     CompressedOops::print_mode(st);
     st->cr();
 
-  STEP_IF("printing compressed klass pointers mode", _verbose && UseCompressedClassPointers)
+  STEP_IF("printing compressed klass pointers mode", _verbose && UCCP_ALWAYS_TRUE_TRUE)
     CDS_ONLY(MetaspaceShared::print_on(st);)
     Metaspace::print_compressed_class_space(st);
     CompressedKlassPointers::print_mode(st);
@@ -1401,7 +1401,7 @@ void VMError::print_vm_info(outputStream* st) {
 #endif
 
   // STEP("printing compressed class ptrs mode")
-  if (UseCompressedClassPointers) {
+  if (UCCP_ALWAYS_TRUE_TRUE) {
     CDS_ONLY(MetaspaceShared::print_on(st);)
     Metaspace::print_compressed_class_space(st);
     CompressedKlassPointers::print_mode(st);

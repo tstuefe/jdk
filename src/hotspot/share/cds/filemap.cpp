@@ -223,8 +223,8 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
     _narrow_oop_shift = CompressedOops::shift();
   }
   _compressed_oops = UseCompressedOops;
-  _compressed_class_ptrs = UseCompressedClassPointers;
-  if (UseCompressedClassPointers) {
+  _compressed_class_ptrs = UCCP_ALWAYS_TRUE_TRUE;
+  if (UCCP_ALWAYS_TRUE_TRUE) {
 #ifdef _LP64
     _narrow_klass_pointer_bits = CompressedKlassPointers::narrow_klass_pointer_bits();
     _narrow_klass_shift = ArchiveBuilder::precomputed_narrow_klass_shift();
@@ -2066,10 +2066,10 @@ bool FileMapHeader::validate() {
             "for testing purposes only and should not be used in a production environment", file_type);
   }
 
-  aot_log_info(aot)("The %s was created with UseCompressedOops = %d, UseCompressedClassPointers = %d, UseCompactObjectHeaders = %d",
+  aot_log_info(aot)("The %s was created with UseCompressedOops = %d, UCCP_ALWAYS_TRUE_TRUE = %d, UseCompactObjectHeaders = %d",
                           file_type, compressed_oops(), compressed_class_pointers(), compact_headers());
-  if (compressed_oops() != UseCompressedOops || compressed_class_pointers() != UseCompressedClassPointers) {
-    aot_log_warning(aot)("Unable to use %s.\nThe saved state of UseCompressedOops and UseCompressedClassPointers is "
+  if (compressed_oops() != UseCompressedOops || compressed_class_pointers() != UCCP_ALWAYS_TRUE_TRUE) {
+    aot_log_warning(aot)("Unable to use %s.\nThe saved state of UseCompressedOops and UCCP_ALWAYS_TRUE_TRUE is "
                                "different from runtime, CDS will be disabled.", file_type);
     return false;
   }

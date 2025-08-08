@@ -352,7 +352,7 @@ class MacroAssembler: public Assembler {
   void store_klass(Register dst, Register src, Register tmp);
 
   // Compares the Klass pointer of an object to a given Klass (which might be narrow,
-  // depending on UseCompressedClassPointers).
+  // depending on UCCP_ALWAYS_TRUE_TRUE).
   void cmp_klass(Register klass, Register obj, Register tmp);
 
   // Compares the Klass pointer of two objects obj1 and obj2. Result is in the condition flags.

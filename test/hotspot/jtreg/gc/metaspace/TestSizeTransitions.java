@@ -107,7 +107,7 @@ public class TestSizeTransitions {
 
     List<String> jvmArgs = new ArrayList<>();
     if (hasCompressedKlassPointers) {
-      jvmArgs.add(useCompressedKlassPointers ? "-XX:+UseCompressedClassPointers" : "-XX:-UseCompressedClassPointers");
+      jvmArgs.add(useCompressedKlassPointers ? "-XX:+UCCP_ALWAYS_TRUE_TRUE" : "-XX:-UCCP_ALWAYS_TRUE_TRUE");
     }
     jvmArgs.add(gcArg);
     jvmArgs.add("-Xmx256m");

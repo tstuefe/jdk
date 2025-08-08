@@ -206,7 +206,7 @@ void CompilerToVM::Data::initialize(JVMCI_TRAPS) {
     Universe_narrow_oop_base = nullptr;
     Universe_narrow_oop_shift = 0;
   }
-  if (UseCompressedClassPointers) {
+  if (UCCP_ALWAYS_TRUE_TRUE) {
     Universe_narrow_klass_base = CompressedKlassPointers::base();
     Universe_narrow_klass_shift = CompressedKlassPointers::shift();
   } else {
@@ -383,7 +383,7 @@ JVMCIObjectArray CompilerToVM::initialize_intrinsics(JVMCI_TRAPS) {
   X86_ONLY(do_int_flag(UseAVX))                                            \
   do_bool_flag(UseCRC32Intrinsics)                                         \
   do_bool_flag(UseAdler32Intrinsics)                                       \
-  do_bool_flag(UseCompressedClassPointers)                                 \
+  do_bool_flag(UCCP_ALWAYS_TRUE_TRUE)                                 \
   do_bool_flag(UseCompressedOops)                                          \
   X86_ONLY(do_bool_flag(UseCountLeadingZerosInstruction))                  \
   X86_ONLY(do_bool_flag(UseCountTrailingZerosInstruction))                 \

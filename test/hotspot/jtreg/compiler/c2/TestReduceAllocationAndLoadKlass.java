@@ -33,7 +33,7 @@
  *                   -XX:CompileCommand=compileonly,*Point*::*init*
  *                   -XX:CompileCommand=exclude,*TestReduceAllocationAndLoadKlass*::dummy
  *                   -XX:-TieredCompilation
- *                   -XX:-UseCompressedClassPointers
+ *                   -XX:-UCCP_ALWAYS_TRUE_TRUE
  *                   -Xbatch
  *                   -Xcomp
  *                   compiler.c2.TestReduceAllocationAndLoadKlass

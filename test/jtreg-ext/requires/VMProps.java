@@ -447,7 +447,7 @@ public class VMProps implements Callable<Map<String, String>> {
     /**
      * @return true if it's possible for "java -Xshare:dump" to write Java heap objects
      *         with the current set of jtreg VM options. For example, false will be returned
-     *         if -XX:-UseCompressedClassPointers is specified,
+     *         if -XX:-UCCP_ALWAYS_TRUE_TRUE is specified,
      */
     protected String vmCDSCanWriteArchivedJavaHeap() {
         return "" + ("true".equals(vmCDS()) && WB.canWriteJavaHeapArchive()
@@ -485,7 +485,7 @@ public class VMProps implements Callable<Map<String, String>> {
         if (jtropts == null) {
             return true;
         }
-        String CCP_DISABLED = "-XX:-UseCompressedClassPointers";
+        String CCP_DISABLED = "-XX:-UCCP_ALWAYS_TRUE_TRUE";
         String G1GC_ENABLED = "-XX:+UseG1GC";
         String PARALLELGC_ENABLED = "-XX:+UseParallelGC";
         String SERIALGC_ENABLED = "-XX:+UseSerialGC";

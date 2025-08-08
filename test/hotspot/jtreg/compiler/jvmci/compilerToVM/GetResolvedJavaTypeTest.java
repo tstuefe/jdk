@@ -159,7 +159,7 @@ public class GetResolvedJavaTypeTest {
     /* a compressed parameter for tested method is set to false because
        unsafe.getKlassPointer always returns uncompressed pointer */
     private static final boolean COMPRESSED = false;
-            // = WB.getBooleanVMFlag("UseCompressedClassPointers");
+            // = WB.getBooleanVMFlag("UCCP_ALWAYS_TRUE_TRUE");
 
     private static long getPtrToKlass() {
         Field field;

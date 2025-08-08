@@ -40,7 +40,7 @@ import jdk.test.lib.jfr.GCHelper;
  * @requires vm.hasJFR & vm.bits == 64
  * @requires vm.gc == "Serial" | vm.gc == null
  * @library /test/lib /test/jdk
- * @run main/othervm -XX:+UseSerialGC -XX:-UseCompressedClassPointers
+ * @run main/othervm -XX:+UseSerialGC -XX:-UCCP_ALWAYS_TRUE_TRUE
  *                   jdk.jfr.event.gc.heapsummary.TestHeapSummaryEventDefNewSerial
  */
 public class TestHeapSummaryEventDefNewSerial {

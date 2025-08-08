@@ -565,7 +565,7 @@ bool ShenandoahAsserts::extract_klass_safely(oop obj, narrowKlass& nk, const Kla
   if (!os::is_readable_pointer(obj)) {
     return false;
   }
-  if (UseCompressedClassPointers) {
+  if (UCCP_ALWAYS_TRUE_TRUE) {
     if (UseCompactObjectHeaders) { // look in forwardee
       markWord mark = obj->mark();
       if (mark.is_marked()) {
