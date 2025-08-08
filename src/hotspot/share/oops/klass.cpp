@@ -1102,7 +1102,7 @@ void Klass::oop_verify_on(oop obj, outputStream* st) {
 
 // Note: this function is called with an address that may or may not be a Klass.
 // The point is not to assert it is but to check if it could be.
-bool Klass::is_valid(Klass* k) {
+bool Klass::is_valid(const Klass* k) {
   if (!is_aligned(k, sizeof(MetaWord))) return false;
   if ((size_t)k < os::min_page_size()) return false;
 

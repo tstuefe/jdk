@@ -770,7 +770,7 @@ public:
   virtual void oop_verify_on(oop obj, outputStream* st);
 
   // for error reporting
-  static bool is_valid(Klass* k);
+  static bool is_valid(const Klass* k);
 
   static void on_secondary_supers_verification_failure(Klass* super, Klass* sub, bool linear_result, bool table_result, const char* msg);
 

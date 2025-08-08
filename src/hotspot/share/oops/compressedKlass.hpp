@@ -255,8 +255,8 @@ public:
   inline static void check_valid_narrow_klass_id(narrowKlass nk);
 #endif
 
-  // Given a narrow Klass ID, returns true if it appears to be valid
-  inline static bool is_valid_narrow_klass_id(narrowKlass nk);
+  // Given a pointer-sized something, returns true if it could be interpreted as a valid narrowKlass ID
+  inline static bool is_valid_narrow_klass_id(uintptr_t x);
 
   // Returns whether the pointer is in the memory region used for encoding compressed
   // class pointers.  This includes CDS.

@@ -91,9 +91,9 @@ inline void CompressedKlassPointers::check_valid_narrow_klass_id(narrowKlass nk)
 }
 #endif // ASSERT
 
-// Given a narrow Klass ID, returns true if it appears to be valid
-inline bool CompressedKlassPointers::is_valid_narrow_klass_id(narrowKlass nk) {
-  return nk >= _lowest_valid_narrow_klass_id && nk < _highest_valid_narrow_klass_id;
+inline bool CompressedKlassPointers::is_valid_narrow_klass_id(uintptr_t x) {
+  return x >= (uintptr_t)_lowest_valid_narrow_klass_id &&
+         x < (uintptr_t)_highest_valid_narrow_klass_id;
 }
 
 inline address CompressedKlassPointers::encoding_range_end() {

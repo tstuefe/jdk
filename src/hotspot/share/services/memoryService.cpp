@@ -28,6 +28,7 @@
 #include "memory/heap.hpp"
 #include "memory/memRegion.hpp"
 #include "memory/resourceArea.hpp"
+#include "oops/compressedKlass.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/handles.inline.hpp"
@@ -113,7 +114,7 @@ void MemoryService::add_metaspace_memory_pools() {
   mgr->add_pool(_metaspace_pool);
   _pools_list->append(_metaspace_pool);
 
-  if (UCCP_ALWAYS_TRUE_TRUE) {
+  if (CompressedKlassPointers::has_class_space()) {
     _compressed_class_pool = new CompressedKlassSpacePool();
     mgr->add_pool(_compressed_class_pool);
     _pools_list->append(_compressed_class_pool);
