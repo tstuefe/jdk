@@ -102,7 +102,7 @@ const Type* EncodePKlassNode::Value(PhaseGVN* phase) const {
   if (t == Type::TOP) return Type::TOP;
   assert (t != TypePtr::NULL_PTR, "null klass?");
 
-  assert(UCCP_ALWAYS_TRUE_TRUE && t->isa_klassptr(), "only klass ptr here");
+  assert(t->isa_klassptr(), "only klass ptr here");
   return t->make_narrowklass();
 }
 
