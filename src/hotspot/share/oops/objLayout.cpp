@@ -32,27 +32,22 @@ int ObjLayout::_oop_base_offset_in_bytes = 0;
 bool ObjLayout::_oop_has_klass_gap = false;
 
 void ObjLayout::initialize() {
-#ifdef _LP64
   assert(_klass_mode == Undefined, "ObjLayout initialized twice");
+#ifdef _LP64
   if (UseCompactObjectHeaders) {
     _klass_mode = Compact;
     _oop_base_offset_in_bytes = sizeof(markWord);
     _oop_has_klass_gap = false;
-  } else if (UCCP_ALWAYS_TRUE_TRUE) {
+  } else {
     _klass_mode = Compressed;
     _oop_base_offset_in_bytes = sizeof(markWord) + sizeof(narrowKlass);
     _oop_has_klass_gap = true;
-  } else {
-    _klass_mode = Uncompressed;
-    _oop_base_offset_in_bytes = sizeof(markWord) + sizeof(Klass*);
-    _oop_has_klass_gap = false;
   }
 #else
-  assert(_klass_mode == Undefined, "ObjLayout initialized twice");
   assert(!UseCompactObjectHeaders, "COH unsupported on 32-bit");
-  // We support +-UCCP_ALWAYS_TRUE_TRUE on 32-bit, but the layout
-  // is exactly the same as it was with uncompressed klass pointers
-  _klass_mode = UCCP_ALWAYS_TRUE_TRUE ? Compressed : Uncompressed;
+  // We support narrowKLass on 32-bit, but the layout is identical to
+  // the one with uncompressed klass pointers
+  _klass_mode = Compressed;
   _oop_base_offset_in_bytes = sizeof(markWord) + sizeof(Klass*);
   _oop_has_klass_gap = false;
 #endif

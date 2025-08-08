@@ -155,23 +155,15 @@ narrowKlass oopDesc::narrow_klass() const {
 void oopDesc::set_klass(Klass* k) {
   assert(Universe::is_bootstrapping() || (k != nullptr && k->is_klass()), "incorrect Klass");
   assert(!UseCompactObjectHeaders, "don't set Klass* with compact headers");
-  if (UCCP_ALWAYS_TRUE_TRUE) {
-    _metadata._compressed_klass = CompressedKlassPointers::encode_not_null(k);
-  } else {
-    _metadata._klass = k;
-  }
+  _metadata._compressed_klass = CompressedKlassPointers::encode_not_null(k);
 }
 
 void oopDesc::release_set_klass(HeapWord* mem, Klass* k) {
   assert(Universe::is_bootstrapping() || (k != nullptr && k->is_klass()), "incorrect Klass");
   assert(!UseCompactObjectHeaders, "don't set Klass* with compact headers");
   char* raw_mem = ((char*)mem + klass_offset_in_bytes());
-  if (UCCP_ALWAYS_TRUE_TRUE) {
-    Atomic::release_store((narrowKlass*)raw_mem,
-                          CompressedKlassPointers::encode_not_null(k));
-  } else {
-    Atomic::release_store((Klass**)raw_mem, k);
-  }
+  Atomic::release_store((narrowKlass*)raw_mem,
+                        CompressedKlassPointers::encode_not_null(k));
 }
 
 void oopDesc::set_klass_gap(HeapWord* mem, int v) {

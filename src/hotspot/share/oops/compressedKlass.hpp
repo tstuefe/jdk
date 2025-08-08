@@ -98,7 +98,6 @@ class Klass;
 // If compressed klass pointers then use narrowKlass.
 typedef juint  narrowKlass;
 
-// For UCCP_ALWAYS_TRUE_TRUE.
 class CompressedKlassPointers : public AllStatic {
   friend class VMStructs;
   friend class ArchiveBuilder;
@@ -160,8 +159,7 @@ class CompressedKlassPointers : public AllStatic {
 public:
 
   // Initialization sequence:
-  // 1) Parse arguments. The following arguments take a role:
-  //      - UCCP_ALWAYS_TRUE_TRUE
+  // 1) Parse arguments. The following arguments play a role:
   //      - UseCompactObjectHeaders
   //      - Xshare on off dump
   //      - CompressedClassSpaceSize
@@ -192,10 +190,11 @@ public:
   // resulting from the current encoding settings (base, shift), capped to a certain max. value.
   static size_t max_klass_range_size();
 
-  // On 64-bit, we need the class space to confine Klass structures to the encoding range, which is determined
-  // by bit size of narrowKlass IDs and the shift. On 32-bit, we support compressed class pointer only
+  // `has_class_space()` defines whether we need to confine Klass structures to a limited range in order to
+  // address them with narrowKlass. This is always true on 64-bit, where the address range is much larger
+  // than the encoding range. It is always false on 32-bit, where we support compressed class pointer only
   // "pro-forma": narrowKlass have the same size as addresses (32 bits), and therefore the encoding range is
-  // equal to the address space size. Here, we don't need a class space.
+  // equal to the address space size.
   static constexpr bool has_class_space() { return IS_64_BIT_PLATFORM; }
 
   // Reserve a range of memory that is to contain Klass strucutures which are referenced by narrow Klass IDs.
@@ -206,7 +205,6 @@ public:
   // set this encoding scheme. Used by CDS at runtime to re-instate the scheme used to pre-compute klass ids for
   // archived heap objects. In this case, we don't have the freedom to choose base and shift; they are handed to
   // us from CDS.
-  // Note: CDS with +UCCP for 32-bit currently unsupported.
   static void initialize_for_given_encoding(address addr, size_t len, address requested_base, int requested_shift);
 
   // Given an address range [addr, addr+len) which the encoding is supposed to
