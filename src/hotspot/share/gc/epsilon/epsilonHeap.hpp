@@ -122,7 +122,7 @@ public:
   void prepare_for_verify() override {}
   void verify(VerifyOption option) override {}
 
-  MemRegion reserved_region() const { return _reserved; }
+//  MemRegion reserved_region() const { return _reserved; }
   bool is_in_reserved(const void* addr) const { return _reserved.contains(addr); }
 
   // Support for loading objects from CDS archive into the heap

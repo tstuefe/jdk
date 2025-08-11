@@ -521,6 +521,11 @@ protected:
   void reset_promotion_should_fail(volatile size_t* count);
   void reset_promotion_should_fail();
 #endif  // #ifndef PRODUCT
+
+  MemRegion reserved_region() const {
+    return _reserved;
+  }
+
 };
 
 // Class to set and reset the GC cause for a CollectedHeap.
