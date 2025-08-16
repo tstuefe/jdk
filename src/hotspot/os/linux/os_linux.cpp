@@ -1535,7 +1535,7 @@ bool os::address_is_in_vm(address addr) {
     assert(libjvm_base_addr !=nullptr, "Cannot obtain base address for libjvm");
   }
 
-  if (dladdr((void *)addr, &dlinfo) != 0) {
+  if (addr >= libjvm_base_addr && dladdr((void *)addr, &dlinfo) != 0) {
     if (libjvm_base_addr == (address)dlinfo.dli_fbase) return true;
   }
 
