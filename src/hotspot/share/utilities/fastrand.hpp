@@ -42,6 +42,11 @@ class FastRandom {
     _seed = os::next_random(_seed);
     return _seed;
   }
+  uint64_t next64() {
+    const int i1 = os::next_random(_seed);
+    const int i2 = _seed = os::next_random(i1);
+    return ((uint64_t)i1 << 32) | (uint64_t)i2;
+  }
 };
 
 #endif // SHARE_UTILITIES_FASTRAND_HPP

@@ -350,18 +350,24 @@ TEST_VM(os, attempt_reserve_memory_between_small_range_fill_hole) {
 }
 
 #ifdef _LP64
-TEST_VM(os, attempt_reserve_memory_between_many_attach_points) {
-return;
+static void attempt_reserve_memory_between_many_attach_points(bool randomize) {
   // Small size, small alignment, but very large range - the number of possible attach points larger than
   // UINT_MAX, and attempt_reserve_memory_between should be coping. We expect all (or at least the large bulk)
-  // of this range to be in the user-addressable address range of all our 64-bit platforms, even the teeny tiny
+  // of this range to be in the user-addressable address range of all our 64-bit platforms, even the tiny
   // ones like Raspian. So we also expect the reservation to succeed.
   // (todo: improve with a possible future os::vm_max_address())
   const size_t ps = os::vm_page_size();
   const size_t range_start = G;
   const size_t range_size = (ps * UINT_MAX) + ps;
   const size_t range_end = range_start + (ps * UINT_MAX) + ps; // = ~8.1TB for 4K pages
-  test_attempt_reserve_memory_between((char*)range_start, (char*)range_end, ps, ps, false, Expect::success_any(), __LINE__);
-  test_attempt_reserve_memory_between((char*)range_start, (char*)range_end, ps, ps, true, Expect::success_any(), __LINE__);
+  test_attempt_reserve_memory_between((char*)range_start, (char*)range_end, ps, ps, randomize, Expect::success_any(), __LINE__);
+}
+
+TEST_VM(os, attempt_reserve_memory_between_many_attach_points_random) {
+  attempt_reserve_memory_between_many_attach_points(true);
+}
+
+TEST_VM(os, attempt_reserve_memory_between_many_attach_points_nonrandom) {
+  attempt_reserve_memory_between_many_attach_points(false);
 }
 #endif // _LP64

@@ -1995,10 +1995,10 @@ char* os::attempt_reserve_memory_at(char* addr, size_t bytes, MemTag mem_tag, bo
 }
 
 #ifdef ASSERT
-static void print_points(const char* s, unsigned* points, unsigned num) {
+static void print_points(const char* s, char** points, unsigned num) {
   stringStream ss;
   for (unsigned i = 0; i < num; i ++) {
-    ss.print("%u ", points[i]);
+    ss.print(PTR_FORMAT " ", p2i(points[i]));
   }
   log_trace(os, map)("%s, %u Points: %s", s, num, ss.base());
 }
@@ -2094,15 +2094,11 @@ char* os::attempt_reserve_memory_between(char* min, char* max, size_t bytes, siz
   const size_t num_attach_points = (size_t)((hi_att - lo_att) / alignment_adjusted) + 1;
   assert(num_attach_points > 0, "Sanity");
 
-  // If this fires, the input range is too large for the given alignment (we work
-  // with int below to keep things simple). Since alignment is bound to page size,
-  // and the lowest page size is 4K, this gives us a minimum of 4K*4G=8TB address
-  // range.
-  assert(num_attach_points <= UINT_MAX,
-         "Too many possible attach points - range too large or alignment too small (" ARGSFMT ")", ARGSFMTARGS);
+  const unsigned num_attempts = checked_cast<unsigned>(MIN2(num_attach_points, (size_t)max_attempts));
+  const size_t stepsize = num_attach_points / num_attempts;
+  assert(stepsize >= 1, "Sanity");
 
-  const unsigned num_attempts = MIN2((unsigned)num_attach_points, max_attempts);
-  unsigned points[max_attempts];
+  char* points[max_attempts];
 
   if (randomize) {
     FastRandom frand;
@@ -2119,18 +2115,17 @@ char* os::attempt_reserve_memory_between(char* min, char* max, size_t bytes, siz
     // 3 Should that not be enough to get effective randomization, shuffle all
     //   attach points
     // 4 Otherwise, re-order them to get an optimized probing sequence.
-    const unsigned stepsize = (unsigned)num_attach_points / num_attempts;
     const unsigned half = num_attempts / 2;
 
     // 1+2: pre-calc points
     for (unsigned i = 0; i < num_attempts; i++) {
       const unsigned deviation = stepsize > 1 ? (frand.next() % stepsize) : 0;
-      points[i] = (i * stepsize) + deviation;
+      points[i] = lo_att + (((i * stepsize) + deviation) * alignment_adjusted);
     }
 
     if (num_attach_points < total_shuffle_threshold) {
       // 3:
-      // The numeber of possible attach points is too low for the "wiggle" from
+      // The number of possible attach points is too low for the "wiggle" from
       // point 2 to be enough to provide randomization. In that case, shuffle
       // all attach points at the cost of possible fragmentation (e.g. if we
       // end up mapping into the middle of the range).
@@ -2150,9 +2145,8 @@ char* os::attempt_reserve_memory_between(char* min, char* max, size_t bytes, siz
   {
     // Non-randomized. We just attempt to reserve by probing sequentially. We
     // alternate between hemispheres, working ourselves up to the middle.
-    const int stepsize = (unsigned)num_attach_points / num_attempts;
     for (unsigned i = 0; i < num_attempts; i++) {
-      points[i] = (i * stepsize);
+      points[i] = lo_att + (i * stepsize * alignment_adjusted);
     }
     hemi_split(points, num_attempts);
   }
@@ -2161,16 +2155,15 @@ char* os::attempt_reserve_memory_between(char* min, char* max, size_t bytes, siz
   // Print + check all pre-calculated attach points
   print_points("before reserve", points, num_attempts);
   for (unsigned i = 0; i < num_attempts; i++) {
-    assert(points[i] < num_attach_points, "Candidate attach point %d out of range (%u, num_attach_points: %zu) " ARGSFMT,
-           i, points[i], num_attach_points, ARGSFMTARGS);
+    assert(points[i] >= lo_att && points[i] <= hi_att,
+           "Candidate attach point " PTR_FORMAT " out of range " ARGSFMT,
+           p2i(points[i]), ARGSFMTARGS);
   }
 #endif
 
   // Now reserve
   for (unsigned i = 0; result == nullptr && i < num_attempts; i++) {
-    const unsigned candidate_offset = points[i];
-    char* const candidate = lo_att + candidate_offset * alignment_adjusted;
-    assert(candidate <= hi_att, "Invalid offset %u (" ARGSFMT ")", candidate_offset, ARGSFMTARGS);
+    char* const candidate = points[i];
     result = SimulateFullAddressSpace ? nullptr : os::pd_attempt_reserve_memory_at(candidate, bytes, false);
     if (!result) {
       log_trace(os, map)("Failed to attach at " PTR_FORMAT, p2i(candidate));
