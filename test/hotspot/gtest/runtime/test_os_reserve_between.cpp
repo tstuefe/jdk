@@ -312,7 +312,7 @@ TEST_VM(os, attempt_reserve_memory_randomization_cornercases) {
 
   // Full size
   // Note: paradoxically, success is not guaranteed here, since a significant portion of the attach points
-  // could be located in un-allocatable territory.
+  // could be located in un-allocatable territory. E.g. on 32-bit, we may only be able to allocate in the lower 2G.
   test_attempt_reserve_memory_between(nullptr, (char*)SIZE_MAX, ps, quarter_address_space / 8, false, Expect::dontcare(), __LINE__);
   test_attempt_reserve_memory_between(nullptr, (char*)SIZE_MAX, ps, quarter_address_space / 8, true, Expect::dontcare(), __LINE__);
 
@@ -348,3 +348,20 @@ TEST_VM(os, attempt_reserve_memory_between_small_range_fill_hole) {
     }
   }
 }
+
+#ifdef _LP64
+TEST_VM(os, attempt_reserve_memory_between_many_attach_points) {
+return;
+  // Small size, small alignment, but very large range - the number of possible attach points larger than
+  // UINT_MAX, and attempt_reserve_memory_between should be coping. We expect all (or at least the large bulk)
+  // of this range to be in the user-addressable address range of all our 64-bit platforms, even the teeny tiny
+  // ones like Raspian. So we also expect the reservation to succeed.
+  // (todo: improve with a possible future os::vm_max_address())
+  const size_t ps = os::vm_page_size();
+  const size_t range_start = G;
+  const size_t range_size = (ps * UINT_MAX) + ps;
+  const size_t range_end = range_start + (ps * UINT_MAX) + ps; // = ~8.1TB for 4K pages
+  test_attempt_reserve_memory_between((char*)range_start, (char*)range_end, ps, ps, false, Expect::success_any(), __LINE__);
+  test_attempt_reserve_memory_between((char*)range_start, (char*)range_end, ps, ps, true, Expect::success_any(), __LINE__);
+}
+#endif // _LP64
