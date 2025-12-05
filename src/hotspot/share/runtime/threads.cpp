@@ -663,6 +663,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
         ml.wait();
       }
     }
+    vmthread->stack_overflow_state()->create_stack_guard_page();
   }
 
   assert(Universe::is_fully_initialized(), "not initialized");

@@ -25,6 +25,8 @@
 #ifndef SHARE_RUNTIME_NONJAVATHREAD_HPP
 #define SHARE_RUNTIME_NONJAVATHREAD_HPP
 
+
+#include "runtime/nonJavaStackOverflow.hpp"
 #include "runtime/thread.hpp"
 #include "utilities/deferredStatic.hpp"
 
@@ -42,6 +44,10 @@ class NonJavaThread: public Thread {
   void add_to_the_list();
   void remove_from_the_list();
 
+  NonJavaStackOverflow _stack_overflow_state;
+
+  void initialize_stack_overflow_state(address stack_base, address stack_end) override;
+
  protected:
   virtual void pre_run();
   virtual void post_run();
@@ -49,6 +55,8 @@ class NonJavaThread: public Thread {
  public:
   NonJavaThread();
   ~NonJavaThread();
+
+  NonJavaStackOverflow* stack_overflow_state() { return &_stack_overflow_state; }
 
   class Iterator;
 };

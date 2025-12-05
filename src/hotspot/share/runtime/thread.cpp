@@ -198,9 +198,7 @@ void Thread::record_stack_base_and_size() {
   set_stack_size(size);
 
   // Set stack limits after thread is initialized.
-  if (is_Java_thread()) {
-    JavaThread::cast(this)->stack_overflow_state()->initialize(stack_base(), stack_end());
-  }
+  initialize_stack_overflow_state(stack_base(), stack_end());
 }
 
 void Thread::register_thread_stack_with_NMT() {

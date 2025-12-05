@@ -524,6 +524,8 @@ protected:
   address          _stack_base;
   size_t           _stack_size;
 
+  virtual void initialize_stack_overflow_state(address stack_base, address stack_end) = 0;
+
  public:
   // Stack overflow support
   address stack_base() const DEBUG_ONLY(;) NOT_DEBUG({ return _stack_base; })

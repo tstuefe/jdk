@@ -2286,3 +2286,7 @@ void JavaThread::post_vthread_pinned_event(EventVirtualThreadPinned* event, cons
   }
 }
 #endif
+
+void JavaThread::initialize_stack_overflow_state(address stack_base, address stack_end) {
+  stack_overflow_state()->initialize(stack_base, stack_end);
+}

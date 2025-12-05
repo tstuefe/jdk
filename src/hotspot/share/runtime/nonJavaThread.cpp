@@ -123,6 +123,10 @@ void NonJavaThread::post_run() {
   osthread()->set_state(ZOMBIE);
 }
 
+void NonJavaThread::initialize_stack_overflow_state(address stack_base, address stack_end) {
+  stack_overflow_state()->initialize(stack_base, stack_end);
+}
+
 // NamedThread --  non-JavaThread subclasses with multiple
 // uniquely named instances should derive from this.
 NamedThread::NamedThread() :
