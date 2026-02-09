@@ -101,7 +101,7 @@ Klass* oopDesc::klass() const {
     case ObjLayout::Compressed:
       return CompressedKlassPointers::decode_not_null(_metadata._compressed_klass);
     default:
-      return _metadata._klass;
+      ShouldNotReachHere();
   }
 }
 
@@ -112,7 +112,7 @@ Klass* oopDesc::klass_or_null() const {
     case ObjLayout::Compressed:
       return CompressedKlassPointers::decode(_metadata._compressed_klass);
     default:
-      return _metadata._klass;
+      ShouldNotReachHere();
   }
 }
 
@@ -125,7 +125,7 @@ Klass* oopDesc::klass_or_null_acquire() const {
       return CompressedKlassPointers::decode(narrow_klass);
     }
     default:
-      return AtomicAccess::load_acquire(&_metadata._klass);
+      ShouldNotReachHere();
   }
 }
 
@@ -136,7 +136,7 @@ Klass* oopDesc::klass_without_asserts() const {
     case ObjLayout::Compressed:
       return CompressedKlassPointers::decode_without_asserts(_metadata._compressed_klass);
     default:
-      return _metadata._klass;
+      ShouldNotReachHere();
   }
 }
 
