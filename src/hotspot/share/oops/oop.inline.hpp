@@ -99,7 +99,7 @@ Klass* oopDesc::klass() const {
     case ObjLayout::Compact:
       return mark().klass();
     case ObjLayout::Compressed:
-      return CompressedKlassPointers::decode_not_null(_metadata._compressed_klass);
+      return CompressedKlassPointers::decode_not_null(_compressed_klass);
     default:
       ShouldNotReachHere();
   }
@@ -110,7 +110,7 @@ Klass* oopDesc::klass_or_null() const {
     case ObjLayout::Compact:
       return mark().klass_or_null();
     case ObjLayout::Compressed:
-      return CompressedKlassPointers::decode(_metadata._compressed_klass);
+      return CompressedKlassPointers::decode(_compressed_klass);
     default:
       ShouldNotReachHere();
   }
@@ -121,7 +121,7 @@ Klass* oopDesc::klass_or_null_acquire() const {
     case ObjLayout::Compact:
       return mark_acquire().klass();
     case ObjLayout::Compressed: {
-      narrowKlass narrow_klass = AtomicAccess::load_acquire(&_metadata._compressed_klass);
+      narrowKlass narrow_klass = AtomicAccess::load_acquire(&_compressed_klass);
       return CompressedKlassPointers::decode(narrow_klass);
     }
     default:
@@ -134,7 +134,7 @@ Klass* oopDesc::klass_without_asserts() const {
     case ObjLayout::Compact:
       return mark().klass_without_asserts();
     case ObjLayout::Compressed:
-      return CompressedKlassPointers::decode_without_asserts(_metadata._compressed_klass);
+      return CompressedKlassPointers::decode_without_asserts(_compressed_klass);
     default:
       ShouldNotReachHere();
   }
@@ -145,7 +145,7 @@ narrowKlass oopDesc::narrow_klass() const {
     case ObjLayout::Compact:
       return mark().narrow_klass();
     case ObjLayout::Compressed:
-      return _metadata._compressed_klass;
+      return _compressed_klass;
     default:
       ShouldNotReachHere();
   }
@@ -154,7 +154,7 @@ narrowKlass oopDesc::narrow_klass() const {
 void oopDesc::set_klass(Klass* k) {
   assert(Universe::is_bootstrapping() || (k != nullptr && k->is_klass()), "incorrect Klass");
   assert(!UseCompactObjectHeaders, "don't set Klass* with compact headers");
-  _metadata._compressed_klass = CompressedKlassPointers::encode_not_null(k);
+  _compressed_klass = CompressedKlassPointers::encode_not_null(k);
 }
 
 void oopDesc::release_set_klass(HeapWord* mem, Klass* k) {

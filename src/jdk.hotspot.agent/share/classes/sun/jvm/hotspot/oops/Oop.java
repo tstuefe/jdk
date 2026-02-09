@@ -51,8 +51,7 @@ public class Oop {
       headerSize = markType.getSize();
     } else {
       headerSize = type.getSize();
-      klass      = new MetadataField(type.getAddressField("_metadata._klass"), 0);
-      compressedKlass  = new NarrowKlassField(type.getAddressField("_metadata._compressed_klass"), 0);
+      compressedKlass  = new NarrowKlassField(type.getAddressField("_compressed_klass"), 0);
     }
   }
 
@@ -75,7 +74,6 @@ public class Oop {
   public  static long getHeaderSize() { return headerSize; } // Header size in bytes.
 
   private static CIntField mark;
-  private static MetadataField  klass;
   private static NarrowKlassField compressedKlass;
 
   // Accessors for declared fields
