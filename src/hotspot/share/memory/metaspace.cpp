@@ -725,12 +725,12 @@ void Metaspace::global_initialize() {
     AOTMetaspace::initialize_for_static_dump();
   }
 
+  // We have two cases:
   // a) if CDS is active (runtime, Xshare=on), it will create the class space
-  //    for us. It then will set up encoding.
+  //    for us. It then will set up encoding to cover both CDS archive space and class space.
   // b) if CDS either deactivated (Xshare=off) or a static dump is to be done (Xshare:dump),
-  //    we will create the class space on our own. It will be placed above the java heap,
-  //    since we assume it has been placed in low address regions. Failing that, it will
-  //    be placed anywhere.
+  //    we will create the class space on our own and set up encoding to only cover the
+  //    class space.
 
 #if INCLUDE_CDS
   // case (a)
