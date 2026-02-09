@@ -30,7 +30,7 @@
  * @requires vm.debug
  * @modules java.base/jdk.internal.misc
  *          java.management
- * @run driver TestVMConfigInHsErrFile false
+ * @run driver TestVMConfigInHsErrFile coh-off
  */
 
 /*
@@ -42,28 +42,29 @@
  * @requires vm.debug
  * @modules java.base/jdk.internal.misc
  *          java.management
- * @run driver TestVMConfigInHsErrFile true
+ * @run driver TestVMConfigInHsErrFile coh-on
  */
 
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.regex.Pattern;
 
 public class TestVMConfigInHsErrFile {
 
   public static void main(String[] args) throws Exception {
-    test(Boolean.parseBoolean(args[0]));
+    switch (args[0]) {
+      case "coh-on" -> testCompactObjectHeaders();
+      case "coh-off" -> testNotCompactObjectHeaders();
+    }
   }
 
-  private static void test(boolean coh) throws Exception {
-    final String argument = "-XX:%cUseCompactObjectHeaders".formatted(coh ? '+' : '-');
-    final Pattern[] pattern = new Pattern[] { Pattern.compile("# Java VM: .*compact obj headers.*") };
-
+  private static void testCompactObjectHeaders() throws Exception {
     ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(
         "-XX:+UnlockDiagnosticVMOptions",
         "-XX:+UnlockExperimentalVMOptions",
-        argument,
+        "-XX:+UseCompactObjectHeaders",
         "-Xmx100M",
         "-XX:-CreateCoredumpOnCrash",
         "-XX:ErrorHandlerTest=14",
@@ -74,10 +75,36 @@ public class TestVMConfigInHsErrFile {
 
     // extract hs-err file
     File f = HsErrFileUtils.openHsErrFileFromOutput(output);
-    if (coh) {
-      HsErrFileUtils.checkHsErrFileContent(f, pattern, null, true, true);
-    } else {
-      HsErrFileUtils.checkHsErrFileContent(f, null, pattern, true, true);
-    }
+
+    Pattern[] expectedPatterns = new Pattern[] {
+      Pattern.compile("# Java VM: .*compact obj headers.*")
+    };
+
+    HsErrFileUtils.checkHsErrFileContent(f, expectedPatterns, null, true, true);
+
+  }
+
+  private static void testNotCompactObjectHeaders() throws Exception {
+    ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(
+        "-XX:+UnlockDiagnosticVMOptions",
+        "-XX:+UnlockExperimentalVMOptions",
+        "-XX:-UseCompactObjectHeaders",
+        "-Xmx100M",
+        "-XX:-CreateCoredumpOnCrash",
+        "-XX:ErrorHandlerTest=14",
+        "-version");
+
+    OutputAnalyzer output = new OutputAnalyzer(pb.start());
+    output.shouldNotHaveExitValue(0);
+
+    // extract hs-err file
+    File f = HsErrFileUtils.openHsErrFileFromOutput(output);
+
+    Pattern[] notExpectedPatterns = new Pattern[] {
+      Pattern.compile("# Java VM: .*compact obj headers.*")
+    };
+
+    HsErrFileUtils.checkHsErrFileContent(f, null, notExpectedPatterns, true, true);
+
   }
 }
