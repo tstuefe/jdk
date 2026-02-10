@@ -164,19 +164,12 @@ public:
 
   static void print_compressed_class_space(outputStream* st) NOT_LP64({});
 
-  // Returns true if we use a class space.
-  static bool using_class_space() {
-    return NOT_LP64(false) // Not needed on 32-bit
-           LP64_ONLY(true);
-  }
-
   static bool is_class_space_allocation(MetadataType mdType) {
-    return mdType == ClassType && using_class_space();
+    return CLASS_SPACE_ONLY(mdType) NOT_CLASS_SPACE(false);
   }
 
   static bool initialized();
 
 };
-
 
 #endif // SHARE_MEMORY_METASPACE_HPP
