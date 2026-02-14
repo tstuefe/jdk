@@ -36,15 +36,17 @@
  * Platform-specific support for java.lang.Process
  */
 #include <assert.h>
+#include <ctype.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <spawn.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <ctype.h>
-#include <sys/wait.h>
-#include <signal.h>
 #include <string.h>
-
-#include <spawn.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "childproc.h"
 
@@ -666,6 +668,21 @@ startChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
     }
 }
 
+static int pipeOrPipe2(int fd[2], bool cloexec) {
+#ifdef HAVE_PIPE2
+    return pipe2(fd, cloexec ? O_CLOEXEC : 0);
+#else
+    /* Do the next best thing - pipe, but tag file descriptors right afterwards.
+     * Still racy, but dangerous time window is as short as we can make it. */
+    int rc = pipe(fd);
+    if (rc == 0 && cloexec) {
+        fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+        fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    }
+    return rc;
+#endif /* HAVE_PIPE2 */
+}
+
 JNIEXPORT jint JNICALL
 Java_java_lang_ProcessImpl_forkAndExec(JNIEnv *env,
                                        jobject process,
@@ -727,11 +744,20 @@ Java_java_lang_ProcessImpl_forkAndExec(JNIEnv *env,
     fds = (*env)->GetIntArrayElements(env, std_fds, NULL);
     if (fds == NULL) goto Catch;
 
-    if ((fds[0] == -1 && pipe(in)  < 0) ||
-        (fds[1] == -1 && pipe(out) < 0) ||
-        (fds[2] == -1 && !redirectErrorStream && pipe(err) < 0) || // if not redirecting create the pipe
-        (pipe(childenv) < 0) ||
-        (pipe(fail) < 0)) {
+    /* In FORK/VFORK mode, we must ensure the pipe fd's are set to CLOEXEC as early as possible.
+     * That is because as long as we have the pipes open and not set to CLOEXEC, a native third-party
+     * thread doing a native fork() (uncontrolled by us) would carry a copy of the pipe fd's and
+     * possibly keep open the fail pipe we need to communicate from child to parent. That would cause
+     * parent to hang (see JDK-8377907).
+     * Note that setting the in/out/err pipes to CLOEXEC is fine, too, since the child process will
+     * dup2() those filedescriptors to their stdin/stdout/stderr. And dup2() does not copy the
+     * CLOEXEC flag. */
+    const bool cloExec = ((mode == MODE_FORK) || (mode == MODE_VFORK));
+    if ((fds[0] == -1 && pipeOrPipe2(in, cloExec)  < 0) ||
+        (fds[1] == -1 && pipeOrPipe2(out, cloExec) < 0) ||
+        (fds[2] == -1 && pipeOrPipe2(err, cloExec) < 0) ||
+        (pipeOrPipe2(childenv, cloExec) < 0) ||
+        (pipeOrPipe2(fail, cloExec) < 0)) {
         throwInternalIOException(env, errno, "Bad file descriptor", mode);
         goto Catch;
     }
