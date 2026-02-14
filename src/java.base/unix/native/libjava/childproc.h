@@ -138,4 +138,11 @@ int childProcess(void *arg);
 void jtregSimulateCrash(pid_t child, int stage);
 #endif
 
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#define HAVE_PIPE2
+#else
+// Neither MacOS nor AIX support pipe2, unfortunately
+#undef HAVE_PIPE2
+#endif
+
 #endif
