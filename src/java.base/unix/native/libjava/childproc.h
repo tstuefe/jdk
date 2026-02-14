@@ -136,6 +136,7 @@ int childProcess(void *arg);
  * See: test/jdk/java/lang/ProcessBuilder/JspawnhelperProtocol.java
  */
 void jtregSimulateCrash(pid_t child, int stage);
+void jtregSimulateDelay();
 #endif
 
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)

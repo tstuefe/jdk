@@ -762,6 +762,10 @@ Java_java_lang_ProcessImpl_forkAndExec(JNIEnv *env,
         goto Catch;
     }
 
+#ifdef DEBUG
+    jtregSimulateDelay();
+#endif
+
     c->fds[0] = fds[0];
     c->fds[1] = fds[1];
     c->fds[2] = fds[2];
