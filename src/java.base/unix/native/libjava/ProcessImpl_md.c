@@ -755,7 +755,7 @@ Java_java_lang_ProcessImpl_forkAndExec(JNIEnv *env,
     const bool cloExec = ((mode == MODE_FORK) || (mode == MODE_VFORK));
     if ((fds[0] == -1 && pipeOrPipe2(in, cloExec)  < 0) ||
         (fds[1] == -1 && pipeOrPipe2(out, cloExec) < 0) ||
-        (fds[2] == -1 && pipeOrPipe2(err, cloExec) < 0) ||
+        (fds[2] == -1 && !redirectErrorStream && pipeOrPipe2(err, cloExec) < 0) ||
         (pipeOrPipe2(childenv, cloExec) < 0) ||
         (pipeOrPipe2(fail, cloExec) < 0)) {
         throwInternalIOException(env, errno, "Bad file descriptor", mode);
