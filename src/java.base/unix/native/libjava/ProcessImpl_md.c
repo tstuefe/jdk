@@ -669,12 +669,16 @@ startChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
 }
 
 static int pipeOrPipe2(int fd[2], bool cloexec) {
+    /* We must ensure the pipe fd's are set to CLOEXEC as early as possible, since at any moment a
+     * concurrent fork() (uncontrolled by us, e.g. third-party JNI coding) could create copies of
+     * these descriptors and accidentally keep the pipes open. That would cause the parent process
+     * to hang (see JDK-8377907).
+     * We use pipe2, if we have it; if not, we use pipe, but tag file descriptors as CLOEXEC
+     * immediately. Still racy, but dangerous time window is as short as we can make it. */
     int rc = -1;
 #ifdef HAVE_PIPE2
     rc = pipe2(fd, cloexec ? O_CLOEXEC : 0);
 #else
-    /* Do the next best thing - pipe, but tag file descriptors right afterwards.
-     * Still racy, but dangerous time window is as short as we can make it. */
     rc = pipe(fd);
     if (rc == 0 && cloexec) {
         fcntl(fd[0], F_SETFD, FD_CLOEXEC);
@@ -753,14 +757,6 @@ Java_java_lang_ProcessImpl_forkAndExec(JNIEnv *env,
     fds = (*env)->GetIntArrayElements(env, std_fds, NULL);
     if (fds == NULL) goto Catch;
 
-    /* In FORK/VFORK mode, we must ensure the pipe fd's are set to CLOEXEC as early as possible.
-     * That is because as long as we have the pipes open and not set to CLOEXEC, a native third-party
-     * thread doing a native fork() (uncontrolled by us) would carry a copy of the pipe fd's and
-     * possibly keep open the fail pipe we need to communicate from child to parent. That would cause
-     * parent to hang (see JDK-8377907).
-     * Note that setting the in/out/err pipes to CLOEXEC is fine, too, since the child process will
-     * dup2() those filedescriptors to their stdin/stdout/stderr. And dup2() does not copy the
-     * CLOEXEC flag. */
     const bool cloExec = ((mode == MODE_FORK) || (mode == MODE_VFORK));
     if ((fds[0] == -1 && pipeOrPipe2(in, cloExec)  < 0) ||
         (fds[1] == -1 && pipeOrPipe2(out, cloExec) < 0) ||
