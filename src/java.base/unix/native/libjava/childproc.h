@@ -146,4 +146,4 @@ void jtregSimulateDelay();
 #undef HAVE_PIPE2
 #endif
 
-#endif
+#endif /* CHILDPROC_MD_H */

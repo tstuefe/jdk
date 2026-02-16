@@ -669,18 +669,27 @@ startChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
 }
 
 static int pipeOrPipe2(int fd[2], bool cloexec) {
+    int rc = -1;
 #ifdef HAVE_PIPE2
-    return pipe2(fd, cloexec ? O_CLOEXEC : 0);
+    rc = pipe2(fd, cloexec ? O_CLOEXEC : 0);
 #else
     /* Do the next best thing - pipe, but tag file descriptors right afterwards.
      * Still racy, but dangerous time window is as short as we can make it. */
-    int rc = pipe(fd);
+    rc = pipe(fd);
     if (rc == 0 && cloexec) {
-        fcntl(fds[0], F_SETFD, FD_CLOEXEC);
-        fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+        fcntl(fd[0], F_SETFD, FD_CLOEXEC);
+        fcntl(fd[1], F_SETFD, FD_CLOEXEC);
     }
-    return rc;
 #endif /* HAVE_PIPE2 */
+#ifdef DEBUG
+    if (rc == 0 && cloexec) {
+        int flags = fcntl(fd[0], F_GETFD);
+        assert(flags != -1 && (flags & FD_CLOEXEC));
+        flags = fcntl(fd[1], F_GETFD);
+        assert(flags != -1 && (flags & FD_CLOEXEC));
+    }
+#endif // DEBUG
+    return rc;
 }
 
 JNIEXPORT jint JNICALL

@@ -474,9 +474,10 @@ void jtregSimulateDelay() {
     if (env != NULL && atoi(env) == 1) {
         printf("delay\n");
         fflush(stdout);
-        sleep(1);
+        sleep(5);
     }
 }
+
 /* This method is only used in debug builds for testing MODE_POSIX_SPAWN
  * in the light of abnormal program termination of either the parent JVM
  * or the newly created jspawnhelper child process during the execution of
