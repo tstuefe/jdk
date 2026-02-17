@@ -55,7 +55,8 @@ Java_ConcNativeForkTest_doFork(JNIEnv* env, jclass cls)
 }
 
 JNIEXPORT void JNICALL
-Java_ConcNativeForkTest_doCleanup(JNIEnv *env, jclass cls, jlong pid) {
+Java_ConcNativeForkTest_doCleanup(JNIEnv *env, jclass cls, jlong jpid) {
+    pid_t pid = (pid_t) jpid;
     TRC(("Kill Child %d", pid));
     kill((pid_t)pid, SIGKILL);
     TRC(("Reap Child %d", pid));
