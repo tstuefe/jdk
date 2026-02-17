@@ -46,6 +46,7 @@
  * @run main/othervm/timeout=50 -Djdk.lang.Process.launchMechanism=VFORK ConcNativeForkTest
  */
 
+import java.time.LocalTime;
 import java.util.Stack;
 
 public class ConcNativeForkTest {
@@ -90,6 +91,7 @@ public class ConcNativeForkTest {
             int safety = 15;
             while (!stopNativeForking && safety-- > 0) {
                 long pid = doFork();
+                System.out.println(LocalTime.now() + ": Native fork");
                 if (pid == -1) {
                     throw new RuntimeException("Native Fork Error");
                 }
@@ -99,13 +101,16 @@ public class ConcNativeForkTest {
                 } catch (InterruptedException e) {
                     return;
                 }
+                System.out.println(LocalTime.now() + ": Native Forker stops");
             }
         });
 
         // Start to fork natively, in 1 second intervals
         nativeForkerThread.start();
 
-        ProcessBuilder pb = new ProcessBuilder("true");
+        ProcessBuilder pb = new ProcessBuilder("date").inheritIO();
+
+        System.out.println(LocalTime.now() + ": Call ProcessBuilder.start...");
 
         long t1 = System.currentTimeMillis();
 
@@ -117,8 +122,12 @@ public class ConcNativeForkTest {
             // native children that forked off in its 5 second delay time window.
             long t2 = System.currentTimeMillis();
 
+            System.out.println(LocalTime.now() + ": ProcessBuilder.start finished.");
+
             // Wait for child (/bin/true runs quick)
             p.waitFor();
+
+            System.out.println(LocalTime.now() + ": Process.waitFor finished.");
 
             // Stop creating native children; reap native children
             stopNativeForking = true;
@@ -140,11 +149,17 @@ public class ConcNativeForkTest {
 
             // program startup time is usually very quick, but test machine may be slow,
             // so allow for a generous time here:
-            final long maxProgramStartupTime = 5000;
+            final long maxProgramStartupTime = 7000;
 
-            final long maxForkTimeExpected = delayTime + maxProgramStartupTime;
-            if (forkTime >= maxForkTimeExpected) {
-                throw new RuntimeException("Took too long => suspicious");
+            final long maxProcessStartTimeExpected = delayTime + maxProgramStartupTime;
+            final long minProcessStartTimeExpected = delayTime;
+
+            if (forkTime < minProcessStartTimeExpected) {
+                throw new RuntimeException("Too quick => suspicious. JTREG_JSPAWNHELPER_DELAY_TEST may not have worked?");
+            }
+
+            if (forkTime >= maxProcessStartTimeExpected) {
+                throw new RuntimeException("Took slow => suspicious");
             }
         }
     }

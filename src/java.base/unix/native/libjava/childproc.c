@@ -471,7 +471,7 @@ childProcess(void *arg)
 /* This method is only used in debug builds */
 void jtregSimulateDelay() {
     const char* env = getenv("JTREG_JSPAWNHELPER_DELAY_TEST");
-    if (env != NULL && atoi(env) == 1) {
+    if (env != NULL && strcmp(env, "1") == 0) {
         printf("delay\n");
         fflush(stdout);
         sleep(5);

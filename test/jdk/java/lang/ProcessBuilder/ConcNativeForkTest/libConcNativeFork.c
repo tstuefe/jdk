@@ -37,6 +37,7 @@
 JNIEXPORT jlong JNICALL
 Java_ConcNativeForkTest_doFork(JNIEnv* env, jclass cls)
 {
+    TRC(("JTREG_JSPAWNHELPER_DELAY_TEST=%s", getenv("JTREG_JSPAWNHELPER_DELAY_TEST")));
     pid_t pid = fork();
     if (pid == 0) {
         TRC(("Child alive, will exec now"));
