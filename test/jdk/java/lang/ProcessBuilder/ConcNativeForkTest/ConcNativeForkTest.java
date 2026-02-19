@@ -27,7 +27,7 @@
  * @requires os.family != "windows"
  * @requires vm.flagless
  * @library /test/lib
- * @run main/othervm/timeout=50 -Djdk.lang.Process.launchMechanism=POSIX_SPAWN ConcNativeForkTest
+ * @run main/othervm/manual -Djdk.lang.Process.launchMechanism=POSIX_SPAWN ConcNativeForkTest
  */
 
 /*
@@ -35,7 +35,7 @@
  * @requires os.family != "windows"
  * @requires vm.flagless
  * @library /test/lib
- * @run main/othervm/timeout=50 -Djdk.lang.Process.launchMechanism=FORK ConcNativeForkTest
+ * @run main/othervm/manual -Djdk.lang.Process.launchMechanism=FORK ConcNativeForkTest
  */
 
 /*
@@ -43,124 +43,76 @@
  * @requires os.family == "linux"
  * @requires vm.flagless
  * @library /test/lib
- * @run main/othervm/timeout=50 -Djdk.lang.Process.launchMechanism=VFORK ConcNativeForkTest
+ * @run main/othervm/manual -Djdk.lang.Process.launchMechanism=VFORK ConcNativeForkTest
  */
-
-import java.time.LocalTime;
-import java.util.Stack;
 
 public class ConcNativeForkTest {
 
-    static boolean stopNativeForking = false;
-    native static long doFork();
-    native static void doCleanup(long pid);
-    native static void makeProcessCreationSlow();
+    // How this works:
+    // - We start a child process via ProcessBuilder. Does not matter what, we just call "/bin/true".
+    // - Concurrently, we continuously (up to a limit) fork natively; these forks will all exec "sleep 30".
+    // - If the natively forked child process forks off at the right (wrong) moment, it will catch the open pipe from
+    //   the "/bin/true" child process, and forcing the parent process (this test) to wait in ProcessBuilder.start()
+    //   (inside forkAndExec()) until the natively forked child releases the pipe file descriptors it inherited.
 
-    static Stack<Long> nativChildrenPIDs = new Stack<>();
+    // Note: obviously, this is racy and depends on scheduler timings of the underlying OS. The test succeeding is
+    // no proof the bug does not exist (see PipesCloseOnExecTest as a complimentary test that is more reliable, but
+    // only works on Linux).
+    // It seems to reliably reproduce the bug on Linux x64, though.
+
+    native static boolean prepareNativeForkerThread(int numForks);
+    native static void releaseNativeForkerThread();
+    native static void stopNativeForkerThread();
+
+    private static final int numIterations = 20;
 
     public static void main(String[] args) throws Exception {
 
-        System.out.println("jdk.lang.Process.launchMechanism=" + System.getProperty("jdk.lang.Process.launchMechanism"));
+        System.out.println("jdk.lang.Process.launchMechanism=" +
+                System.getProperty("jdk.lang.Process.launchMechanism"));
 
         System.loadLibrary("ConcNativeFork");
 
-        // How this works:
-        // - We start a child process A. Does not matter what, we just call "/bin/true".
-        // - We introduce an artificial (5 seconds) delay between pipe creation and pipe usage in ProcessBuilder.start()
-        //    (see JTREG_JSPAWNHELPER_DELAY_TEST);
-        // - Concurrently to that, we will continuously - in 1 second intervals - call fork()+exec() in native code
-        //    to start "native" child processes B+; these processes all run "sleep" for 30 seconds.
-        // - Since the fork interval of child processes B+ is smaller than the time we need to start child process A
-        //    (see JTREG_JSPAWNHELPER_DELAY_TEST), it is certain that in that time window several child processes B+
-        //    will have been started. These child processes carry copies of the pipe file descriptors created for A,
-        //    and if those were incorrectly created (without CLOEXEC), will keep them open for the full length of the
-        //    30 second sleep interval.
-        // - This means that the ProcessBuilder.start() call to create A will take 5 (start delay) + 30 (runtime of last
-        //    "intersecting" process B) seconds, since ProcessBuilder.start() will wait for the fail pipe to close, and
-        //    the last intersecting child B will keep that open as long as it lives.
-        // - But if all goes well, the ProcessBuilder.start() should just take 5 seconds (start delay).
+        // A very simple program returning immediately (/bin/true)
+        ProcessBuilder pb = new ProcessBuilder("true").inheritIO();
+        final int numJavaProcesses = 10;
+        final int numNativeProcesses = 250;
+        Process[] processes = new Process[numJavaProcesses];
 
-        makeProcessCreationSlow();
+        for (int iteration = 0; iteration < numIterations; iteration ++) {
 
-        String s = System.getenv("JTREG_JSPAWNHELPER_DELAY_TEST");
-        if (s == null || !s.equals("1")) {
-            throw new RuntimeException("JTREG_JSPAWNHELPER_DELAY_TEST should be set now");
+            if (!prepareNativeForkerThread(numNativeProcesses)) {
+                throw new RuntimeException("Failed to start native forker thread (see stdout)");
+            }
+
+            long[] durations = new long[numJavaProcesses];
+
+            releaseNativeForkerThread();
+
+            for (int np = 0; np < numJavaProcesses; np ++) {
+                long t1 = System.currentTimeMillis();
+                try (Process p = pb.start()) {
+                    durations[np] = System.currentTimeMillis() - t1;
+                    processes[np] = p;
+                }
+            }
+
+            stopNativeForkerThread();
+
+            long longestDuration = 0;
+            for (int np = 0; np < numJavaProcesses; np ++) {
+                processes[np].waitFor();
+                System.out.printf("Duration: %dms%n", durations[np]);
+                longestDuration = Math.max(durations[np], longestDuration);
+            }
+
+            System.out.printf("Longest startup time: %dms%n", longestDuration);
+
+            if (longestDuration >= 30000) {
+                throw new RuntimeException("Looks like we blocked on native fork");
+            }
         }
 
-        Thread nativeForkerThread = new Thread(() -> {
-            int safety = 15;
-            while (!stopNativeForking && safety-- > 0) {
-                long pid = doFork();
-                System.out.println(LocalTime.now() + ": Native fork");
-                if (pid == -1) {
-                    throw new RuntimeException("Native Fork Error");
-                }
-                nativChildrenPIDs.add(pid);
-                try {
-                    Thread.sleep(1000); // wait 1 second
-                } catch (InterruptedException e) {
-                    return;
-                }
-                System.out.println(LocalTime.now() + ": Native Forker stops");
-            }
-        });
-
-        // Start to fork natively, in 1 second intervals
-        nativeForkerThread.start();
-
-        ProcessBuilder pb = new ProcessBuilder("date").inheritIO();
-
-        System.out.println(LocalTime.now() + ": Call ProcessBuilder.start...");
-
-        long t1 = System.currentTimeMillis();
-
-        // Start /bin/true.
-        try (Process p = pb.start()) { // delay 5 seconds
-
-            // If ProcessBuilder.start() returns after 5ish seconds, all is well.
-            // If ProcessBuilder.start() returns after 35ish seconds, it means it had to wait for all
-            // native children that forked off in its 5 second delay time window.
-            long t2 = System.currentTimeMillis();
-
-            System.out.println(LocalTime.now() + ": ProcessBuilder.start finished.");
-
-            // Wait for child (/bin/true runs quick)
-            p.waitFor();
-
-            System.out.println(LocalTime.now() + ": Process.waitFor finished.");
-
-            // Stop creating native children; reap native children
-            stopNativeForking = true;
-            nativeForkerThread.join();
-            while (!nativChildrenPIDs.isEmpty()) {
-                doCleanup(nativChildrenPIDs.pop());
-            }
-
-            // child run should have been successfully
-            if (p.exitValue() != 0) { // true returns 0
-                throw new RuntimeException("Failed");
-            }
-
-            // Examine time it took to spawn off the child. Too long? Suspicious.
-            long forkTime = t2 - t1;
-            System.out.println("Took " + forkTime + "ms");
-
-            final long delayTime = 5000; // JTREG_JSPAWNHELPER_DELAY_TEST
-
-            // program startup time is usually very quick, but test machine may be slow,
-            // so allow for a generous time here:
-            final long maxProgramStartupTime = 7000;
-
-            final long maxProcessStartTimeExpected = delayTime + maxProgramStartupTime;
-            final long minProcessStartTimeExpected = delayTime;
-
-            if (forkTime < minProcessStartTimeExpected) {
-                throw new RuntimeException("Too quick => suspicious. JTREG_JSPAWNHELPER_DELAY_TEST may not have worked?");
-            }
-
-            if (forkTime >= maxProcessStartTimeExpected) {
-                throw new RuntimeException("Took slow => suspicious");
-            }
-        }
     }
+
 }
