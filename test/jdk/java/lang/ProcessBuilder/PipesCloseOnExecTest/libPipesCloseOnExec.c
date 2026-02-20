@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <jni.h>
+#include "testlib_thread_barriers.h"
 
 static void trc(const char* fmt, ...) {
     char buf [1024];
