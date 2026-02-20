@@ -28,7 +28,7 @@
 /* Fallback implementation of pthread_barrier_t for platforms that don't have them. */
 
 #ifndef _WIN32
-#ifndef _POSIX_BARRIERS
+#if !defined _POSIX_BARRIERS || _POSIX_BARRIERS < 0
 
 #include <pthread.h>
 
