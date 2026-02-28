@@ -94,13 +94,6 @@ static void sigaltstack_and_log(const stack_t* ss, stack_t* oss) {
          (oss->ss_flags == SS_ONSTACK) ? " (called from signal handler?)" : "");
 }
 
-static void release_and_check(char* p, size_t sz) {
-  if (!os::release_memory(p, sz)) {
-    // No way to cleanly handle this.
-    assert(false, "Failed to release alternative signal stack");
-  }
-}
-
 void Thread::enable_alternate_signal_stack() {
   if (!UseAltSigStacks) {
     return;
@@ -132,7 +125,7 @@ void Thread::enable_alternate_signal_stack() {
   if (!success) {
     log_warning(os, thread)("Failed to prepare alternative signal stack (step %d, errno %d)", step, errno);
     if (p != nullptr) {
-      release_and_check(p, stacksize);
+      os::release_memory(p, stacksize);
     }
     return;
   }
@@ -176,6 +169,6 @@ void Thread::disable_alternate_signal_stack() {
   assert(oss.ss_sp == _altsigstack, "Different stack? " PTR_FORMAT " vs " PTR_FORMAT, p2i(oss.ss_sp), p2i(_altsigstack));
   assert(oss.ss_size == stacksize, "Different size?");
 
-  release_and_check((char*)_altsigstack, stacksize);
+  os::release_memory((char*)_altsigstack, stacksize);
   _altsigstack = nullptr;
 }

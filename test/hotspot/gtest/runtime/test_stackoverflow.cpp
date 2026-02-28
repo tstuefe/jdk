@@ -121,7 +121,7 @@ struct NonJavaTestThread : public NamedThread {
 TEST_VM_CRASH_SIGNAL(StackOverflow, nativeStackOverflowInNonJavaThread,
                      MACOS_ONLY("SIGBUS") NOT_MACOS("SIGSEGV")) {
   if (!UseAltSigStacks) {
-    return;
+    raise(MACOS_ONLY(SIGBUS) NOT_MACOS(SIGSEGV)); // satisfy death test
   }
   new NonJavaTestThread();
   // Wait some time for the thread to come up and crash the process
@@ -138,9 +138,10 @@ TEST_VM_CRASH_SIGNAL(StackOverflow, nativeStackOverflowInNonJavaThread,
 // tests the same thing, but for custom JNI code invoked from java.
 TEST_VM_CRASH_SIGNAL(StackOverflow, nativeStackOverflowInJavaThread, "SIGSEGV") {
   if (!UseAltSigStacks) {
-    return;
+    raise(SIGSEGV); // satisfy death test
   }
-  // Gtests get invoked on the "main" java thread, so its a java thread.
+  // Gtests get invoked on the "main" java thread, so its already a java thread. No
+  // need to create one.
   cause_native_stack_overflow();
 }
 #endif
