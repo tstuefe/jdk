@@ -614,25 +614,6 @@ spawnChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
     /* 4: copy of the "childenv" pipe read end */
     child_childenv = c->childenv[0];
 
-#ifdef __APPLE__
-    /* Apple's implementation of posix_spawn is not POSIX-compliant with respect to how dup2 file
-     * actions work with the FD_CLOEXEC flag on inherited file descriptors:
-     * on MacOS, the kernel closes file descriptors marked with CLOEXEC too early for the libc to
-     * dup2 them in the new process. That causes the file descriptor to be invalid in the child
-     * process.
-     * The only way to prevent this is to create temporary file descriptor duplicates that are
-     * *not* marked as CLOEXEC, use them as source for dup2 file actions, and close them right
-     * after the posix_spawn call. These file descriptors would of course leak to other processes,
-     * but since they are only short-lived temporary copies, that is benign.
-     * Note that posix_spawn_file_actions_addinherit_np(3) on MacOS does not reliably prevent
-     * this problem; only the dup-twice-trick does.
-     * Also note that this problem does not seem to affect stdin, stdout and stderr, so we only
-     * need to care about the other pipes.
-     */
-    child_fail = dup(child_fail);
-    child_childenv = dup(child_childenv);
-#endif
-
     assert(fdIsValid(child_stdin));
     assert(fdIsValid(child_stdout));
     assert(fdIsValid(child_stderr));
@@ -644,6 +625,18 @@ spawnChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
 
     /* Slot in dup2 file actions. */
     posix_spawn_file_actions_init(&file_actions);
+
+#ifdef __APPLE__
+    /* On MacOS, posix_spawn does not behave in a POSIX-conform way in that the
+     * kernel closes CLOEXEC file descriptors too early for dup2 file actions to
+     * copy them after the fork. We have to explicitly prevent that by calling a
+     * propietary API. */
+    posix_spawn_file_actions_addinherit_np(&file_actions, child_stdin);
+    posix_spawn_file_actions_addinherit_np(&file_actions, child_stdout);
+    posix_spawn_file_actions_addinherit_np(&file_actions, child_stderr);
+    posix_spawn_file_actions_addinherit_np(&file_actions, child_fail);
+    posix_spawn_file_actions_addinherit_np(&file_actions, child_childenv);
+#endif
 
     /* First dup2 stdin/out/err to 0,1,2. After this, we can safely dup2 over the
      * original stdin/out/err. */
@@ -671,14 +664,6 @@ spawnChild(JNIEnv *env, jobject process, ChildStuff *c, const char *helperpath) 
     c->redirectErrorStream = false;
 
     rval = posix_spawn(&resultPid, helperpath, &file_actions, 0, (char * const *) hlpargs, environ);
-
-#ifdef __APPLE__
-    /* Close our dup'ed copies */
-    close(child_fail);
-    child_fail = -1;
-    close(child_childenv);
-    child_childenv = -1;
-#endif
 
     if (rval != 0) {
         return -1;
