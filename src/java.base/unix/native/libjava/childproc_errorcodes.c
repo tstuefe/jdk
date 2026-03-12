@@ -31,19 +31,16 @@
 #include "childproc_errorcodes.h"
 
 void buildErrorCode(errcode_t* errcode, int step, int hint, int errno_) {
-    const int maxstep = (1 << 8);
-    assert(step < maxstep);
+    errcode_t e;
+
+    assert(step < (1 << 8));
+    e.step = step;
+
+    assert(errno_ < (1 << 8));
+    e.errno_ = errno_;
 
     const int maxhint = (1 << 16);
-    int hint_capped = hint < maxhint ? hint : maxhint;
-
-    const int maxerrno = (1 << 8);
-    assert(errno_ < maxerrno);
-
-    errcode_t e;
-    e.step = step;
-    e.hint = hint_capped;
-    e.errno_ = errno_;
+    e.hint = hint < maxhint ? hint : maxhint;
 
     (*errcode) = e;
 }
