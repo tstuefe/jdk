@@ -23,20 +23,20 @@
 
 /**
  * @test id=FORK
+ * @summary Check that passing an invalid work dir yields a corresponding IOE text.
  * @requires (os.family != "windows")
  * @requires vm.flagless
  * @library /test/lib
  * @run main/othervm -Xmx64m -Djdk.lang.Process.launchMechanism=FORK InvalidWorkDir
- * @summary Check that passing an invalid work dir yields a corresponding IOE text.
  */
 
 /**
  * @test id=POSIX_SPAWN
+ * @summary Check that passing an invalid work dir yields a corresponding IOE text.
  * @requires (os.family != "windows")
  * @requires vm.flagless
  * @library /test/lib
  * @run main/othervm -Xmx64m -Djdk.lang.Process.launchMechanism=FORK InvalidWorkDir
- * @summary Check that passing an invalid work dir yields a corresponding IOE text.
  */
 
 import jdk.test.lib.process.OutputAnalyzer;
@@ -47,7 +47,7 @@ import java.io.IOException;
 public class InvalidWorkDir {
 
     public static void main(String[] args) {
-        ProcessBuilder bld = new ProcessBuilder("ls").directory(new File("/doesnotexist"));
+        ProcessBuilder bld = new ProcessBuilder("ls").directory(new File("./doesnotexist"));
         try(Process p = bld.start()) {
             throw new RuntimeException("IOE expected");
         } catch (IOException e) {
