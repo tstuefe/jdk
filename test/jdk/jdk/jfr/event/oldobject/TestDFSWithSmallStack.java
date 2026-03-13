@@ -94,7 +94,7 @@ public class TestDFSWithSmallStack {
                 }
                 System.out.println("Not enough chains found, retrying.");
             }
-            count++;
+            count--;
             leak = null;
         }
     }
