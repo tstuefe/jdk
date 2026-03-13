@@ -81,7 +81,6 @@ DFSClosure::DFSClosure(EdgeStore* edge_store, JFRBitSet* mark_bits, const Edge* 
 }
 
 bool DFSClosure::have_headroom() const {
-  int dummy;
   const address sp = (address) os::current_stack_pointer();
 #ifdef ASSERT
   const Thread* const t = Thread::current_or_null();
