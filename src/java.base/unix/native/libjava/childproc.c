@@ -34,6 +34,7 @@
 #include <limits.h>
 
 #include "childproc.h"
+#include "childproc_errorcodes.h"
 #include "jni_util.h"
 
 const char * const *parentPathv;
@@ -63,7 +64,8 @@ closeSafely(int fd)
 }
 
 /* Like closeSafely, but sets errcode (hint = fd, errno) on error and returns false */
-bool closeSafely2(int fd, errcode_t* errcode) {
+static bool
+closeSafely2(int fd, errcode_t* errcode) {
     if (closeSafely(fd) == -1) {
         buildErrorCode(errcode, ESTEP_UNKNOWN, fd, errno);
         return false;
@@ -395,9 +397,9 @@ childProcess(void *arg)
     /* error information for WhyCantJohnnyExec */
     errcode_t errcode;
 
+    /* Child shall signal aliveness to parent at the very first
+     * moment. */
     if (p->sendAlivePing && !sendAlivePing(fail_pipe_fd)) {
-        /* Child shall signal aliveness to parent at the very first
-         * moment. */
         buildErrorCode(&errcode, ESTEP_SENDALIVE_FAIL, fail_pipe_fd, errno);
         goto WhyCantJohnnyExec;
     }

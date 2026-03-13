@@ -28,8 +28,6 @@
 
 #include <sys/types.h>
 
-#include "childproc_errorcodes.h"
-
 #ifdef __APPLE__
 #include <crt_externs.h>
 #define environ (*_NSGetEnviron())
@@ -117,9 +115,6 @@ extern const char * const *parentPathv;
 
 ssize_t writeFully(int fd, const void *buf, size_t count);
 int closeSafely(int fd);
-
-/* close a file descriptor; set error info (hint = fd, errno) on error and return false */
-bool closeSafelyWithInfo(int fd, errcode_t* err);
 
 int magicNumber();
 ssize_t readFully(int fd, void *buf, size_t nbyte);

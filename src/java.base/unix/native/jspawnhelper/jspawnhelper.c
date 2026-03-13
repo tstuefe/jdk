@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 
 #include "childproc.h"
+#include "childproc_errorcodes.h"
 
 extern int errno;
 
