@@ -509,10 +509,8 @@ childProcess(void *arg)
      * yields EOF when the write ends (we have two of them!) are closed.
      */
     if (!sendErrorCode(fail_pipe_fd, errcode)) {
-        // Write error code to stdout, in the hope someone reads this.
         printf("childproc fail: " ERRCODE_FORMAT "\n", ERRCODE_FORMAT_ARGS(errcode));
     }
-    /* let the process exit code be related to the failing step number */
     int exitcode = exitCodeFromErrorCode(errcode);
     close(fail_pipe_fd);
     _exit(exitcode);
