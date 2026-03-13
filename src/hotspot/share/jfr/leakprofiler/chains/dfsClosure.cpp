@@ -34,6 +34,7 @@
 #include "memory/resourceArea.hpp"
 #include "oops/access.inline.hpp"
 #include "oops/oop.inline.hpp"
+#include "runtime/os.hpp"
 #include "utilities/align.hpp"
 
 UnifiedOopRef DFSClosure::_reference_stack[max_dfs_depth];
@@ -81,7 +82,7 @@ DFSClosure::DFSClosure(EdgeStore* edge_store, JFRBitSet* mark_bits, const Edge* 
 
 bool DFSClosure::have_headroom() const {
   int dummy;
-  const address sp = (address) &dummy;
+  const address sp = (address) os::current_stack_pointer();
 #ifdef ASSERT
   const Thread* const t = Thread::current_or_null();
   assert(t->is_VM_thread(), "invariant");

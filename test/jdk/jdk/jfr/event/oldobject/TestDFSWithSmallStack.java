@@ -33,12 +33,21 @@ import jdk.test.lib.jfr.EventNames;
 import jdk.test.lib.jfr.Events;
 
 /**
- * @test
+ * @test id=dfsonly
  * @summary Tests that DFS works with a small stack
  * @library /test/lib /test/jdk
  * @requires vm.hasJFR
  * @modules jdk.jfr/jdk.jfr.internal.test
- * @run main/othervm -Xmx2g -XX:VMThreadStackSize=512 jdk.jfr.event.oldobject.TestDFSWithSmallStack
+ * @run main/othervm -Xmx2g -XX:VMThreadStackSize=512 jdk.jfr.event.oldobject.TestDFSWithSmallStack dfsonly
+ */
+
+/**
+ * @test id=bfsdfs
+ * @summary Tests that DFS works with a small stack
+ * @library /test/lib /test/jdk
+ * @requires vm.hasJFR
+ * @modules jdk.jfr/jdk.jfr.internal.test
+ * @run main/othervm -Xmx2g -XX:VMThreadStackSize=512 jdk.jfr.event.oldobject.TestDFSWithSmallStack bfsdfs
  */
 public class TestDFSWithSmallStack {
 
@@ -49,35 +58,33 @@ public class TestDFSWithSmallStack {
 
     // We build up an array of linked lists, each containing enough entries for DFS search to
     // max out max_dfs_depth (but not greatly surpass it).
-    // The old recursive implementation, started with such a small stack, will fail to reach
-    // max_dfs_depth, instead crashing with stack overflow.
-    // The new non-recursive implementation should work; the majority of the linked list items
-    // should be scanned (all those at the start of the lists, below max_dfs_depth) and contribute
-    // old object samples to the result.
-
-    // Note: VMThreadStackSize defines thread stack size for *all* VM-internal threads, not just the
-    // VM thread. Make sure that whatever small size we use in this test is still fine for the rest of
-    // the VM.
 
     private static final int TOTAL_OBJECTS = 10_000_000;
     private static final int OBJECTS_PER_LIST = 5_000;
     public static LinkedList<Object>[] leak;
 
     public static void main(String... args) throws Exception {
-         WhiteBox.setWriteAllObjectSamples(true);
-         WhiteBox.setSkipBFS(true);
-         int count = 10;
-         while (count > 0) {
-             try (Recording r = new Recording()) {
-                 r.enable(EventNames.OldObjectSample).with("cutoff", "infinity");
-                 r.start();
-                 leak = new LinkedList[TOTAL_OBJECTS/OBJECTS_PER_LIST];
-                 for (int i = 0; i < leak.length; i++) {
-                     leak[i] = new LinkedList<Object>();
-                     for (int j = 0; j < OBJECTS_PER_LIST; j++) {
-                         leak[i].add(new Object());
-                     }
-                 }
+
+        switch (args[0]) {
+            case "dfsonly" -> WhiteBox.setSkipBFS(true);
+            case "bfsdfs" -> {} /* ignored */
+            default -> throw new RuntimeException("Invalid argument");
+        }
+
+        WhiteBox.setWriteAllObjectSamples(true);
+        int count = 10;
+
+        while (count > 0) {
+            try (Recording r = new Recording()) {
+                r.enable(EventNames.OldObjectSample).with("cutoff", "infinity");
+                r.start();
+                leak = new LinkedList[TOTAL_OBJECTS / OBJECTS_PER_LIST];
+                for (int i = 0; i < leak.length; i++) {
+                    leak[i] = new LinkedList<Object>();
+                    for (int j = 0; j < OBJECTS_PER_LIST; j++) {
+                        leak[i].add(new Object());
+                    }
+                }
                 System.gc();
                 r.stop();
                 List<RecordedEvent> events = Events.fromRecording(r);
@@ -86,9 +93,9 @@ public class TestDFSWithSmallStack {
                     return;
                 }
                 System.out.println("Not enough chains found, retrying.");
-             }
-             count++;
-             leak = null;
-         }
-     }
+            }
+            count++;
+            leak = null;
+        }
+    }
 }
