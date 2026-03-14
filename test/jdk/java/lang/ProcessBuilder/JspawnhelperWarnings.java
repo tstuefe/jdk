@@ -31,7 +31,7 @@
 
 /*
  * @test id=badversion
- * @bug 8325567 8325621
+ * @bug 8325567 8325621 8379967
  * @requires (os.family == "linux") | (os.family == "aix") | (os.family == "mac")
  * @library /test/lib
  * @run driver JspawnhelperWarnings badversion
