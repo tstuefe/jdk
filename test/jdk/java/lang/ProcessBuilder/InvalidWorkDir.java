@@ -23,6 +23,7 @@
 
 /**
  * @test id=FORK
+ * @bug 8379967
  * @summary Check that passing an invalid work dir yields a corresponding IOE text.
  * @requires (os.family != "windows")
  * @requires vm.flagless
