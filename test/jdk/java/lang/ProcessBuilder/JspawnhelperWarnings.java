@@ -87,7 +87,7 @@ public class JspawnhelperWarnings {
         switch (args[0]) {
             case "badargs" -> {
                 for (int nArgs = 0; nArgs < 10; nArgs++) {
-                    if (nArgs != 2) {
+                    if (nArgs != 1) {
                         tryWithNArgs(nArgs);
                     }
                 }
