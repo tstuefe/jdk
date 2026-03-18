@@ -36,7 +36,6 @@
  * @comment Driver sets compressed oops/class pointers, jtreg overrides will cause problems.
             Only run the test if the flags are not set via the command line.
  * @requires vm.opt.UseCompressedOops == null
- * @requires vm.opt.UseCompressedClassPointers == null
  * @run driver TestZGCWithCDS true
  */
 
@@ -55,7 +54,6 @@
  * @comment Driver sets compressed oops/class pointers, jtreg overrides will cause problems.
             Only run the test if the flags are not set via the command line.
  * @requires vm.opt.UseCompressedOops == null
- * @requires vm.opt.UseCompressedClassPointers == null
  * @run driver TestZGCWithCDS false
  */
 
@@ -95,7 +93,6 @@ public class TestZGCWithCDS {
                    .exec(helloJar,
                          "-XX:-UseZGC",
                          "-XX:+UseCompressedOops",           // in case turned off by vmoptions
-                         "-XX:+UseCompressedClassPointers",  // by jtreg
                          compactHeaders,
                          "-Xlog:cds",
                          "Hello");
@@ -108,7 +105,6 @@ public class TestZGCWithCDS {
                    .exec(helloJar,
                          "-XX:+UseSerialGC",
                          "-XX:-UseCompressedOops",
-                         "-XX:+UseCompressedClassPointers",
                          compactHeaders,
                          "-Xlog:cds",
                          "Hello");
@@ -120,7 +116,6 @@ public class TestZGCWithCDS {
                    .exec(helloJar,
                          "-XX:+UseSerialGC",
                          "-XX:+UseCompressedOops",
-                         "-XX:+UseCompressedClassPointers",
                          compactHeaders,
                          "-Xlog:cds",
                          "Hello");
