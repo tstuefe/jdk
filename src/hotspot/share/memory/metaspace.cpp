@@ -243,20 +243,16 @@ void MetaspaceUtils::print_on(outputStream* out) {
 void MetaspaceUtils::verify() {
   if (Metaspace::initialized()) {
 
-    // Verify non-class chunkmanager...
     ChunkManager* cm = ChunkManager::chunkmanager_nonclass();
     cm->verify();
 
-    // ... and space list.
     VirtualSpaceList* vsl = VirtualSpaceList::vslist_nonclass();
     vsl->verify();
 
 #if INCLUDE_CLASS_SPACE
-    // If we use compressed class pointers, verify class chunkmanager...
     cm = ChunkManager::chunkmanager_class();
     cm->verify();
 
-    // ... and class spacelist.
     vsl = VirtualSpaceList::vslist_class();
     vsl->verify();
 #endif // INCLUDE_CLASS_SPACE
@@ -549,8 +545,7 @@ const void* Metaspace::_class_space_end = nullptr;
 
 bool Metaspace::initialized() {
   return metaspace::MetaspaceContext::context_nonclass() != nullptr
-         && CLASS_SPACE_ONLY(Metaspace::class_space_is_initialized())
-            NOT_CLASS_SPACE(true);
+         CLASS_SPACE_ONLY(&& Metaspace::class_space_is_initialized());
 }
 
 #ifdef _LP64

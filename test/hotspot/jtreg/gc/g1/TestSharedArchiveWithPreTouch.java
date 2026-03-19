@@ -66,7 +66,7 @@ public class TestSharedArchiveWithPreTouch {
             List<String> load_args = new ArrayList<String>(BaseOptions);
 
             if (Platform.is64bit()) {
-                dump_args.addFirst("-XX:+UseCompressedOops" );
+                load_args.addFirst("-XX:+UseCompressedOops" );
             }
             load_args.addAll(Arrays.asList(new String[] { "-Xshare:on", "-version" }));
 

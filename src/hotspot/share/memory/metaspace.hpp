@@ -165,7 +165,7 @@ public:
   static void print_compressed_class_space(outputStream* st) NOT_LP64({});
 
   static bool is_class_space_allocation(MetadataType mdType) {
-    return CLASS_SPACE_ONLY(mdType) NOT_CLASS_SPACE(false);
+    return CLASS_SPACE_ONLY(mdType == ClassType) NOT_CLASS_SPACE(false);
   }
 
   static bool initialized();

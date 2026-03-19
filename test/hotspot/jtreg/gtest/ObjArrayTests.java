@@ -27,7 +27,7 @@
  */
 
 /* @test id=with-coops
- * @summary Run object array size tests with compressed oops and compressed class pointers
+ * @summary Run object array size tests with compressed oops
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.xml
@@ -35,7 +35,7 @@
  */
 
 /* @test id=no-coops
- * @summary Run object array size tests with compressed oops and compressed class pointers
+ * @summary Run object array size tests with compressed oops
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.xml
@@ -43,7 +43,7 @@
  */
 
 /* @test id=with-coops-large-align
- * @summary Run object array size tests with compressed oops and compressed class pointers
+ * @summary Run object array size tests with compressed oops
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.xml
@@ -51,7 +51,7 @@
  */
 
 /* @test id=no-coops-large-align
- * @summary Run object array size tests with compressed oops and compressed class pointers
+ * @summary Run object array size tests with compressed oops
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.xml

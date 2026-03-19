@@ -78,7 +78,7 @@ public class TestZGCWithCDS {
          out.shouldContain("Dumping shared data to file:");
          out.shouldHaveExitValue(0);
 
-         System.out.println("1. Run with same args of dump");
+         System.out.println("Run with same args of dump");
          out = TestCommon
                    .exec(helloJar,
                          "-XX:+UseZGC",
@@ -88,7 +88,7 @@ public class TestZGCWithCDS {
          out.shouldContain(HELLO);
          out.shouldHaveExitValue(0);
 
-         System.out.println("2. Run with ZGC, +UseCompressedOops");
+         System.out.println("Run with ZGC, +UseCompressedOops");
          out = TestCommon
                    .exec(helloJar,
                          "-XX:-UseZGC",
@@ -100,7 +100,7 @@ public class TestZGCWithCDS {
          out.shouldContain(ERR_MSG);
          out.shouldHaveExitValue(1);
 
-         System.out.println("3. Run with SerialGC, -UseCompressedOops");
+         System.out.println("Run with SerialGC, -UseCompressedOops");
          out = TestCommon
                    .exec(helloJar,
                          "-XX:+UseSerialGC",
@@ -111,7 +111,7 @@ public class TestZGCWithCDS {
          out.shouldContain(HELLO);
          out.shouldHaveExitValue(0);
 
-         System.out.println("6. Run with SerialGC, +UseCompressedOops");
+         System.out.println("Run with SerialGC, +UseCompressedOops");
          out = TestCommon
                    .exec(helloJar,
                          "-XX:+UseSerialGC",

@@ -268,20 +268,18 @@ void MetaspaceReporter::print_report(outputStream* out, size_t scale, int flags)
 
   //////////// Freelists (ChunkManager) section ///////////////////////////
 
-  out->cr();
-
   ChunkManagerStats non_class_cm_stat;
   ChunkManagerStats class_cm_stat;
   ChunkManagerStats total_cm_stat;
 
   ChunkManager::chunkmanager_nonclass()->add_to_statistics(&non_class_cm_stat);
 #if INCLUDE_CLASS_SPACE
-  ChunkManager::chunkmanager_nonclass()->add_to_statistics(&non_class_cm_stat);
   ChunkManager::chunkmanager_class()->add_to_statistics(&class_cm_stat);
   total_cm_stat.add(non_class_cm_stat);
   total_cm_stat.add(class_cm_stat);
 
   out->print_cr("Chunk freelists:");
+  out->cr();
   out->print_cr("   Non-Class:");
   non_class_cm_stat.print_on(out, scale);
   out->cr();
