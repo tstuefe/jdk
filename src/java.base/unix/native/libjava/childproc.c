@@ -507,7 +507,8 @@ childProcess(void *arg)
         printf("childproc fail: " ERRCODE_FORMAT "\n", ERRCODE_FORMAT_ARGS(errcode));
     }
     int exitcode = exitCodeFromErrorCode(errcode);
-    exit(exitcode);
+    close(fail_pipe_fd);
+    _exit(exitcode);
     return 0;  /* Suppress warning "no return value from function" */
 }
 
@@ -523,7 +524,7 @@ void jtregSimulateCrash(pid_t child, int stage) {
     if (env != NULL && atoi(env) == stage) {
         printf("posix_spawn:%d\n", child);
         fflush(stdout);
-        exit(stage);
+        _exit(stage);
     }
 }
 #endif
