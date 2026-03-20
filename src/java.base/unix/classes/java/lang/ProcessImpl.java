@@ -99,11 +99,12 @@ final class ProcessImpl extends Process {
             // Should be value of a LaunchMechanism enum
             String launchMechanism = s.toUpperCase(Locale.ROOT);
             if (launchMechanism.equals("VFORK") && OperatingSystem.isLinux()) {
-                System.err.println("""
-                                   The VFORK launch mechanism has been removed. Please either remove the
-                                   jdk.lang.Process.launchMechanism property (preferred) or use FORK mode
-                                   instead (-Djdk.lang.Process.launchMechanism=FORK).
-                                   """);
+                launchMechanism = "FORK";
+                System.err.println(String.format("""
+                                   The VFORK launch mechanism has been removed. Switching to %s instead.
+                                   Please remove the jdk.lang.Process.launchMechanism property (preferred)
+                                   or use FORK mode instead (-Djdk.lang.Process.launchMechanism=FORK).%n
+                                   """, launchMechanism));
             }
             return LaunchMechanism.valueOf(launchMechanism);
         } catch (IllegalArgumentException e) {

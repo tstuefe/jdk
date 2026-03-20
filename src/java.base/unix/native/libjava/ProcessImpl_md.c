@@ -60,40 +60,37 @@
  *   changing paths...
  * - then exec(2) the target binary
  *
- * On the OS-side are four ways to fork off:
+ * On the OS-side are four ways to fork off, but we only use two of them:
  *
- * A) fork(2). Portable and safe (no side effects) but may fail with ENOMEM on
- *    all Unices when invoked from a VM with a high memory footprint. On Unices
- *    with strict no-overcommit policy this problem is most visible.
+ * A) fork(2). Portable and safe (no side effects) but could fail on very ancient
+ *    Unices that don't employ COW on fork(2). The modern platforms we support
+ *    (Linux, MacOS, AIX) all do. It may have a small performance penalty compared
+ *    to modern posix_spawn(3) implementations - see below.
+ *    fork(2) can be used by specifying -Djdk.lang.Process.launchMechanism=FORK when starting
+ *    the (parent process) JVM.
  *
- *    This is because forking the VM will first create a child process with
- *    theoretically the same memory footprint as the parent - even if you plan
- *    to follow up with exec'ing a tiny binary. In reality techniques like
- *    copy-on-write etc mitigate the problem somewhat but we still run the risk
- *    of hitting system limits.
+ * B) vfork(2): Portable and fast but very unsafe. For details, see JDK-8357090.
+ *    We supported this mode in older releases but removed support for it in JDK 27.
+ *    Modern posix_spawn(3) implementations use techniques similar to vfork(2), but
+ *    much safer (see below).
  *
- *    For a Linux centric description of this problem, see the documentation on
- *    /proc/sys/vm/overcommit_memory in Linux proc(5).
- *
- * B) vfork(2): Portable and fast but very unsafe. It bypasses the memory
- *    problems related to fork(2) by starting the child in the memory image of
- *    the parent.
- *    *** This mode is inherently dangerous, and the danger partly outside the control
- *        of the programmer (for details, see JDK-8357090). Therefore, we deprecated
- *        the vfork mode with JDK 25 and removed if with JDK 26. ***
- *
- * C) clone(2): This is a Linux specific call which gives the caller fine
- *    grained control about how exactly the process fork is executed. It is
- *    powerful, but Linux-specific.
+ * C) clone(2): This is a Linux-specific call which gives the caller fine
+ *    grained control about how exactly the process fork is executed. We don't need
+ *    that fine-grained control though, and it gives us no benefits over using posix_spawn(3).
  *
  * D) posix_spawn(3): Where fork/vfork/clone all fork off the process and leave
- * pre-exec work and calling exec(2) to the user, posix_spawn(3) offers the user
- * fork+exec-like functionality in one package, similar to CreateProcess() on Windows.
- * It is not a system call, but usually a wrapper implemented within the libc in terms
- * of one of (fork|vfork|clone)+exec - so whether or not it has advantages over calling
- * the naked (fork|vfork|clone) functions depends on how posix_spawn(3) is implemented.
- * Note, however, that even if posix_spawn(3) uses vfork(2) internally, that is still fine -
- * the assumption here is that the libc developers know how to mitigate the vfork problems.
+ *    pre-exec work and calling exec(2) to the user, posix_spawn(3) offers the user
+ *    fork+exec-like functionality in one package, similar to CreateProcess() on Windows.
+ *    It is not a system call, but a wrapper implemented in user-space libc in terms
+ *    of one of (fork|vfork|clone)+exec - so whether or not it has advantages over calling
+ *    the naked (fork|vfork|clone) functions depends on how posix_spawn(3) is implemented.
+ *    Modern posix_spawn(3) implementations, on Linux, use clone(2) with CLONE_VM | CLONE_VFORK,
+ *    giving us the best ratio between performance and safety.
+ *    Note however, that posix_spawn(3) can be buggy, depending on the libc implementation.
+ *    E.g., on MacOS, it is still fully not POSIX-compliant. Therefore, we need to retain the
+ *    FORK mode as a backup.
+ *    Posix_spawn mode is used by default, but can be explicitly enabled using
+ *    -Djdk.lang.Process.launchMechanism=POSIX_SPAWN when starting the (parent process) JVM.
  *
  * Note that when using posix_spawn(3), we exec twice: first a tiny binary called
  * the jspawnhelper, then in the jspawnhelper we do the pre-exec work and exec a

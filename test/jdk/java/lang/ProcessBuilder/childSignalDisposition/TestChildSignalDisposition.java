@@ -39,15 +39,6 @@
  * @run main/othervm/native -Djdk.lang.Process.launchMechanism=fork -agentlib:ChangeSignalDisposition TestChildSignalDisposition
  */
 
-/**
- * @test id=vfork
- * @bug 8364611
- * @summary Check that childs start with SIG_DFL as SIGPIPE disposition
- * @requires os.family == "linux"
- * @library /test/lib
- * @run main/othervm/native -Djdk.lang.Process.launchMechanism=vfork -agentlib:ChangeSignalDisposition TestChildSignalDisposition
- */
-
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 public class TestChildSignalDisposition {

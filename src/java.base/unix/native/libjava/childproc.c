@@ -398,7 +398,7 @@ childProcess(void *arg)
 #endif
 
     /* File descriptor setup for non-Posix-spawn mode */
-    if (p->mode != MODE_POSIX_SPAWN) {
+    if (p->mode == MODE_FORK) {
 
         /* Close the parent sides of the pipes.
            Closing pipe fds here is redundant, since markDescriptorsCloseOnExec()
@@ -450,7 +450,7 @@ childProcess(void *arg)
         /* We moved the fail pipe fd */
         fail_pipe_fd = FAIL_FILENO;
 
-    } /* end: FORK/VFORK mode */
+    } /* end: FORK mode */
 
     assert(fail_pipe_fd == FAIL_FILENO);
 
@@ -507,8 +507,7 @@ childProcess(void *arg)
         printf("childproc fail: " ERRCODE_FORMAT "\n", ERRCODE_FORMAT_ARGS(errcode));
     }
     int exitcode = exitCodeFromErrorCode(errcode);
-    close(fail_pipe_fd);
-    _exit(exitcode);
+    exit(exitcode);
     return 0;  /* Suppress warning "no return value from function" */
 }
 
@@ -524,7 +523,7 @@ void jtregSimulateCrash(pid_t child, int stage) {
     if (env != NULL && atoi(env) == stage) {
         printf("posix_spawn:%d\n", child);
         fflush(stdout);
-        _exit(stage);
+        exit(stage);
     }
 }
 #endif
