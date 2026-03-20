@@ -190,12 +190,6 @@ public:
   // resulting from the current encoding settings (base, shift), capped to a certain max. value.
   static size_t max_klass_range_size();
 
-  // On 64-bit, we need the class space to confine Klass structures to the encoding range, which is determined
-  // by bit size of narrowKlass IDs and the shift. On 32-bit, we support compressed class pointer only
-  // "pro-forma": narrowKlass have the same size as addresses (32 bits), and therefore the encoding range is
-  // equal to the address space size. Here, we don't need a class space.
-  static constexpr bool needs_class_space() { return LP64_ONLY(true) NOT_LP64(false); }
-
   // Reserve a range of memory that is to contain Klass strucutures which are referenced by narrow Klass IDs.
   // If optimize_for_zero_base is true, the implementation will attempt to reserve optimized for zero-based encoding.
   static char* reserve_address_space_for_compressed_classes(size_t size, bool aslr, bool optimize_for_zero_base);

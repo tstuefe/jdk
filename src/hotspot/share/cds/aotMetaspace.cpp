@@ -250,9 +250,9 @@ static bool shared_base_too_high(char* specified_base, char* aligned_base, size_
 static char* compute_shared_base(size_t cds_max) {
   char* specified_base = (char*)SharedBaseAddress;
   size_t alignment = AOTMetaspace::core_region_alignment();
-  if (CompressedKlassPointers::needs_class_space()) {
-    alignment = MAX2(alignment, Metaspace::reserve_alignment());
-  }
+#if INCLUDE_CLASS_SPACE
+  alignment = MAX2(alignment, Metaspace::reserve_alignment());
+#endif
 
   if (SharedBaseAddress == 0) {
     // Special meaning of -XX:SharedBaseAddress=0 -> Always map archive at os-selected address.
