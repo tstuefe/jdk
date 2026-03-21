@@ -60,7 +60,7 @@
  *   changing paths...
  * - then exec(2) the target binary
  *
- * On the OS-side are four ways to fork off, but we only use two of them:
+ * On the OS-side are three ways to fork off, but we only use two of them:
  *
  * A) fork(2). Portable and safe (no side effects) but could fail on very ancient
  *    Unices that don't employ COW on fork(2). The modern platforms we support
@@ -72,13 +72,9 @@
  * B) vfork(2): Portable and fast but very unsafe. For details, see JDK-8357090.
  *    We supported this mode in older releases but removed support for it in JDK 27.
  *    Modern posix_spawn(3) implementations use techniques similar to vfork(2), but
- *    much safer (see below).
+ *    in a much safer way
  *
- * C) clone(2): This is a Linux-specific call which gives the caller fine
- *    grained control about how exactly the process fork is executed. We don't need
- *    that fine-grained control though, and it gives us no benefits over using posix_spawn(3).
- *
- * D) posix_spawn(3): Where fork/vfork/clone all fork off the process and leave
+ * C) posix_spawn(3): Where fork/vfork/clone all fork off the process and leave
  *    pre-exec work and calling exec(2) to the user, posix_spawn(3) offers the user
  *    fork+exec-like functionality in one package, similar to CreateProcess() on Windows.
  *    It is not a system call, but a wrapper implemented in user-space libc in terms
@@ -103,58 +99,14 @@
  * --- Linux-specific ---
  *
  * How does glibc implement posix_spawn?
- * (see: sysdeps/posix/spawni.c for glibc < 2.24,
- *       sysdeps/unix/sysv/linux/spawni.c for glibc >= 2.24):
  *
- * 1) Before glibc 2.4 (released 2006), posix_spawn(3) used just fork(2)/exec(2).
- *    This would be bad for the JDK since we would risk the known memory issues with
- *    fork(2). But since this only affects glibc variants which have long been
- *    phased out by modern distributions, this is irrelevant.
+ * Before glibc 2.4 (released 2006), posix_spawn(3) used just fork(2)/exec(2). From
+ * glibc 2.4 up to and including 2.23, it used either fork(2) or vfork(2). None of these
+ * versions still matter.
  *
- * 2) Between glibc 2.4 and glibc 2.23, posix_spawn uses either fork(2) or
- *    vfork(2) depending on how exactly the user called posix_spawn(3):
- *
- * <quote>
- *       The child process is created using vfork(2) instead of fork(2) when
- *       either of the following is true:
- *
- *       * the spawn-flags element of the attributes object pointed to by
- *          attrp contains the GNU-specific flag POSIX_SPAWN_USEVFORK; or
- *
- *       * file_actions is NULL and the spawn-flags element of the attributes
- *          object pointed to by attrp does not contain
- *          POSIX_SPAWN_SETSIGMASK, POSIX_SPAWN_SETSIGDEF,
- *          POSIX_SPAWN_SETSCHEDPARAM, POSIX_SPAWN_SETSCHEDULER,
- *          POSIX_SPAWN_SETPGROUP, or POSIX_SPAWN_RESETIDS.
- * </quote>
- *
- * Due to the way the JDK calls posix_spawn(3), it would therefore call vfork(2).
- * So we would avoid the fork(2) memory problems. However, there still remains the
- * risk associated with vfork(2). But it is smaller than were we to call vfork(2)
- * directly since we use the jspawnhelper, moving all pre-exec work off to after
- * the first exec, thereby reducing the vulnerable time window.
- *
- * 3) Since glibc >= 2.24, glibc uses clone+exec:
- *
- *    new_pid = CLONE (__spawni_child, STACK (stack, stack_size), stack_size,
- *                     CLONE_VM | CLONE_VFORK | SIGCHLD, &args);
- *
- * This is even better than (2):
- *
- * CLONE_VM means we run in the parent's memory image, as with (2)
- * CLONE_VFORK means parent waits until we exec, as with (2)
- *
- * However, error possibilities are further reduced since:
- * - posix_spawn(3) passes a separate stack for the child to run on, eliminating
- *   the danger of trashing the forking thread's stack in the parent process.
- * - posix_spawn(3) takes care to temporarily block all incoming signals to the
- *   child process until the first exec(2) has been called,
- *
- * TL;DR
- * Calling posix_spawn(3) for glibc
- * (2) < 2.24 is not perfect but still better than using plain vfork(2), since
- *     the chance of an error happening is greatly reduced
- * (3) >= 2.24 is the best option - portable, fast and as safe as possible.
+ * Since glibc >= 2.24, glibc uses clone+exec with CLONE_VM | CLONE_VFORK to emulate vfork
+ * performance but without the inherent dangers (we run inside the parent's memory image
+ * and stop the parent for as long as it takes the child process to exec).
  *
  * ---
  *
@@ -165,7 +117,6 @@
  * version.
  *
  * </Linux-specific>
- *
  *
  * Based on the above analysis, we are currently defaulting to posix_spawn()
  * on all Unices including Linux.
