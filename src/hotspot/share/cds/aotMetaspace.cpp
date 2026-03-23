@@ -1187,8 +1187,8 @@ void AOTMetaspace::dump_static_archive_impl(StaticArchiveBuilder& builder, TRAPS
     CDSConfig::enable_dumping_aot_code();
     {
       builder.start_ac_region();
-      // Write the contents to AOT code region and close AOTCodeCache before packing the region
-      AOTCodeCache::close();
+      // Write the contents to AOT code region before packing the region
+      AOTCodeCache::dump();
       builder.end_ac_region();
     }
     CDSConfig::disable_dumping_aot_code();
@@ -1811,11 +1811,18 @@ MapArchiveResult AOTMetaspace::map_archives(FileMapInfo* static_mapinfo, FileMap
         if (static_mapinfo->object_streaming_mode()) {
           AOTMetaspace::report_loading_error("Cannot use CDS heap data.");
         } else {
-          if (!UseCompressedOops && !AOTMappedHeapLoader::can_map()) {
-            AOTMetaspace::report_loading_error("Cannot use CDS heap data. Selected GC not compatible -XX:-UseCompressedOops");
-          } else {
-            AOTMetaspace::report_loading_error("Cannot use CDS heap data. UseEpsilonGC, UseG1GC, UseSerialGC, UseParallelGC, or UseShenandoahGC are required.");
-          }
+          // map_or_load_heap_region() compares the current narrow oop and klass encodings
+          // with the archived ones, so it must be done after all encodings are determined.
+          static_mapinfo->map_or_load_heap_region();
+          HeapShared::initialize_loading_mode(HeapArchiveMode::_mapping);
+        }
+      } else {
+        FileMapRegion* r = static_mapinfo->region_at(AOTMetaspace::hp);
+        if (r->used() > 0) {
+          AOTMetaspace::report_loading_error("Cannot use CDS heap data.");
+        }
+        if (!CDSConfig::is_dumping_static_archive()) {
+          CDSConfig::stop_using_full_module_graph("No CDS heap data");
         }
       }
     }
