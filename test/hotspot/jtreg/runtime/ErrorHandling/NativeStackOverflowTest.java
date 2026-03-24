@@ -73,7 +73,6 @@ public class NativeStackOverflowTest {
         final int expectedStackSize = useExplicitStackSize ? explicitStackSize : defaultStackSize;
         final int acceptableFudge = 128;
 
-output.reportDiagnosticSummary();
         output.shouldNotHaveExitValue(0);
 
         output.shouldContain("Alternative signal stack size");

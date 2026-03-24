@@ -39,7 +39,7 @@ static size_t get_alternate_signal_stack_size() {
   if (value == 0) {
     assert(UseAltSigStacks, "invariant");
     const size_t stacksize_mincap = (MINSIGSTKSZ) + (128 * K); // very generous
-    value = MAX2(stacksize_mincap, (size_t)(AltSigStackSize * K));
+    value = MAX2(stacksize_mincap, AltSigStackSize * K);
     value = align_up(value, os::vm_page_size());
 
     // Guard page
@@ -112,7 +112,6 @@ void Thread::enable_alternate_signal_stack() {
 
   if (success) {
     step++;
-    DEBUG_ONLY(memset(p, 0, stacksize));
     success = os::protect_memory(p, os::vm_page_size(), os::MEM_PROT_NONE, true);
   }
 

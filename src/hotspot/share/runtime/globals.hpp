@@ -1982,7 +1982,7 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, UseAltSigStacks, false, DIAGNOSTIC,                         \
           "Enable the use of alternative signal stacks (Non-Windows only.") \
                                                                             \
-  product(intx, AltSigStackSize, 128, DIAGNOSTIC,                           \
+  product(size_t, AltSigStackSize, 128, DIAGNOSTIC,                         \
           range(128, 8192)                                                  \
           "If UseAltSigStacks is enabled, signal stack size (in Kbytes).")  \
                                                                             \
