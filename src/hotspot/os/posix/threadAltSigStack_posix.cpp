@@ -112,12 +112,12 @@ void Thread::enable_alternate_signal_stack() {
   success = (p != nullptr);
 
   if (success) {
-    step ++;
+    step++;
     success = os::commit_memory(p, stacksize, false);
   }
 
   if (success) {
-    step ++;
+    step++;
     DEBUG_ONLY(memset(p, 0, stacksize));
     success = os::protect_memory(p, os::vm_page_size(), os::MEM_PROT_NONE, true);
   }
@@ -137,7 +137,7 @@ void Thread::enable_alternate_signal_stack() {
   stack_t oss;
   sigaltstack_and_log(&ss, &oss);
 
-  // --- From here on, if we receive a signal, we'll run on the alternative stack ----
+  // --- From here on, if we receive SIGSEGV or SIGBUS, we'll run on the alternative stack ----
   _altsigstack = (address)p;
 }
 
@@ -152,7 +152,6 @@ void Thread::disable_alternate_signal_stack() {
   }
 
   assert(this == Thread::current_or_null_safe(), "Only for current thread");
-  assert(_altsigstack != nullptr, "Not enabled?");
 
   const size_t stacksize = get_alternate_signal_stack_size();
 
@@ -167,7 +166,7 @@ void Thread::disable_alternate_signal_stack() {
   // --- From here on, if we receive a signal, we'll run on the original stack ----
 
   assert(oss.ss_sp == _altsigstack, "Different stack? " PTR_FORMAT " vs " PTR_FORMAT, p2i(oss.ss_sp), p2i(_altsigstack));
-  assert(oss.ss_size == stacksize, "Different size?");
+  assert(oss.ss_size == stacksize, "Different size? %zu vs %zu", oss.ss_size, stacksize);
 
   os::release_memory((char*)_altsigstack, stacksize);
   _altsigstack = nullptr;

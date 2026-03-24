@@ -1980,7 +1980,7 @@ const int ObjectAlignmentInBytes = 8;
           "binary search over simple linear search." )                      \
                                                                             \
   product(bool, UseAltSigStacks, false, DIAGNOSTIC,                         \
-          "Enable the use of alternative signal stacks.")                   \
+          "Enable the use of alternative signal stacks (Non-Windows only.") \
                                                                             \
   product(intx, AltSigStackSize, 128, DIAGNOSTIC,                           \
           range(128, 8192)                                                  \
