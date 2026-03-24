@@ -32,12 +32,6 @@
 
 #include <signal.h>
 
-// For stack size, using the same size as the shadow zone is a good choice
-// since that mechanism defines how much space normally is left on the stack
-// for native code. The default size is also a min cap. It seems excessive
-// but that is to have some headroom in case we hit an excessive number of
-// secondary crashes during signal handling, which would increase stack
-// usage.
 static size_t get_alternate_signal_stack_size() {
   // Note: the first thread initializing this would be the main thread which
   // still runs single-threaded. It is invoked after initial argument parsing.
@@ -170,4 +164,11 @@ void Thread::disable_alternate_signal_stack() {
 
   os::release_memory((char*)_altsigstack, stacksize);
   _altsigstack = nullptr;
+}
+
+bool Thread::is_in_alternate_stack(address adr) const {
+  const bool on = (adr >= _altsigstack) &&
+                  (adr <  _altsigstack + get_alternate_signal_stack_size());
+  assert(!on || UseAltSigStacks, "on alternate signal stack, but UseAltSigStacks is off?");
+  return on;
 }

@@ -941,10 +941,8 @@ address nmethod::continuation_for_implicit_exception(address pc, bool for_div0_c
     // nmethod::continuation_for_implicit_exception runs in a signal handler, and
     // Method::print_codes_on implicitly assumes (see methodHandle::methodHandle)
     // that we run on the same stack as the faulting code.
-    if (!UseAltSigStacks) {
-      // Buffering to a stringStream, disable internal buffering so it's not done twice.
-      method()->print_codes_on(&ss, 0, false);
-    }
+    // Buffering to a stringStream, disable internal buffering so it's not done twice.
+    method()->print_codes_on(&ss, 0, false);
     print_code_on(&ss);
     print_pcs_on(&ss);
     tty->print("%s", ss.as_string()); // print all at once
