@@ -26,3 +26,4 @@
 
 void Thread::enable_alternate_signal_stack() {}
 void Thread::disable_alternate_signal_stack() {}
+bool Thread::is_in_alternate_stack(address adr) { return false; }
