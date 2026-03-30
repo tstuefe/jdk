@@ -1188,16 +1188,14 @@ void SystemMapDCmd::execute(DCmdSource source, TRAPS) {
   MemMapPrinter::print_all_mappings(output());
 }
 
-static constexpr char default_filename[] = "vm_memory_map_%p.txt";
-
 SystemDumpMapDCmd::SystemDumpMapDCmd(outputStream* output, bool heap) :
   DCmdWithParser(output, heap),
-  _filename("-F", "file path", "FILE", false, default_filename) {
-  _dcmdparser.add_dcmd_option(&_filename);
+  _filename("filename", "file name of the dump", "FILE", false, default_filename) {
+  _dcmdparser.add_dcmd_argument(&_filename);
 }
 
 void SystemDumpMapDCmd::execute(DCmdSource source, TRAPS) {
-  const char* name = _filename.value();
+  char* name = make_log_name(_filename.value(), nullptr);
   if (name == nullptr || name[0] == 0) {
     output()->print_cr("filename is empty or not specified.  No file written");
     return;
@@ -1210,12 +1208,12 @@ void SystemDumpMapDCmd::execute(DCmdSource source, TRAPS) {
     MemMapPrinter::print_all_mappings(&fs);
     // For the readers convenience, resolve path name.
     char tmp[JVM_MAXPATHLEN];
-    const char* absname = os::realpath(name, tmp, sizeof(tmp));
-    name = absname != nullptr ? absname : name;
-    output()->print_cr("Memory map dumped to \"%s\".", name);
+    char* absname = os::realpath(name, tmp, sizeof(tmp));
+    output()->print_cr("Memory map dumped to \"%s\".", absname != nullptr ? absname : name);
   } else {
     output()->print_cr("Failed to open \"%s\" for writing (%s).", name, os::strerror(errno));
   }
+  os::free(name);
 }
 
 #endif // LINUX

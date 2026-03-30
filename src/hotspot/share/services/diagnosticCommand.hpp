@@ -855,6 +855,7 @@ public:
 };
 
 class SystemDumpMapDCmd : public DCmdWithParser {
+  static constexpr char default_filename[] = "vm_memory_map_pid%p_%t.txt";
   DCmdArgument<char*> _filename;
 public:
   static int num_arguments() { return 1; }
