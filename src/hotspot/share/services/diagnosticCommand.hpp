@@ -870,4 +870,22 @@ public:
 
 #endif // LINUX, WINDOWS or MACOS
 
+#ifndef _WINDOWS
+
+class SystemDumpCoreDCmd : public DCmdWithParser {
+  static constexpr char default_filename[] = "java_core_pid%p_%t";
+  DCmdArgument<char*> _filename;
+public:
+  static int num_arguments() { return 1; }
+  SystemDumpCoreDCmd(outputStream* output, bool heap);
+  static const char* name() { return "System.dump_map"; }
+  static const char* description() {
+    return "Dumps a core file.";
+  }
+  static const char* impact() { return "Medium; can be high for very large java heaps."; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+#endif // !_WINDOWS
+
 #endif // SHARE_SERVICES_DIAGNOSTICCOMMAND_HPP

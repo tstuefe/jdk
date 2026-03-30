@@ -1215,3 +1215,35 @@ void SystemDumpMapDCmd::execute(DCmdSource source, TRAPS) {
 }
 
 #endif // LINUX || WINDOWS || MacOS
+
+#ifndef _WINDOWS
+
+SystemDumpCoreDCmd::SystemDumpCoreDCmd(outputStream* output, bool heap) :
+  DCmdWithParser(output, heap),
+  _filename("filename", "core file name (default 'java_core_pid%p_%t')", "FILE", false, default_filename) {
+  _dcmdparser.add_dcmd_argument(&_filename);
+}
+
+void SystemDumpCoreDCmd::execute(DCmdSource source, TRAPS) {
+  char* name = make_log_name(_filename.value(), nullptr);
+  if (name == nullptr || name[0] == 0) {
+    output()->print_cr("core file name is empty or not specified.  No file written");
+    return;
+  }
+  fileStream fs(name);
+  if (fs.is_open()) {
+    if (!MemTracker::enabled()) {
+      output()->print_cr("(NMT is disabled, will not annotate mappings).");
+    }
+    MemMapPrinter::print_all_mappings(&fs);
+    // For the readers convenience, resolve path name.
+    char tmp[JVM_MAXPATHLEN];
+    char* absname = os::realpath(name, tmp, sizeof(tmp));
+    output()->print_cr("Memory map dumped to \"%s\".", absname != nullptr ? absname : name);
+  } else {
+    output()->print_cr("Failed to open \"%s\" for writing (%s).", name, os::strerror(errno));
+  }
+  os::free(name);
+}
+
+#endif // !_WINDOWS
