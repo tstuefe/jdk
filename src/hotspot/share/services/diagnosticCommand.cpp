@@ -141,7 +141,7 @@ void DCmd::register_dcmds() {
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<TrimCLibcHeapDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<MallocInfoDcmd>(full_export));
 #endif // LINUX
-#if defined(LINUX) || defined(_WIN64) || defined(__APPLE__)
+#if defined(LINUX) || defined(_WINDOWS) || defined(__APPLE__)
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SystemMapDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SystemDumpMapDCmd>(full_export));
 #endif // LINUX or WINDOWS or MacOS
@@ -1180,7 +1180,7 @@ void CompilationMemoryStatisticDCmd::execute(DCmdSource source, TRAPS) {
   CompilationMemoryStatistic::print_jcmd_report(output(), _verbose.value(), _legend.value(), minsize);
 }
 
-#if defined(LINUX) || defined(_WIN64) || defined(__APPLE__)
+#if defined(LINUX) || defined(_WINDOWS) || defined(__APPLE__)
 
 SystemMapDCmd::SystemMapDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
 
@@ -1195,11 +1195,9 @@ SystemDumpMapDCmd::SystemDumpMapDCmd(outputStream* output, bool heap) :
 }
 
 void SystemDumpMapDCmd::execute(DCmdSource source, TRAPS) {
-  char* name = make_log_name(_filename.value(), nullptr);
-  if (name == nullptr || name[0] == 0) {
-    output()->print_cr("filename is empty or not specified.  No file written");
-    return;
-  }
+  char* name = _filename.value();
+  assert(name != nullptr && strlen(name) > 0, "Sanity"); // since we specify a default file name
+  name = make_log_name(name, nullptr);
   fileStream fs(name);
   if (fs.is_open()) {
     if (!MemTracker::enabled()) {
@@ -1216,4 +1214,4 @@ void SystemDumpMapDCmd::execute(DCmdSource source, TRAPS) {
   os::free(name);
 }
 
-#endif // LINUX
+#endif // LINUX || WINDOWS || MacOS
