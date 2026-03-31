@@ -1027,9 +1027,17 @@ class os: AllStatic {
   // on the checking result.
   static void check_core_dump_prerequisites(char* buffer, size_t bufferSize, bool check_only = false);
 
-  // Get the default path to the core file
+private:
+  // Returns a platform-dependent description of the current core path.
+  // Note: this may or may not be an actual file path.
   // Returns the length of the string
-  static int get_core_path(char* buffer, size_t bufferSize);
+  static int describe_core_path(int pid, char* buffer, size_t bufferSize);
+
+public:
+
+  // Given a file name, dump a core file to that location without terminating the JVM.
+  // If error_output is not nullptr, writes error output to that stream.
+  static bool dump_core_file(const char* filename, outputStream* error_output);
 
   // JVMTI & JVM monitoring and management support
   // The thread_cpu_time() and current_thread_cpu_time() are only

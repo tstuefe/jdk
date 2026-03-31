@@ -145,6 +145,7 @@ void DCmd::register_dcmds() {
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SystemMapDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SystemDumpMapDCmd>(full_export));
 #endif // LINUX or WINDOWS or MacOS
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SystemDumpCoreDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<CodeHeapAnalyticsDCmd>(full_export));
 
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<CompilerDirectivesPrintDCmd>(full_export));
@@ -1225,25 +1226,18 @@ SystemDumpCoreDCmd::SystemDumpCoreDCmd(outputStream* output, bool heap) :
 }
 
 void SystemDumpCoreDCmd::execute(DCmdSource source, TRAPS) {
-  char* name = make_log_name(_filename.value(), nullptr);
-  if (name == nullptr || name[0] == 0) {
-    output()->print_cr("core file name is empty or not specified.  No file written");
-    return;
-  }
-  fileStream fs(name);
-  if (fs.is_open()) {
-    if (!MemTracker::enabled()) {
-      output()->print_cr("(NMT is disabled, will not annotate mappings).");
-    }
-    MemMapPrinter::print_all_mappings(&fs);
+  char* name = _filename.value();
+  assert(name != nullptr && strlen(name) > 0, "Sanity"); // since we specify a default file name
+  name = make_log_name(name, nullptr);
+
+  if (os::dump_core_file(name, _output)) {
     // For the readers convenience, resolve path name.
     char tmp[JVM_MAXPATHLEN];
     char* absname = os::realpath(name, tmp, sizeof(tmp));
-    output()->print_cr("Memory map dumped to \"%s\".", absname != nullptr ? absname : name);
+    output()->print_cr("Core dumped to '%s'.", absname != nullptr ? absname : name);
   } else {
-    output()->print_cr("Failed to open \"%s\" for writing (%s).", name, os::strerror(errno));
+    output()->print_cr("Failed to dump core to '%s'.", name);
   }
-  os::free(name);
 }
 
 #endif // !_WINDOWS

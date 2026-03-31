@@ -118,7 +118,8 @@ void os::check_core_dump_prerequisites(char* buffer, size_t bufferSize, bool che
     bool success = true;
     bool warn = true;
     char core_path[PATH_MAX];
-    if (get_core_path(core_path, PATH_MAX) <= 0) {
+    const int pid = os::current_process_id();
+    if (describe_core_path(pid, core_path, PATH_MAX) <= 0) {
       // In the warning message, let the user know.
       if (check_only) {
         buf.print("the core path couldn't be determined. It commonly defaults to ");
@@ -2352,3 +2353,89 @@ const void* os::get_saved_assert_context(const void** sigInfo) {
   *sigInfo = nullptr;
   return nullptr;
 }
+
+// Given a file name, dump a core file to that location without terminating the JVM.
+// If error_output is not nullptr, writes error output to that stream.
+bool os::dump_core_file(const char* filename, outputStream* err_stream) {
+
+  // Can the destination location be written to? (existing files are overwritten)
+  FILE* f = fopen(filename, "w");
+  if (f == nullptr) {
+    err_stream->print_cr("Core file location '%s' cannot be written to.", filename);
+    return false;
+  } else {
+    fclose(f);
+    unlink(filename);
+  }
+
+  // Create dump
+  pid_t pid = fork();
+  if (pid == 0) {
+    abort();
+  } else {
+    int status;
+    // Need to wait for child to rename core file.
+    int rc = waitpid(pid, &status, 0);
+    assert(rc != 0, "Sanity"); // since we don't specify WNOHANG
+    if (rc == -1 || !WIFSIGNALED(status)) {
+      // unexpected; we expected child to die with SIGABRT
+      err_stream->print_cr("Core file creation failed.");
+      return false;
+    }
+#ifdef WCOREDUMP
+    if (!WCOREDUMP(status)) {
+      err_stream->print_cr("No core file has been written. Please check system limits.");
+      return false;
+    }
+#endif
+    // Optimistically use os::describe_core_path() to find the core file. It is not perfect
+    // for this job, since it may give some descriptive string. In that case we return a
+    // copy failure.
+    char tmp[JVM_MAXPATHLEN];
+    if (os::describe_core_path(pid, tmp, sizeof(tmp)) <= 0) {
+      err_stream->print_cr("Core file location could not be determined.");
+      return false;
+    }
+    struct stat s;
+    if (stat(tmp, &s) == -1) {
+      err_stream->print_cr("Core file cannot be accessed.");
+      return false;
+    }
+    // move to target file
+    if (rename(tmp, filename) != 0) {
+      if (errno == EXDEV) {
+        err_stream->print_cr("Cannot copy core file '%s' across file systems.", tmp);
+      } else {
+        err_stream->print_cr("Failed to copy core file '%s' to '%s'.", tmp, filename);
+      }
+      return false;
+    }
+  }
+  return true;
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

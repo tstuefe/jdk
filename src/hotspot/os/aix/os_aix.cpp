@@ -2604,7 +2604,7 @@ void os::current_stack_base_and_size(address* stack_base, size_t* stack_size) {
 
 // Get the default path to the core file
 // Returns the length of the string
-int os::get_core_path(char* buffer, size_t bufferSize) {
+int os::describe_core_path(int pid, char* buffer, size_t bufferSize) {
   const char* p = get_current_directory(buffer, bufferSize);
 
   if (p == nullptr) {
@@ -2613,7 +2613,7 @@ int os::get_core_path(char* buffer, size_t bufferSize) {
   }
 
   jio_snprintf(buffer, bufferSize, "%s/core or core.%d",
-                                               p, current_process_id());
+                                               p, pid);
 
   return checked_cast<int>(strlen(buffer));
 }

@@ -2487,7 +2487,7 @@ int os::loadavg(double loadavg[], int nelem) {
 
 // Get the kern.corefile setting, or otherwise the default path to the core file
 // Returns the length of the string
-int os::get_core_path(char* buffer, size_t bufferSize) {
+int os::describe_core_path(int pid, char* buffer, size_t bufferSize) {
   int n = 0;
 #ifdef __APPLE__
   char coreinfo[MAX_PATH];
@@ -2500,7 +2500,7 @@ int os::get_core_path(char* buffer, size_t bufferSize) {
 
     if (pid_pos != nullptr) {
       *pid_pos = '\0';
-      n = jio_snprintf(buffer, bufferSize, "%s%d%s", coreinfo, os::current_process_id(), tail);
+      n = jio_snprintf(buffer, bufferSize, "%s%d%s", coreinfo, pid, tail);
     } else {
       n = jio_snprintf(buffer, bufferSize, "%s", coreinfo);
     }

@@ -5099,7 +5099,7 @@ int os::loadavg(double loadavg[], int nelem) {
 
 // Get the default path to the core file
 // Returns the length of the string
-int os::get_core_path(char* buffer, size_t bufferSize) {
+int os::describe_core_path(int pid, char* buffer, size_t bufferSize) {
   /*
    * Max length of /proc/sys/kernel/core_pattern is 128 characters.
    * See https://www.kernel.org/doc/Documentation/sysctl/kernel.txt
@@ -5152,8 +5152,7 @@ int os::get_core_path(char* buffer, size_t bufferSize) {
                              &core_pattern[1], p, current_process_id());
     } else if (pid_pos != nullptr) {
       *pid_pos = '\0';
-      written = jio_snprintf(buffer, bufferSize, "%s/%s%d%s", p, core_pattern,
-                             current_process_id(), tail);
+      written = jio_snprintf(buffer, bufferSize, "%s/%s%d%s", p, core_pattern, pid, tail);
     } else {
       written = jio_snprintf(buffer, bufferSize, "%s/%s", p, core_pattern);
     }

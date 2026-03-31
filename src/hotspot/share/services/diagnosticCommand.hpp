@@ -878,7 +878,7 @@ class SystemDumpCoreDCmd : public DCmdWithParser {
 public:
   static int num_arguments() { return 1; }
   SystemDumpCoreDCmd(outputStream* output, bool heap);
-  static const char* name() { return "System.dump_map"; }
+  static const char* name() { return "System.dump_core"; }
   static const char* description() {
     return "Dumps a core file.";
   }
