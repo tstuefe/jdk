@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -60,28 +60,16 @@ public class TestMemoryAlignment {
         assertEquals(aligned.byteAlignment(), align); //unreasonable alignment here, to make sure access throws
         VarHandle vh = aligned.varHandle();
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment segment = arena.allocate(aligned);;
+            MemorySegment segment = arena.allocate(aligned);
             vh.set(segment, 0L, -42);
+
+            // Allocate another segment and fill it with data to
+            // check that the first segment is not overwritten
+            MemorySegment nextSegment = arena.allocate(aligned);
+            vh.set(nextSegment, 0L, 0xffffff);
+
             int val = (int)vh.get(segment, 0L);
             assertEquals(val, -42);
-        }
-    }
-
-    @Test(dataProvider = "alignments")
-    public void testUnalignedAccess(long align) {
-        ValueLayout layout = ValueLayout.JAVA_INT
-                .withOrder(ByteOrder.BIG_ENDIAN);
-        assertEquals(layout.byteAlignment(), 4);
-        ValueLayout aligned = layout.withByteAlignment(align);
-        try (Arena arena = Arena.ofConfined()) {
-            MemoryLayout alignedGroup = MemoryLayout.structLayout(MemoryLayout.paddingLayout(1), aligned);
-            assertEquals(alignedGroup.byteAlignment(), align);
-            VarHandle vh = aligned.varHandle();
-            MemorySegment segment = arena.allocate(alignedGroup);;
-            vh.set(segment.asSlice(1L), 0L, -42);
-            assertEquals(align, 8); //this is the only case where access is aligned
-        } catch (IllegalArgumentException ex) {
-            assertNotEquals(align, 8); //if align != 8, access is always unaligned
         }
     }
 

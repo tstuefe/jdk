@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2026, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2014, 2020, Red Hat Inc. All rights reserved.
  * Copyright (c) 2020, 2022, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -1073,9 +1073,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
   }
 
   // start execution
-#ifdef ASSERT
   __ verify_frame_setup();
-#endif
 
   // jvmti support
   __ notify_method_entry();
@@ -1148,9 +1146,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
     Label L;
     __ ld(x28, Address(xmethod, Method::native_function_offset()));
     ExternalAddress unsatisfied(SharedRuntime::native_method_throw_unsatisfied_link_error_entry());
-    __ la(t, unsatisfied);
-    __ load_long_misaligned(t1, Address(t, 0), t0, 2); // 2 bytes aligned, but not 4 or 8
-
+    __ la(t1, unsatisfied);
     __ bne(x28, t1, L);
     __ call_VM(noreg,
                CAST_FROM_FN_PTR(address,
@@ -1217,7 +1213,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
   // Force all preceding writes to be observed prior to thread state change
   __ membar(MacroAssembler::LoadStore | MacroAssembler::StoreStore);
 
-  __ mv(t0, _thread_in_native_trans);
+  __ mv(t0, _thread_in_vm);
   __ sw(t0, Address(xthread, JavaThread::thread_state_offset()));
 
   // Force this write out before the read below
@@ -1427,7 +1423,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
 //
 // Generic interpreted method entry to (asm) interpreter
 //
-address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
+address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized, bool object_init) {
 
   // determine code generation flags
   const bool inc_counter  = UseCompiler || CountCompiledCalls;
@@ -1540,10 +1536,14 @@ address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
 #endif
   }
 
+  // Issue a StoreStore barrier on entry to Object_init if the
+  // class has strict field fields.  Be lazy, always do it.
+  if (object_init) {
+    __ membar(MacroAssembler::StoreStore);
+  }
+
   // start execution
-#ifdef ASSERT
   __ verify_frame_setup();
-#endif
 
   // jvmti support
   __ notify_method_entry();

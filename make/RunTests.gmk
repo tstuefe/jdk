@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016, 2025, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2016, 2026, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -92,6 +92,9 @@ JTREG_FAILURE_HANDLER := $(JTREG_FAILURE_HANDLER_DIR)/jtregFailureHandler.jar
 
 JTREG_TEST_THREAD_FACTORY_DIR := $(TEST_IMAGE_DIR)/jtreg_test_thread_factory
 JTREG_TEST_THREAD_FACTORY_JAR := $(JTREG_TEST_THREAD_FACTORY_DIR)/jtregTestThreadFactory.jar
+
+JTREG_VALUE_CLASS_PLUGIN_DIR := $(TEST_IMAGE_DIR)/jtreg_value_class_plugin
+JTREG_VALUE_CLASS_PLUGIN_JAR := $(JTREG_VALUE_CLASS_PLUGIN_DIR)/valueClassPlugin.jar
 
 JTREG_FAILURE_HANDLER_TIMEOUT ?= 0
 
@@ -206,7 +209,7 @@ $(eval $(call ParseKeywordVariable, JTREG, \
     SINGLE_KEYWORDS := JOBS TIMEOUT_FACTOR FAILURE_HANDLER_TIMEOUT \
         TEST_MODE ASSERT VERBOSE RETAIN TEST_THREAD_FACTORY JVMTI_STRESS_AGENT \
         MAX_MEM RUN_PROBLEM_LISTS RETRY_COUNT REPEAT_COUNT MAX_OUTPUT REPORT \
-        AOT_JDK $(CUSTOM_JTREG_SINGLE_KEYWORDS), \
+        AOT_JDK MANUAL VALUE_CLASS_PLUGIN $(CUSTOM_JTREG_SINGLE_KEYWORDS), \
     STRING_KEYWORDS := OPTIONS JAVA_OPTIONS VM_OPTIONS KEYWORDS \
         EXTRA_PROBLEM_LISTS LAUNCHER_OPTIONS \
         $(CUSTOM_JTREG_STRING_KEYWORDS), \
@@ -873,7 +876,21 @@ define SetupRunJtregTestBody
     $1_JTREG_BASIC_OPTIONS += -testThreadFactoryPath:$$(JTREG_TEST_THREAD_FACTORY_JAR)
     $1_JTREG_BASIC_OPTIONS += -testThreadFactory:$$(JTREG_TEST_THREAD_FACTORY)
     $1_JTREG_BASIC_OPTIONS += $$(addprefix $$(JTREG_PROBLEM_LIST_PREFIX), $$(wildcard \
-	$$(addprefix $$($1_TEST_ROOT)/, ProblemList-$$(JTREG_TEST_THREAD_FACTORY).txt) \
+        $$(addprefix $$($1_TEST_ROOT)/, ProblemList-$$(JTREG_TEST_THREAD_FACTORY).txt) \
+    ))
+  endif
+
+  ifneq ($$(JTREG_VALUE_CLASS_PLUGIN), )
+    ifneq ($$(wildcard $$(JTREG_VALUE_CLASS_PLUGIN_JAR)), )
+      $1_JTREG_BASIC_OPTIONS += -cpa:$$(JTREG_VALUE_CLASS_PLUGIN_JAR)
+    endif
+    $1_JTREG_BASIC_OPTIONS += -vmoption:--enable-preview
+    $1_JTREG_BASIC_OPTIONS += -javacoption:-XDaccessInternalAPI
+    $1_JTREG_BASIC_OPTIONS += -javacoption:--source -javacoption:$(VERSION_FEATURE)
+    $1_JTREG_BASIC_OPTIONS += -javacoption:--enable-preview
+    $1_JTREG_BASIC_OPTIONS += -javacoption:-Xplugin:ValueClassPlugin
+    $1_JTREG_BASIC_OPTIONS += $$(addprefix $$(JTREG_PROBLEM_LIST_PREFIX), $$(wildcard \
+        $$(addprefix $$($1_TEST_ROOT)/, ProblemList-ValueClass.txt) \
     ))
   endif
 
@@ -881,8 +898,8 @@ define SetupRunJtregTestBody
     AGENT := $$(LIBRARY_PREFIX)JvmtiStressAgent$$(SHARED_LIBRARY_SUFFIX)=$$(JTREG_JVMTI_STRESS_AGENT)
     $1_JTREG_BASIC_OPTIONS += -javaoption:'-agentpath:$(TEST_IMAGE_DIR)/hotspot/jtreg/native/$$(AGENT)'
     $1_JTREG_BASIC_OPTIONS += $$(addprefix $$(JTREG_PROBLEM_LIST_PREFIX), $$(wildcard \
-	    $$(addprefix $$($1_TEST_ROOT)/, ProblemList-jvmti-stress-agent.txt) \
-        ))
+        $$(addprefix $$($1_TEST_ROOT)/, ProblemList-jvmti-stress-agent.txt) \
+    ))
   endif
 
 
@@ -911,7 +928,13 @@ define SetupRunJtregTestBody
       -vmoption:-Dtest.boot.jdk="$$(BOOT_JDK)" \
       -vmoption:-Djava.io.tmpdir="$$($1_TEST_TMP_DIR)"
 
-  $1_JTREG_BASIC_OPTIONS += -automatic -ignore:quiet
+  $1_JTREG_BASIC_OPTIONS += -ignore:quiet
+
+  ifeq ($$(JTREG_MANUAL), true)
+    $1_JTREG_BASIC_OPTIONS += -manual
+  else
+    $1_JTREG_BASIC_OPTIONS += -automatic
+  endif
 
   # Make it possible to specify the JIB_DATA_DIR for tests using the
   # JIB Artifact resolver
@@ -946,8 +969,8 @@ define SetupRunJtregTestBody
   JTREG_ALL_OPTIONS := $$(JTREG_JAVA_OPTIONS) $$(JTREG_VM_OPTIONS)
 
   JTREG_AUTO_PROBLEM_LISTS :=
-  # Please reach consensus before changing this. It was not easy changing it to a `1`.
-  JTREG_AUTO_TIMEOUT_FACTOR := 1
+  # Please reach consensus before changing this.
+  JTREG_AUTO_TIMEOUT_FACTOR := 4
 
   ifneq ($$(findstring -Xcomp, $$(JTREG_ALL_OPTIONS)), )
     JTREG_AUTO_PROBLEM_LISTS += ProblemList-Xcomp.txt
@@ -965,7 +988,6 @@ define SetupRunJtregTestBody
   ifneq ($$(findstring --enable-preview, $$(JTREG_ALL_OPTIONS)), )
     JTREG_AUTO_PROBLEM_LISTS += ProblemList-enable-preview.txt
   endif
-
 
   ifneq ($$(JTREG_EXTRA_PROBLEM_LISTS), )
     # Accept both absolute paths as well as relative to the current test root.
@@ -1010,6 +1032,9 @@ define SetupRunJtregTestBody
         VM_OPTIONS := $$(JTREG_ALL_OPTIONS) ))
     $$(call LogWarn, AOT_JDK_CACHE=$$($1_AOT_JDK_CACHE))
     $1_JTREG_BASIC_OPTIONS += -vmoption:-XX:AOTCache="$$($1_AOT_JDK_CACHE)"
+    $1_JTREG_BASIC_OPTIONS += $$(addprefix $$(JTREG_PROBLEM_LIST_PREFIX), $$(wildcard \
+        $$(addprefix $$($1_TEST_ROOT)/, ProblemList-AotJdk.txt) \
+    ))
   endif
 
 
@@ -1029,9 +1054,11 @@ define SetupRunJtregTestBody
   $1_JTREG_BASIC_OPTIONS += -timeoutFactor:$$(JTREG_TIMEOUT_FACTOR)
 
   clean-outputdirs-$1:
-	$$(call LogWarn, Clean up dirs for $1)
-	$$(RM) -r $$($1_TEST_SUPPORT_DIR)
-	$$(RM) -r $$($1_TEST_RESULTS_DIR)
+        ifeq ($(JTREG_STATUS),)
+	  $$(call LogWarn, Clean up dirs for $1)
+	  $$(RM) -r $$($1_TEST_SUPPORT_DIR)
+	  $$(RM) -r $$($1_TEST_RESULTS_DIR)
+        endif
 
   $1_COMMAND_LINE := \
       $$(JTREG_JAVA) $$($1_JTREG_LAUNCHER_OPTIONS) \
@@ -1086,7 +1113,7 @@ define SetupRunJtregTestBody
 	$$(call MakeDir, $$($1_TEST_RESULTS_DIR) $$($1_TEST_SUPPORT_DIR) \
 	    $$($1_TEST_TMP_DIR))
 	$$(call ExecuteWithLog, $$($1_TEST_SUPPORT_DIR)/jtreg, \
-            $$(COV_ENVIRONMENT) $$($1_COMMAND_LINE) \
+	    $$(COV_ENVIRONMENT) $$($1_COMMAND_LINE) \
 	)
 
   $1_RESULT_FILE := $$($1_TEST_RESULTS_DIR)/text/stats.txt
@@ -1096,11 +1123,11 @@ define SetupRunJtregTestBody
 	$$(call LogWarn, Test report is stored in $$(strip \
 	    $$(subst $$(TOPDIR)/, , $$($1_TEST_RESULTS_DIR))))
 
-	# Read jtreg documentation to learn on the test stats categories:
-	# https://github.com/openjdk/jtreg/blob/master/src/share/doc/javatest/regtest/faq.md#what-do-all-those-numbers-in-the-test-results-line-mean
-	# In jtreg, "skipped:" category accounts for tests that threw jtreg.SkippedException at runtime.
-	# At the same time these tests contribute to "passed:" tests.
-	# In here we don't want that and so we substract number of "skipped:" from "passed:".
+        # Read jtreg documentation to learn on the test stats categories:
+        # https://github.com/openjdk/jtreg/blob/master/src/share/doc/javatest/regtest/faq.md#what-do-all-those-numbers-in-the-test-results-line-mean
+        # In jtreg, "skipped:" category accounts for tests that threw jtreg.SkippedException at runtime.
+        # At the same time these tests contribute to "passed:" tests.
+        # In here we don't want that and so we substract number of "skipped:" from "passed:".
 
 	$$(if $$(wildcard $$($1_RESULT_FILE)), \
 	  $$(eval $1_PASSED_AND_RUNTIME_SKIPPED := $$(shell $$(AWK) '{ gsub(/[,;]/, ""); \
@@ -1151,6 +1178,7 @@ define SetupRunJtregTestBody
 	      $$(EXPR) $$($1_PASSED) + $$($1_FAILED) + $$($1_ERROR) + $$($1_SKIPPED))) \
 	, \
 	  $$(eval $1_PASSED_AND_RUNTIME_SKIPPED := 0) \
+	  $$(eval $1_PASSED := 0) \
 	  $$(eval $1_RUNTIME_SKIPPED := 0) \
 	  $$(eval $1_SKIPPED := 0) \
 	  $$(eval $1_FAILED := 0) \

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2014, 2025, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2015, 2025 SAP SE. All rights reserved.
+ * Copyright (c) 2014, 2026, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2026 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -619,6 +619,11 @@ address TemplateInterpreterGenerator::generate_return_entry_for(TosState state, 
     default  : ShouldNotReachHere();
   }
 
+  if (state == atos && InlineTypeReturnedAsFields) {
+    __ unimplemented("return entry InlineTypeReturnedAsFields");
+    //__ store_inline_type_fields_to_buf(nullptr, true);
+  }
+
   __ restore_interpreter_state(R11_scratch1, false /*bcp_and_mdx_only*/, true /*restore_top_frame_sp*/);
 
   // Compiled code destroys templateTableBase, reload.
@@ -702,6 +707,11 @@ address TemplateInterpreterGenerator::generate_cont_resume_interpreter_adapter()
 
   __ load_const_optimized(R25_templateTableBase, (address)Interpreter::dispatch_table((TosState)0), R12_scratch2);
   __ restore_interpreter_state(R11_scratch1, false, true /*restore_top_frame_sp*/);
+  // Restore registers that are preserved across vthread preemption
+  assert(__ nonvolatile_accross_vthread_preemtion(R31) && __ nonvolatile_accross_vthread_preemtion(R24), "");
+  __ ld(R3_ARG1, _abi0(callers_sp), R1_SP); // load FP
+  __ ld(R31, _ijava_state_neg(lresult), R3_ARG1);
+  __ ld(R24, _ijava_state_neg(fresult), R3_ARG1);
   __ blr();
 
   return start;
@@ -1249,7 +1259,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
   const Register pending_exception    = R0;
   const Register result_handler_addr  = R31;
   const Register native_method_fd     = R12_scratch2; // preferred in MacroAssembler::branch_to
-  const Register access_flags         = R22_tmp2;
+  const Register access_flags         = R24_tmp4;
   const Register active_handles       = R11_scratch1; // R26_monitor saved to state.
   const Register sync_state           = R12_scratch2;
   const Register sync_state_addr      = sync_state;   // Address is dead after use.
@@ -1474,21 +1484,10 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
   // In order for GC to work, don't clear the last_Java_sp until after
   // blocking.
 
-  //=============================================================================
-  // Switch thread to "native transition" state before reading the
-  // synchronization state. This additional state is necessary
-  // because reading and testing the synchronization state is not
-  // atomic w.r.t. GC, as this scenario demonstrates: Java thread A,
-  // in _thread_in_native state, loads _not_synchronized and is
-  // preempted. VM thread changes sync state to synchronizing and
-  // suspends threads for GC. Thread A is resumed to finish this
-  // native method, but doesn't block here since it didn't see any
-  // synchronization in progress, and escapes.
-
   // We use release_store_fence to update values like the thread state, where
   // we don't want the current thread to continue until all our prior memory
   // accesses (including the new thread state) are visible to other threads.
-  __ li(R0/*thread_state*/, _thread_in_native_trans);
+  __ li(R0/*thread_state*/, _thread_in_vm);
   __ release();
   __ stw(R0/*thread_state*/, thread_(thread_state));
   if (!UseSystemMemoryBarrier) {
@@ -1496,9 +1495,8 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
   }
 
   // Now before we return to java we must look for a current safepoint
-  // (a new safepoint can not start since we entered native_trans).
-  // We must check here because a current safepoint could be modifying
-  // the callers registers right this moment.
+  // (a new safepoint can not start since we entered _thread_in_vm).
+  // We must check here because a current safepoint could be in progress.
 
   // Acquire isn't strictly necessary here because of the fence, but
   // sync_state is declared to be volatile, so we do it anyway
@@ -1528,7 +1526,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
   //=============================================================================
   // <<<<<< Back in Interpreter Frame >>>>>
 
-  // We are in thread_in_native_trans here and back in the normal
+  // We are in _thread_in_vm here and back in the normal
   // interpreter frame. We don't have to do anything special about
   // safepoints and we can switch to Java mode anytime we are ready.
 
@@ -1706,7 +1704,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
 
 // Generic interpreted method entry to (asm) interpreter.
 //
-address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
+address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized, bool object_init) {
   bool inc_counter = UseCompiler || CountCompiledCalls;
   address entry = __ pc();
   // Generate the code to allocate the interpreter stack frame.
@@ -1787,6 +1785,7 @@ address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
   if (synchronized) {
     lock_method(R3_ARG1, R4_ARG2, R5_ARG3);
   }
+
 #ifdef ASSERT
   else {
     Label Lok;
@@ -1796,6 +1795,12 @@ address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
     __ bind(Lok);
   }
 #endif // ASSERT
+
+  // Issue a StoreStore barrier on entry to Object_init if the
+  // class has strict field fields.  Be lazy, always do it.
+  if (object_init) {
+    __ membar(MacroAssembler::StoreStore);
+  }
 
   // --------------------------------------------------------------------------
   // JVMTI support

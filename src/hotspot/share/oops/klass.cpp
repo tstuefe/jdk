@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,9 +22,8 @@
  *
  */
 
-#include "cds/archiveHeapLoader.hpp"
 #include "cds/cdsConfig.hpp"
-#include "cds/heapShared.hpp"
+#include "cds/heapShared.inline.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataGraph.inline.hpp"
@@ -58,6 +57,10 @@
 #include "utilities/rotate_bits.hpp"
 #include "utilities/stack.inline.hpp"
 
+#if INCLUDE_JFR
+#include "jfr/jfr.hpp"
+#endif
+
 void Klass::set_java_mirror(Handle m) {
   assert(!m.is_null(), "New mirror should never be null.");
   assert(_java_mirror.is_empty(), "should only be used to initialize mirror");
@@ -67,17 +70,6 @@ void Klass::set_java_mirror(Handle m) {
 bool Klass::is_cloneable() const {
   return _misc_flags.is_cloneable_fast() ||
          is_subtype_of(vmClasses::Cloneable_klass());
-}
-
-void Klass::set_is_cloneable() {
-  if (name() == vmSymbols::java_lang_invoke_MemberName()) {
-    assert(is_final(), "no subclasses allowed");
-    // MemberName cloning should not be intrinsified and always happen in JVM_Clone.
-  } else if (is_instance_klass() && InstanceKlass::cast(this)->reference_type() != REF_NONE) {
-    // Reference cloning should not be intrinsified and always happen in JVM_Clone.
-  } else {
-    _misc_flags.set_is_cloneable_fast(true);
-  }
 }
 
 uint8_t Klass::compute_hash_slot(Symbol* n) {
@@ -252,6 +244,10 @@ void Klass::initialize(TRAPS) {
   ShouldNotReachHere();
 }
 
+void Klass::initialize_preemptable(TRAPS) {
+  ShouldNotReachHere();
+}
+
 Klass* Klass::find_field(Symbol* name, Symbol* sig, fieldDescriptor* fd) const {
 #ifdef ASSERT
   tty->print_cr("Error: find_field called on a klass oop."
@@ -274,20 +270,6 @@ Method* Klass::uncached_lookup_method(const Symbol* name, const Symbol* signatur
   return nullptr;
 }
 
-static markWord make_prototype(const Klass* kls) {
-  markWord prototype = markWord::prototype();
-#ifdef _LP64
-  if (UseCompactObjectHeaders) {
-    // With compact object headers, the narrow Klass ID is part of the mark word.
-    // We therefore seed the mark word with the narrow Klass ID.
-    precond(CompressedKlassPointers::is_encodable(kls));
-    const narrowKlass nk = CompressedKlassPointers::encode(const_cast<Klass*>(kls));
-    prototype = prototype.set_narrow_klass(nk);
-  }
-#endif
-  return prototype;
-}
-
 void* Klass::operator new(size_t size, ClassLoaderData* loader_data, size_t word_size, TRAPS) throw() {
   return Metaspace::allocate(loader_data, word_size, MetaspaceObj::ClassType, THREAD);
 }
@@ -300,9 +282,9 @@ Klass::Klass() : _kind(UnknownKlassKind) {
 // which zeros out memory - calloc equivalent.
 // The constructor is also used from CppVtableCloner,
 // which doesn't zero out the memory before calling the constructor.
-Klass::Klass(KlassKind kind) : _kind(kind),
-                               _prototype_header(make_prototype(this)),
+Klass::Klass(KlassKind kind, markWord prototype_header) : _kind(kind),
                                _shared_class_path_index(-1) {
+  set_prototype_header(make_prototype_header(this, prototype_header));
   CDS_ONLY(_aot_class_flags = 0;)
   CDS_JAVA_HEAP_ONLY(_archived_mirror_index = -1;)
   _primary_supers[0] = this;
@@ -315,12 +297,12 @@ jint Klass::array_layout_helper(BasicType etype) {
   int  hsize = arrayOopDesc::base_offset_in_bytes(etype);
   int  esize = type2aelembytes(etype);
   bool isobj = (etype == T_OBJECT);
-  int  tag   =  isobj ? _lh_array_tag_obj_value : _lh_array_tag_type_value;
-  int lh = array_layout_helper(tag, hsize, etype, exact_log2(esize));
+  int  tag   =  isobj ? _lh_array_tag_ref_value : _lh_array_tag_type_value;
+  int lh = array_layout_helper(tag, false, hsize, etype, exact_log2(esize));
 
   assert(lh < (int)_lh_neutral_value, "must look like an array layout");
   assert(layout_helper_is_array(lh), "correct kind");
-  assert(layout_helper_is_objArray(lh) == isobj, "correct kind");
+  assert(layout_helper_is_refArray(lh) == isobj, "correct kind");
   assert(layout_helper_is_typeArray(lh) == !isobj, "correct kind");
   assert(layout_helper_header_size(lh) == hsize, "correct decode");
   assert(layout_helper_element_type(lh) == etype, "correct decode");
@@ -614,8 +596,7 @@ GrowableArray<Klass*>* Klass::compute_secondary_supers(int num_extra_slots,
 
 // subklass links.  Used by the compiler (and vtable initialization)
 // May be cleaned concurrently, so must use the Compile_lock.
-// The log parameter is for clean_weak_klass_links to report unlinked classes.
-Klass* Klass::subklass(bool log) const {
+Klass* Klass::subklass() const {
   // Need load_acquire on the _subklass, because it races with inserts that
   // publishes freshly initialized data.
   for (Klass* chain = AtomicAccess::load_acquire(&_subklass);
@@ -626,11 +607,6 @@ Klass* Klass::subklass(bool log) const {
   {
     if (chain->is_loader_alive()) {
       return chain;
-    } else if (log) {
-      if (log_is_enabled(Trace, class, unload)) {
-        ResourceMark rm;
-        log_trace(class, unload)("unlinking class (subclass): %s", chain->external_name());
-      }
     }
   }
   return nullptr;
@@ -701,15 +677,20 @@ void Klass::append_to_sibling_list() {
   DEBUG_ONLY(verify();)
 }
 
-void Klass::clean_subklass() {
+// The log parameter is for clean_weak_klass_links to report unlinked classes.
+Klass* Klass::clean_subklass(bool log) {
   for (;;) {
     // Need load_acquire, due to contending with concurrent inserts
     Klass* subklass = AtomicAccess::load_acquire(&_subklass);
     if (subklass == nullptr || subklass->is_loader_alive()) {
-      return;
+      return subklass;
+    }
+    if (log && log_is_enabled(Trace, class, unload)) {
+      ResourceMark rm;
+      log_trace(class, unload)("unlinking class (subclass): %s", subklass->external_name());
     }
     // Try to fix _subklass until it points at something not dead.
-    AtomicAccess::cmpxchg(&_subklass, subklass, subklass->next_sibling());
+    AtomicAccess::cmpxchg(&_subklass, subklass, subklass->next_sibling(log));
   }
 }
 
@@ -728,8 +709,7 @@ void Klass::clean_weak_klass_links(bool unloading_occurred, bool clean_alive_kla
     assert(current->is_loader_alive(), "just checking, this should be live");
 
     // Find and set the first alive subklass
-    Klass* sub = current->subklass(true);
-    current->clean_subklass();
+    Klass* sub = current->clean_subklass(true);
     if (sub != nullptr) {
       stack.push(sub);
     }
@@ -861,7 +841,6 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   assert(is_klass(), "ensure C++ vtable is restored");
   assert(in_aot_cache(), "must be set");
   assert(secondary_supers()->length() >= (int)population_count(_secondary_supers_bitmap), "must be");
-  JFR_ONLY(RESTORE_ID(this);)
   if (log_is_enabled(Trace, aot, unshareable)) {
     ResourceMark rm(THREAD);
     oop class_loader = loader_data->class_loader();
@@ -874,11 +853,13 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   // modify the CLD list outside a safepoint.
   if (class_loader_data() == nullptr) {
     set_class_loader_data(loader_data);
-
-    // Add to class loader list first before creating the mirror
-    // (same order as class file parsing)
-    loader_data->add_class(this);
   }
+
+  // Add to class loader list first before creating the mirror
+  // (same order as class file parsing)
+  loader_data->add_class(this);
+
+  JFR_ONLY(Jfr::on_restoration(this, THREAD);)
 
   Handle loader(THREAD, loader_data->class_loader());
   ModuleEntry* module_entry = nullptr;
@@ -899,7 +880,7 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   if (this->has_archived_mirror_index()) {
     ResourceMark rm(THREAD);
     log_debug(aot, mirror)("%s has raw archived mirror", external_name());
-    if (ArchiveHeapLoader::is_in_use()) {
+    if (HeapShared::is_archived_heap_in_use()) {
       bool present = java_lang_Class::restore_archived_mirror(this, loader, module_handle,
                                                               protection_domain,
                                                               CHECK);
@@ -1034,10 +1015,8 @@ void Klass::oop_print_on(oop obj, outputStream* st) {
      // print header
      obj->mark().print_on(st);
      st->cr();
-     if (UseCompactObjectHeaders) {
-       st->print(BULLET"prototype_header: " INTPTR_FORMAT, _prototype_header.value());
-       st->cr();
-     }
+     st->print(BULLET"prototype_header: " INTPTR_FORMAT, _prototype_header.value());
+     st->cr();
   }
 
   // print class
@@ -1060,14 +1039,8 @@ void Klass::verify_on(outputStream* st) {
 
   // This can be expensive, but it is worth checking that this klass is actually
   // in the CLD graph but not in production.
-#ifdef ASSERT
-  if (UseCompressedClassPointers) {
-    // Stricter checks for both correct alignment and placement
-    CompressedKlassPointers::check_encodable(this);
-  } else {
-    assert(Metaspace::contains((address)this), "Should be");
-  }
-#endif // ASSERT
+  // Stricter checks for both correct alignment and placement
+  DEBUG_ONLY(CompressedKlassPointers::check_encodable(this));
 
   guarantee(this->is_klass(),"should be klass");
 
@@ -1094,6 +1067,40 @@ void Klass::oop_verify_on(oop obj, outputStream* st) {
   guarantee(oopDesc::is_oop(obj),  "should be oop");
   guarantee(obj->klass()->is_klass(), "klass field is not a klass");
 }
+
+#ifdef ASSERT
+void Klass::validate_array_description(const ArrayDescription& ad) {
+  if (is_identity_class() || is_array_klass() || is_interface() ||
+      (is_instance_klass() && InstanceKlass::cast(this)->access_flags().is_abstract())) {
+    assert(ad._layout_kind == LayoutKind::REFERENCE, "Cannot support flattening");
+    assert(ad._kind == KlassKind::RefArrayKlassKind, "Must be a reference array");
+  } else {
+    assert(is_inline_klass(), "Must be");
+    InlineKlass* ik = InlineKlass::cast(this);
+    switch(ad._layout_kind) {
+      case LayoutKind::BUFFERED:
+        fatal("Invalid layout for an array");
+        break;
+      case LayoutKind::NULL_FREE_ATOMIC_FLAT:
+        assert(ik->has_null_free_atomic_layout(), "Sanity check");
+        break;
+      case LayoutKind::NULL_FREE_NON_ATOMIC_FLAT:
+        assert(ik->has_null_free_non_atomic_layout(), "Sanity check");
+        break;
+      case LayoutKind::NULLABLE_ATOMIC_FLAT:
+        assert(ik->has_nullable_atomic_layout(), "Sanity check");
+        break;
+      case LayoutKind::NULLABLE_NON_ATOMIC_FLAT:
+        assert(ik->has_nullable_non_atomic_layout(), "Sanity check)");
+        break;
+      case LayoutKind::REFERENCE:
+        break;
+      default:
+        ShouldNotReachHere();
+    }
+  }
+}
+#endif // ASSERT
 
 // Note: this function is called with an address that may or may not be a Klass.
 // The point is not to assert it is but to check if it could be.

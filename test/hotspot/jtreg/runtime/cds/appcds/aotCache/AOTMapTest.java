@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,26 +26,52 @@
  * @bug 8362566
  * @summary Test the contents of -Xlog:aot+map with AOT workflow
  * @requires vm.cds.supports.aot.class.linking
- * @library /test/lib /test/hotspot/jtreg/runtime/cds
- * @build AOTMapTest
+ * @library /test/lib /test/hotspot/jtreg/runtime/cds /test/hotspot/jtreg/runtime/cds/appcds/test-classes
+ * @modules java.base/jdk.internal.misc
+ * @build AOTMapTest Hello
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar AOTMapTestApp
- * @run driver AOTMapTest AOT --two-step-training
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar cust.jar Hello
+ * @run driver/timeout=240 AOTMapTest AOT --two-step-training
  */
 
 /**
  * @test id=dynamic
  * @bug 8362566
- * @summary Test the contents of -Xlog:aot+map with AOT workflow
+ * @summary Test the contents of -Xlog:aot+map with dynamic CDS archive
  * @requires vm.cds.supports.aot.class.linking
- * @library /test/lib /test/hotspot/jtreg/runtime/cds
+ * @library /test/lib /test/hotspot/jtreg/runtime/cds /test/hotspot/jtreg/runtime/cds/appcds/test-classes
+ * @modules java.base/jdk.internal.misc
  * @build jdk.test.whitebox.WhiteBox
  * @run driver jdk.test.lib.helpers.ClassFileInstaller jdk.test.whitebox.WhiteBox
- * @build AOTMapTest
+ * @build AOTMapTest Hello
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar AOTMapTestApp
- * @run  main/othervm -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI -Xbootclasspath/a:. AOTMapTest DYNAMIC
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar cust.jar Hello
+ * @run main/othervm/timeout=240 -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI -Xbootclasspath/a:. AOTMapTest DYNAMIC
  */
 
+/**
+ * @test id=valhalla
+ * @bug 8362566
+ * @summary Test the contents of -Xlog:aot+map with AOT workflow and flat arrays
+ * @enablePreview
+ * @requires vm.cds.supports.aot.class.linking & vm.debug & vm.cds.write.archived.java.heap
+ * @library /test/lib /test/hotspot/jtreg/runtime/cds /test/hotspot/jtreg/runtime/cds/appcds/test-classes
+ * @modules java.base/jdk.internal.value java.base/jdk.internal.misc java.base/jdk.internal.vm.annotation
+ * @build Hello AOTMapTest
+ * @compile test-classes/AOTMapTestValhallaHelper.java
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
+ *                 AOTMapTestApp
+ *                 Hello
+ *                 AOTMapTestValhallaHelper
+ *                 AOTMapTestValhallaHelper$Wrapper
+ *                 AOTMapTestValhallaHelper$WrapperWrapper
+ *                 AOTMapTestValhallaHelper$ArchivedData
+ * @run main/othervm/timeout=240 AOTMapTest AOT --two-step-training Valhalla
+ */
 
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import jdk.test.lib.cds.CDSAppTester;
 import jdk.test.lib.helpers.ClassFileInstaller;
@@ -54,22 +80,32 @@ import jdk.test.lib.Platform;
 public class AOTMapTest {
     static final String appJar = ClassFileInstaller.getJarPath("app.jar");
     static final String mainClass = "AOTMapTestApp";
-
+    static final String classLoadLogFile = "production.class.load.log";
+    static boolean testValhalla;
     public static void main(String[] args) throws Exception {
-        doTest(args);
-    }
-
-    public static void doTest(String[] args) throws Exception {
+        testValhalla = args.length >= 3 && args[2].equals("Valhalla");
         Tester tester = new Tester();
         tester.run(args);
 
-        validate(tester.dumpMapFile);
-        validate(tester.runMapFile);
+        if (tester.isDynamicWorkflow()) {
+            // For dynamic workflow, the AOT map file doesn't include classes in the base archive, so
+            // AOTMapReader.validateClasses() will fail.
+            validate(tester.dumpMapFile, false);
+        } else {
+            validate(tester.dumpMapFile, true);
+        }
+        validate(tester.runMapFile, true);
     }
 
-    static void validate(String mapFileName) {
-        CDSMapReader.MapFile mapFile = CDSMapReader.read(mapFileName);
-        CDSMapReader.validate(mapFile);
+    static void validate(String mapFileName, boolean checkClases) throws Exception {
+        AOTMapReader.MapFile mapFile = AOTMapReader.read(mapFileName);
+        if (checkClases) {
+            AOTMapReader.validate(mapFile, classLoadLogFile);
+        } else {
+            AOTMapReader.validate(mapFile, null);
+        }
+        mapFile.shouldHaveClass("AOTMapTestApp"); // built-in class
+        mapFile.shouldHaveClass("Hello"); // unregistered class
     }
 
     static class Tester extends CDSAppTester {
@@ -94,15 +130,28 @@ public class AOTMapTest {
 
             vmArgs.add("-Xmx128M");
             vmArgs.add("-Xlog:aot=debug");
+            vmArgs.add("--add-exports");
+            vmArgs.add("java.base/jdk.internal.misc=ALL-UNNAMED");
+
+            if (testValhalla) {
+                vmArgs.add("--enable-preview");
+                vmArgs.add("--add-exports");
+                vmArgs.add("java.base/jdk.internal.value=ALL-UNNAMED");
+
+                if (runMode == RunMode.ASSEMBLY) {
+                    vmArgs.add("-XX:AOTInitTestClass=AOTMapTestValhallaHelper");
+                }
+            }
 
             // filesize=0 ensures that a large map file not broken up in multiple files.
-            String logMapPrefix = "-Xlog:aot+map=debug,aot+map+oops=trace:file=";
-            String logMapSuffix = ":none:filesize=0";
+            String logMapPrefix = "-Xlog:aot+map=trace,aot+map+oops=trace:file=";
+            String logSuffix = ":none:filesize=0";
 
-            if (runMode == RunMode.ASSEMBLY || runMode == RunMode.DUMP_DYNAMIC) {
-                vmArgs.add(logMapPrefix + dumpMapFile + logMapSuffix);
+            if (runMode == RunMode.ASSEMBLY || runMode == RunMode.DUMP_DYNAMIC || runMode == RunMode.DUMP_STATIC) {
+                vmArgs.add(logMapPrefix + dumpMapFile + logSuffix);
             } else if (runMode == RunMode.PRODUCTION) {
-                vmArgs.add(logMapPrefix + runMapFile + logMapSuffix);
+                vmArgs.add(logMapPrefix + runMapFile + logSuffix);
+                vmArgs.add("-Xlog:class+load:file=" + classLoadLogFile + logSuffix);
             }
 
             return vmArgs.toArray(new String[vmArgs.size()]);
@@ -112,13 +161,30 @@ public class AOTMapTest {
         public String[] appCommandLine(RunMode runMode) {
             return new String[] {
                 mainClass,
+                testValhalla ? "Valhalla" : "none"
             };
         }
     }
 }
 
 class AOTMapTestApp {
-    public static void main(String[] args) {
+    static URLClassLoader loader; // keep Hello class alive
+    public static void main(String[] args) throws Exception {
         System.out.println("Hello AOTMapTestApp");
+        testCustomLoader();
+
+        if (args[0].equals("Valhalla")) {
+            Class<?> c = Class.forName("AOTMapTestValhallaHelper");
+            Object o = c.newInstance();
+            System.out.println(o);
+        }
+    }
+
+    static void testCustomLoader() throws Exception {
+        File custJar = new File("cust.jar");
+        URL[] urls = new URL[] {custJar.toURI().toURL()};
+        loader = new URLClassLoader(urls, AOTMapTestApp.class.getClassLoader());
+        Class<?> c = loader.loadClass("Hello");
+        System.out.println(c);
     }
 }
