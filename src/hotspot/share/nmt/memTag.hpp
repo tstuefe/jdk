@@ -44,7 +44,9 @@
   f(mtSymbol,         "Symbol")                                                      \
   f(mtNMT,            "Native Memory Tracking")  /* memory used by NMT            */ \
   f(mtClassShared,    "Shared class space")      /* class data sharing            */ \
-  f(mtChunk,          "Arena Chunk") /* chunk that holds content of arenas        */ \
+  f(mtChunkMmap,      "Arena Chunk, mmap") /* chunk that holds content of arenas        */ \
+  f(mtChunkMeta,      "Arena Chunk, metadata") /* chunk that holds content of arenas        */ \
+  f(mtChunkMalloc,    "Arena Chunk, small") /* chunk that holds content of arenas        */ \
   f(mtTest,           "Test")        /* Test type for verifying NMT               */ \
   f(mtTracing,        "Tracing")                                                     \
   f(mtLogging,        "Logging")                                                     \

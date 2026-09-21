@@ -176,7 +176,7 @@ class MallocMemorySnapshot {
 
   // Total malloc'd memory amount
   size_t total() const {
-    return _all_mallocs.size() + malloc_overhead() + total_arena();
+    return _all_mallocs.size() + malloc_overhead();
   }
 
   // Total peak malloc

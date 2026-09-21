@@ -89,7 +89,7 @@ public:
   void set_next(Chunk* n)       { _next = n;  }
   // Boundaries of data area (possibly unused)
   char* bottom() const          { return ((char*) this) + aligned_overhead_size();  }
-  char* top()    const          { return bottom() + _len; }
+  char* top()    const          { return ((char*) this) + _len; }
   bool contains(char* p) const  { return bottom() <= p && p <= top(); }
 
   void set_stamp(uint64_t v) { _stamp = v; }

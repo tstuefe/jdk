@@ -115,6 +115,8 @@
 #include "jfr/jfr.hpp"
 #endif
 
+#include "memory/buddy_alloc_wrapper.hpp"
+
 // Initialization after module runtime initialization
 void universe_post_module_init();  // must happen after call_initPhase2
 
@@ -497,7 +499,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Initialize NMT right after argument parsing to keep the pre-NMT-init window small.
   MemTracker::initialize();
-
+  BuddyAlloc::initialize();
   os::init_before_ergo();
 
   jint ergo_result = Arguments::apply_ergo();

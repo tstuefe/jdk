@@ -94,10 +94,10 @@ size_t MallocMemorySnapshot::total_arena() const {
 // Make adjustment by subtracting chunks used by arenas
 // from total chunks to get total free chunk size
 void MallocMemorySnapshot::make_adjustment() {
-  size_t arena_size = total_arena();
-  int chunk_idx = NMTUtil::tag_to_index(mtChunk);
-  _malloc[chunk_idx].record_free(arena_size);
-  _all_mallocs.deallocate(arena_size);
+//  size_t arena_size = total_arena();
+  //  int chunk_idx = NMTUtil::tag_to_index(mtChunk);
+  //  _malloc[chunk_idx].record_free(arena_size);
+  //_all_mallocs.deallocate(arena_size);
 }
 
 void MallocMemorySummary::initialize() {

@@ -79,8 +79,8 @@ void NMTUsage::update_malloc_usage() {
   _malloc_total = ms->total();
 
   // Adjustment due to mtChunk double counting.
-  _malloc_by_type[NMTUtil::tag_to_index(mtChunk)] -= total_arena_size;
-  _malloc_total -= total_arena_size;
+//  _malloc_by_type[NMTUtil::tag_to_index(mtChunk)] -= total_arena_size;
+//  _malloc_total -= total_arena_size;
 
   // Adjust mtNMT to include malloc overhead.
   _malloc_by_type[NMTUtil::tag_to_index(mtNMT)] += ms->malloc_overhead();
