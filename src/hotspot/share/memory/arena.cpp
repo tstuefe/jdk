@@ -278,7 +278,7 @@ Arena::Arena(MemTag mem_tag, Tag tag, size_t init_size) :
   _hwm(nullptr), _max(nullptr)
 {
   init_size = ARENA_ALIGN(init_size);
-  log_info(arena)("Created Arena " PTR_FORMAT ", memtag %d, size: %zu", p2u(this), (int)_mem_tag, init_size);
+  log_info(arena)("Created Arena " PTR_FORMAT ", memtag %d, tag %s, size: %zu", p2u(this), (int)_mem_tag, tag_name[(int)tag], init_size);
 
   _chunk = ChunkPool::allocate_chunk(this, init_size, AllocFailStrategy::EXIT_OOM);
   _first = _chunk;
