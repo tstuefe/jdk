@@ -25,6 +25,7 @@
 #ifndef SHARE_NMT_MEMTRACKER_HPP
 #define SHARE_NMT_MEMTRACKER_HPP
 
+#include "logging/log.hpp"
 #include "memory/reservedSpace.hpp"
 #include "nmt/mallocTracker.hpp"
 #include "nmt/memBaseline.hpp"
@@ -119,6 +120,9 @@ class MemTracker : AllStatic {
   // Record arena size change. Arena size is the size of all arena
   // chunks that are backing up the arena.
   static inline void record_arena_size_change(ssize_t diff, MemTag mem_tag) {
+
+
+
     if (!enabled()) return;
     MallocTracker::record_arena_size_change(diff, mem_tag);
   }

@@ -278,17 +278,26 @@ Arena::Arena(MemTag mem_tag, Tag tag, size_t init_size) :
   _hwm(nullptr), _max(nullptr)
 {
   init_size = ARENA_ALIGN(init_size);
+  log_info(arena)("Created Arena " PTR_FORMAT ", memtag %d, size: %zu", p2u(this), (int)_mem_tag, init_size);
+
   _chunk = ChunkPool::allocate_chunk(this, init_size, AllocFailStrategy::EXIT_OOM);
   _first = _chunk;
   _hwm = _chunk->bottom();      // Save the cached hwm, max
   _max = _chunk->top();
   MemTracker::record_new_arena(mem_tag);
   set_size_in_bytes(init_size);
+
+
 }
 
 Arena::~Arena() {
+  size_t size = _size_in_bytes;
+
   destruct_contents();
   MemTracker::record_arena_free(_mem_tag);
+
+  log_info(arena)("Released Arena " PTR_FORMAT ", size: %zu", p2u(this), size);
+
 }
 
 // Destroy this arenas contents and reset to empty
@@ -305,6 +314,8 @@ void Arena::destruct_contents() {
 // This is high traffic method, but many calls actually don't
 // change the size
 void Arena::set_size_in_bytes(size_t size) {
+  log_info(arena)("Changed Arena " PTR_FORMAT ", new size: %zu", p2u(this), size);
+
   if (_size_in_bytes != size) {
     ssize_t delta = size - size_in_bytes();
     _size_in_bytes = size;
