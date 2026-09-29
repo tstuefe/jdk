@@ -24,22 +24,30 @@
 #ifndef SHARE_MEMORY_BUDDY_ALLOC_WRAPPER_HPP
 #define SHARE_MEMORY_BUDDY_ALLOC_WRAPPER_HPP
 
-#include "memory/allStatic.hpp"
-#include "utilities/debug.hpp"
+#include "memory/allocation.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 class outputStream;
+struct buddy;
 
-class BuddyAlloc : public AllStatic {
+class BuddyAlloc : public CHeapObj<mtChunkMeta> {
+  address _arena_heap;
+  address _metadata_heap;
+  size_t _metadata_heap_size;
+  buddy* _buddy;
+
 public:
 
-  static constexpr size_t min_size = 4 * K;
+  static constexpr size_t min_size = 32 * K; // todo: needs to be page size aligned.
   static constexpr size_t total_size = 4 * G;
 
-  static void initialize();
-  static void cleanup();
-  static void* allocate_memory(size_t size);
-  static void deallocate_memory(void* p, size_t size);
+  BuddyAlloc();
+  ~BuddyAlloc();
+
+  void initialize();
+  void cleanup();
+  void* allocate_memory(size_t size);
+  void deallocate_memory(void* p, size_t size);
 
 };
 

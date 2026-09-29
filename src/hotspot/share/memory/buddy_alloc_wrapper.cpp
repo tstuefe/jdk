@@ -31,23 +31,30 @@
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/ostream.hpp"
+#include "utilities/globalDefinitions.hpp"
+
 
 #define BUDDY_ALLOC_IMPLEMENTATION
+PRAGMA_DISABLE_GCC_WARNING("-Wzero-as-null-pointer-constant")
 #include "buddy_alloc.h"
 
-static address g_memory_arena = nullptr;
-static address g_memory_metadata = nullptr;
-static size_t g_memory_metadata_size = 0;
-static struct buddy* g_buddy = nullptr;
+BuddyAlloc::BuddyAlloc() {
+  _buddy = nullptr;
+  initialize();
+}
+
+BuddyAlloc::~BuddyAlloc() {
+  cleanup();
+}
 
 void* BuddyAlloc::allocate_memory(size_t s) {
 
-  assert(g_buddy != nullptr, "not yet inited");
+  assert(_buddy != nullptr, "not yet inited");
 
   assert(is_power_of_2(s), "must be pow2");
   assert(s >= os::vm_page_size() && s <= total_size, "bad size");
 
-  void* p = buddy_malloc(g_buddy, s);
+  void* p = buddy_malloc(_buddy, s);
 
   assert(p != nullptr, "alloc fail");
 
@@ -63,13 +70,13 @@ void* BuddyAlloc::allocate_memory(size_t s) {
 
 void BuddyAlloc::deallocate_memory(void* p, size_t s) {
 
-  assert(g_buddy != nullptr, "not yet inited");
+  assert(_buddy != nullptr, "not yet inited");
 
   assert(is_power_of_2(s), "must be pow2");
   assert(s >= os::vm_page_size() && s <= total_size, "bad size");
   assert(p != nullptr, "bad ptr");
 
-  buddy_free(g_buddy, p);
+  buddy_free(_buddy, p);
 
   os::uncommit_memory((char*)p, s, false);
 
@@ -80,33 +87,32 @@ void BuddyAlloc::deallocate_memory(void* p, size_t s) {
 
 void BuddyAlloc::initialize() {
 
-  assert(g_buddy == nullptr, "already inited");
+  assert(_buddy == nullptr, "already inited");
 
-  g_memory_arena = (address) os::reserve_memory(total_size, mtChunkMmap, false);
-  assert(g_memory_arena != nullptr, "sanity");
-  assert(is_aligned(g_memory_arena, min_size), "needs to be aligned to smallest byddy size");
-  assert(is_aligned(os::vm_page_size(), min_size), "needs to be aligned to page size");
+  _arena_heap = (address) os::reserve_memory(total_size, mtChunkMmap, false);
+  assert(_arena_heap != nullptr, "sanity");
+  assert(is_aligned(_arena_heap, min_size), "needs to be aligned to smallest byddy size");
+  assert(is_aligned(min_size, os::vm_page_size()), "needs to be aligned to page size");
 
-  g_memory_metadata_size = buddy_sizeof_alignment(total_size, min_size);
-  g_memory_metadata_size = align_up(g_memory_metadata_size, os::vm_allocation_granularity());
-  g_memory_metadata = (address) os::reserve_memory(g_memory_metadata_size, mtChunkMeta, false);
-  bool b = os::commit_memory((char*)g_memory_metadata, g_memory_metadata_size, false);
+  _metadata_heap_size = buddy_sizeof_alignment(total_size, min_size);
+  _metadata_heap_size = align_up(_metadata_heap_size, os::vm_allocation_granularity());
+  _metadata_heap = (address) os::reserve_memory(_metadata_heap_size, mtChunkMeta, false);
+  bool b = os::commit_memory((char*)_metadata_heap, _metadata_heap_size, false);
   assert(b, "sanit");
 
-  g_buddy = buddy_init_alignment(g_memory_metadata, g_memory_arena, total_size, min_size);
+  _buddy = buddy_init_alignment(_metadata_heap, _arena_heap, total_size, min_size);
 
-  assert(g_buddy != nullptr, "sanity");
+  assert(_buddy != nullptr, "sanity");
 
   log_info(arena)("buddy initialized");
-
-
 }
 
 
 void BuddyAlloc::cleanup() {
-  assert(g_buddy != nullptr, "sanity");
+  assert(_buddy != nullptr, "sanity");
 
-  os::release_memory((char*)g_memory_arena, total_size);
-    os::release_memory((char*)g_memory_metadata, g_memory_metadata_size);
-    g_buddy = nullptr;
+  os::release_memory((char*)_metadata_heap, _metadata_heap_size);
+  os::release_memory((char*)_arena_heap, total_size);
+
+  _buddy = nullptr;
 }

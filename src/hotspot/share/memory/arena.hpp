@@ -74,7 +74,6 @@ public:
 
     tiny_size  =  256  - slack, // Size of first chunk (tiny)
     init_size  =  1*K  - slack, // Size of first chunk (normal aka small)
-    medium_size= 10*K  - slack, // Size of medium-sized chunk
     size       = 32*K  - slack, // Default size of an Arena chunk (following the first)
     max_default_size = size     // Largest default size
   };
@@ -94,6 +93,7 @@ public:
 
   void set_stamp(uint64_t v) { _stamp = v; }
   uint64_t stamp() const     { return _stamp; }
+
 };
 
 // Arena types (for Compilation Memory Statistic)
@@ -158,6 +158,8 @@ protected:
   }
 
  public:
+
+  static void initialize_arena_heap();
   static void initialize_chunk_pool();
 
   // Start the chunk_pool cleaner task

@@ -2051,7 +2051,7 @@ static const uint8_t bitset_char_mask[8][8] = {
 };
 
 static inline struct bitset_range to_bitset_range(size_t from_pos, size_t to_pos) {
-    struct bitset_range range = {0};
+    struct bitset_range range;
     range.from_bucket = from_pos / CHAR_BIT;
     range.to_bucket = to_pos / CHAR_BIT;
 

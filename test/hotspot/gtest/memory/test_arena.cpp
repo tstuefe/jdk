@@ -354,10 +354,10 @@ TEST_VM(Arena, Arena_grows_large_unaligned) {
 static size_t random_arena_chunk_size() {
   // Return with a 50% rate a standard size, otherwise some random size
   if (os::random() % 10 < 5) {
-    static const size_t standard_sizes[4] = {
-        Chunk::tiny_size, Chunk::init_size, Chunk::size, Chunk::medium_size
+    static const size_t standard_sizes[3] = {
+        Chunk::tiny_size, Chunk::init_size, Chunk::size
     };
-    return standard_sizes[os::random() % 4];
+    return standard_sizes[os::random() % (sizeof(standard_sizes)/sizeof(standard_sizes[0]))];
   }
   return ARENA_ALIGN(os::random() % 1024);
 }

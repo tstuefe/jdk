@@ -44,8 +44,14 @@
 // been created so we cannot use Mutex.
 static DeferredStatic<PlatformMutex> GlobalChunkPoolMutex;
 
+static DeferredStatic<BuddyAlloc> g_arena_heap;
+
 void Arena::initialize_chunk_pool() {
   GlobalChunkPoolMutex.initialize();
+}
+
+void Arena::initialize_arena_heap() {
+  g_arena_heap.initialize();
 }
 
 ChunkPoolLocker::ChunkPoolLocker(LockStrategy ls) {
@@ -67,7 +73,6 @@ ChunkPoolLocker::~ChunkPoolLocker() {
 // Pre-defined default chunk sizes must be arena-aligned, see Chunk::operator new()
 STATIC_ASSERT(is_aligned((int)Chunk::tiny_size, ARENA_AMALLOC_ALIGNMENT));
 STATIC_ASSERT(is_aligned((int)Chunk::init_size, ARENA_AMALLOC_ALIGNMENT));
-STATIC_ASSERT(is_aligned((int)Chunk::medium_size, ARENA_AMALLOC_ALIGNMENT));
 STATIC_ASSERT(is_aligned((int)Chunk::size, ARENA_AMALLOC_ALIGNMENT));
 
 
@@ -104,7 +109,7 @@ static Chunk* allocate_chunk(Arena* arena, size_t length, AllocFailType alloc_fa
   } else {
     ChunkPoolLocker lock;
     length = next_power_of_2(length);
-    mem = BuddyAlloc::allocate_memory(length);
+    mem = g_arena_heap->allocate_memory(length);
   }
   assert(mem != nullptr, "sanity");
 
@@ -137,7 +142,7 @@ static void deallocate_chunk(Chunk* c) {
     os::free(c);
   } else {
     ChunkPoolLocker lock;
-    BuddyAlloc::deallocate_memory(c, c->length());
+    g_arena_heap->deallocate_memory(c, c->length());
   }
 
 }
