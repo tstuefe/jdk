@@ -64,8 +64,10 @@ public:
 
 #ifdef LOG_PLEASE
 #define LOG_HERE(s, ...) { printf(s, __VA_ARGS__); printf("\n"); fflush(stdout); }
+#define LOG_HERE_0(s) { printf("%s", s); printf("\n"); fflush(stdout); }
 #else
 #define LOG_HERE(s, ...)
+#define LOG_HERE_0(s)
 #endif
 
 // handy for error analysis

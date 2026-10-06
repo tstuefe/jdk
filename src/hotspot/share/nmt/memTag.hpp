@@ -47,6 +47,7 @@
   f(mtChunkMmap,      "Arena Chunk, mmap") /* chunk that holds content of arenas        */ \
   f(mtChunkMeta,      "Arena Chunk, metadata") /* chunk that holds content of arenas        */ \
   f(mtChunkMalloc,    "Arena Chunk, small") /* chunk that holds content of arenas        */ \
+  f(mtChunkMisc,      "Arena Chunk, miscellaneous")                                  \
   f(mtTest,           "Test")        /* Test type for verifying NMT               */ \
   f(mtTracing,        "Tracing")                                                     \
   f(mtLogging,        "Logging")                                                     \
