@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2021, 2025, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2021 SAP SE. All rights reserved.
+* Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
  *
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -22,7 +21,6 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 #include "memory/arena.hpp"
 #include "runtime/os.hpp"
 #include "utilities/align.hpp"
