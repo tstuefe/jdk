@@ -38,26 +38,30 @@ public:
 
   static constexpr IndexType num_bits = num_summary_bits * num_segment_bits;
   static constexpr IndexType num_segments = num_summary_bits;
-  static constexpr size_t num_words = BitMap::calc_size_in_words(num_bits) * BytesPerWord;
-  static constexpr size_t num_summary_words = BitMap::calc_size_in_words(num_summary_bits) * BytesPerWord;
-  static constexpr size_t num_segment_words = BitMap::calc_size_in_words(num_segment_bits) * BytesPerWord;
+  static constexpr size_t num_words = BitMap::calc_size_in_words(num_bits);
+  static constexpr size_t num_summary_words = BitMap::calc_size_in_words(num_summary_bits);
+  static constexpr size_t num_segment_words = BitMap::calc_size_in_words(num_segment_bits);
 
   STATIC_ASSERT(num_summary_bits >= 64);
   STATIC_ASSERT(is_power_of_2(num_summary_bits));
   STATIC_ASSERT(num_segment_bits >= 64);
   STATIC_ASSERT(is_power_of_2(num_segment_bits));
 
+  NONCOPYABLE(LayeredBitmap);
+
+  struct alignas(DEFAULT_CACHE_LINE_SIZE) Storage {
+    WordType _full_segments_bitmap_storage[num_summary_words];
+    WordType _nonempty_segments_bitmap_storage[num_summary_words];
+    WordType _bitmap_storage[num_words];
+  };
+
 private:
 
-  WordType _bitmap_storage[num_words];
-  WordType _full_segments_bitmap_storage[num_summary_words];
-  WordType _nonempty_segments_bitmap_storage[num_summary_words];
-
-  BitMapView _bitmap;
+  Storage* const _storage;
   BitMapView _full_segments_bitmap;
   BitMapView _nonempty_segments_bitmap;
+  BitMapView _bitmap;
 
-#ifdef ASSERT
   static void verify_index_excl(IndexType idx) {
     assert(idx < num_bits, "out of bounds (idx %zu, num_bits %zu)",
       idx, num_bits);
@@ -96,17 +100,16 @@ private:
   }
   static void verify_segment_index_range_excl(IndexType begsegidx, IndexType endsegidx) {
     assert(begsegidx <= endsegidx, "Sanity");
-    verify_segment_index_incl(begsegidx);
-    verify_segment_index_incl(endsegidx);
+    verify_segment_index_excl(begsegidx);
+    verify_segment_index_excl(endsegidx);
   }
-#endif // ASSERT
 
   // Given a bit index, return the index of enclosing segment
   // Passing num_bits is allowed and returns num_summary_bits
   static IndexType index_to_segment_index(IndexType idx) {
     verify_index_incl(idx);
     const IndexType segidx = idx / num_segment_bits;
-    verify_index_excl(segidx);
+    verify_segment_index_incl(segidx);
     return segidx;
   }
 
@@ -149,7 +152,7 @@ private:
 
   // Given a single segment index, return the index range covering this segment
   static Range segment_index_to_index_range(IndexType segidx) {
-    verify_segment_index_incl(segidx);
+    verify_segment_index_excl(segidx);
     return Range { segment_index_to_index(segidx), segment_index_to_index(segidx + 1) };
   }
 
@@ -278,7 +281,7 @@ private:
         inner_bit_handler(begidx_aligned, endidx_aligned);
       }
       if (endidx_aligned < endidx) {
-        prologue_bit_handler(endidx_aligned, endidx);
+        epilogue_bit_handler(endidx_aligned, endidx);
       }
     }
   }
@@ -291,6 +294,9 @@ private:
                                         EpilogueBitHandler epilogue_bit_handler)
   {
     verify_index_range_incl(begidx, endidx);
+    if (begidx == endidx) {
+      return;
+    }
     const IndexType begidx_aligned = index_align_up_segment_start(begidx);
     const IndexType endidx_aligned = index_align_down_segment_start(endidx);
     if (begidx_aligned > endidx_aligned) { // same segment
@@ -303,27 +309,26 @@ private:
         if (!inner_bit_handler(begidx_aligned, endidx_aligned)) return;
       }
       if (endidx_aligned < endidx) {
-        if (!prologue_bit_handler(endidx_aligned, endidx)) return;
+        if (!epilogue_bit_handler(endidx_aligned, endidx)) return;
       }
     }
   }
 
 public:
 
-  LayeredBitmap(bool do_clear = false)
-  : _bitmap(_bitmap_storage, num_bits),
-    _full_segments_bitmap(_full_segments_bitmap_storage, num_summary_bits),
-    _nonempty_segments_bitmap(_nonempty_segments_bitmap_storage, num_summary_bits)
+  LayeredBitmap(Storage* storage, bool do_clear)
+  : _storage(storage),
+    _full_segments_bitmap(_storage->_full_segments_bitmap_storage, num_segments),
+    _nonempty_segments_bitmap(_storage->_nonempty_segments_bitmap_storage, num_segments),
+    _bitmap(_storage->_bitmap_storage, num_bits)
   {
     if (do_clear) {
-      memset(_bitmap_storage, 0, sizeof(_bitmap_storage));
-      memset(_full_segments_bitmap_storage, 0, sizeof(_full_segments_bitmap_storage));
-      memset(_nonempty_segments_bitmap_storage, 0, sizeof(_nonempty_segments_bitmap_storage));
+      clear();
     }
   }
 
   void set_bit(IndexType idx) {
-    assert(idx < num_bits, "Sanity");
+    verify_index_excl(idx);
 
     if (_bitmap.at(idx)) {
       return; // nothing changes
@@ -344,7 +349,7 @@ public:
   }
 
   void clear_bit(IndexType idx) {
-    assert(idx < num_bits, "Sanity");
+    verify_index_excl(idx);
 
     if (!_bitmap.at(idx)) {
       return; // nothing changes
@@ -428,7 +433,7 @@ public:
     _bitmap.clear_range(begidx, endidx);
 
     // adjust summary bitmaps
-    auto prefix_postfix_handler = [this](IndexType idx1, IndexType idx2) {
+    auto prefix_postfix_handler = [this](IndexType idx1, IndexType) {
       const IndexType segidx = index_to_segment_index(idx1);
       _full_segments_bitmap.clear_bit(segidx);
       const Range range_idx = segment_index_to_index_range(segidx);
@@ -482,23 +487,19 @@ public:
   }
 
   void clear() {
-    _bitmap.clear();
-    _full_segments_bitmap.clear();
-    _nonempty_segments_bitmap.clear();
+    memset(_storage, 0, sizeof(Storage));
   }
 
-  const WordType* raw() const { return _bitmap_storage; }
-
-  // This is mostly for test. Fills the bitmap with a pattern.
+  // This is mostly for tests. Fills the bitmap with a pattern.
   void propagate_bit_pattern(WordType bit_pattern) {
     for (IndexType idx = 0; idx < num_words; idx++) {
-      _bitmap_storage[idx] = bit_pattern;
+      _storage->_bitmap_storage[idx] = bit_pattern;
     }
     const WordType summary_pattern_full = (bit_pattern == SIZE_MAX) ? SIZE_MAX : 0;
     const WordType summary_pattern_nonempty = (bit_pattern > 0) ? SIZE_MAX : 0;
     for (IndexType idx = 0; idx < num_summary_words; idx++) {
-      _full_segments_bitmap_storage[idx] = summary_pattern_full;
-      _nonempty_segments_bitmap_storage[idx] = summary_pattern_nonempty;
+      _storage->_full_segments_bitmap_storage[idx] = summary_pattern_full;
+      _storage->_nonempty_segments_bitmap_storage[idx] = summary_pattern_nonempty;
     }
   }
 

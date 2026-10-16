@@ -49,21 +49,23 @@ struct Tester : public CHeapObj<mtTest> {
   typedef BitMap::idx_t IndexType;
   static constexpr IndexType num_bits = BitmapType::num_bits;
 
+  typename BitmapType::Storage _layered_bitmap_storage;
   BitmapType _layered_bitmap;
   BitMap::bm_word_t _test_bitmap_storage[num_bits * BitsPerWord];
   BitMapView _test_bitmap;
   MyRandom _random;
   mutable int _sometimes;
 
-  Tester() : _layered_bitmap(true), _test_bitmap(_test_bitmap_storage, num_bits), _sometimes(0) {
+  Tester() : _layered_bitmap(&_layered_bitmap_storage, true),
+             _test_bitmap(_test_bitmap_storage, num_bits), _sometimes(0) {
     memset(_test_bitmap_storage, 0, sizeof(_test_bitmap_storage));
   }
 
   void sometimes_verify(int interval = 20) {
 #ifdef ASSERT
-    if (_sometimes++ % 20) {
+  //  if (_sometimes++ % 20) {
       _layered_bitmap.verify();
-    }
+  //  }
 #endif // ASSERT
   }
 
@@ -134,6 +136,8 @@ struct Tester : public CHeapObj<mtTest> {
   }
 
   void basic_test() {
+
+    ASSERT_EQ(BitmapType::num_bits / BitsPerWord, BitmapType::num_words);
 
     // set and clear first bit
     set_bit_and_verify(0);
