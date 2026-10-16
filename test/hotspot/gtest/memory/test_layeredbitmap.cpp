@@ -51,7 +51,7 @@ struct Tester : public CHeapObj<mtTest> {
 
   typename BitmapType::Storage _layered_bitmap_storage;
   BitmapType _layered_bitmap;
-  BitMap::bm_word_t _test_bitmap_storage[num_bits * BitsPerWord];
+  BitMap::bm_word_t _test_bitmap_storage[BitmapType::num_words];
   BitMapView _test_bitmap;
   MyRandom _random;
   mutable int _sometimes;
@@ -61,11 +61,11 @@ struct Tester : public CHeapObj<mtTest> {
     memset(_test_bitmap_storage, 0, sizeof(_test_bitmap_storage));
   }
 
-  void sometimes_verify(int interval = 20) {
+  void sometimes_verify(int interval = 1) {
 #ifdef ASSERT
-  //  if (_sometimes++ % 20) {
+    if ((_sometimes++ % interval) == 0) {
       _layered_bitmap.verify();
-  //  }
+    }
 #endif // ASSERT
   }
 
@@ -128,7 +128,7 @@ struct Tester : public CHeapObj<mtTest> {
 
   void fill_with_pattern_and_verify(BitMap::bm_word_t bit_pattern) {
     _layered_bitmap.propagate_bit_pattern(bit_pattern);
-    for (IndexType idx = 0; idx < num_bits; idx++) {
+    for (IndexType idx = 0; idx < BitmapType::num_words; idx++) {
       _test_bitmap_storage[idx] = bit_pattern;
     }
     check_equality();

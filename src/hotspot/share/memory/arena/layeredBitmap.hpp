@@ -179,19 +179,25 @@ private:
   // return number of 1 bits in range
   uintx count_one_bits_in_aligned_range(IndexType begidx, IndexType endidx) const {
     verify_index_range_aligned_to_segment_boundaries(begidx, endidx);
-    uintx result = 0;
     const Range range_segidx = index_range_aligned_to_segment_index_range(begidx, endidx);
-    for (IndexType segidx = range_segidx.beg; segidx < range_segidx.end; segidx++) {
-      if (_full_segments_bitmap.at(segidx)) {
-        result += num_segment_bits;
-      } else {
-        if (_nonempty_segments_bitmap.at(segidx)) {
-          const Range range_idx = segment_index_to_index_range(segidx);
-          result += _bitmap.count_one_bits(range_idx.beg, range_idx.end);
-        }
+    const uintx from_full = _full_segments_bitmap.count_one_bits(range_segidx.beg, range_segidx.end) * num_segment_bits;
+    // count the ones in not-full not-empty segments
+    WordType diff[num_segments];
+    BitMapView tmpbm(diff, num_segments);
+    tmpbm.set_from(_nonempty_segments_bitmap); // all segments that are not empty...
+    tmpbm.set_difference(_full_segments_bitmap); // but not full.
+    uintx from_half_full = 0;
+    IndexType segidx = range_segidx.beg;
+    while (segidx < range_segidx.end) {
+      segidx = tmpbm.find_first_set_bit(segidx, range_segidx.end);
+      if (segidx < range_segidx.end) {
+        const IndexType segidx_end = tmpbm.find_first_clear_bit(segidx, range_segidx.end);
+        const Range range_idx = segment_index_range_to_index_range(segidx, segidx_end);
+        from_half_full += _bitmap.count_one_bits(range_idx.beg, range_idx.end);
+        segidx = segidx_end;
       }
     }
-    return result;
+    return from_half_full + from_full;
   }
 
   // Given a bit index range [begidx, endidx) aligned to segment boundaries,
@@ -385,7 +391,7 @@ public:
     if (num == 0) {
       return; // nothing changes
     }
-    if (_bitmap.find_first_clear_bit(begidx, endidx) == endidx) {
+    if (find_first_clear_bit(begidx, endidx) == endidx) {
       return; // bits already set, nothing changes
     }
 
@@ -401,7 +407,6 @@ public:
 #endif
       const IndexType segidx = index_to_segment_index(idx1);
       _nonempty_segments_bitmap.set_bit(segidx);
-      const Range range_idx = segment_index_to_index_range(segidx);
       const bool is_full = segment_is_full(segidx);
       if (is_full) {
         _full_segments_bitmap.set_bit(segidx);
@@ -425,7 +430,7 @@ public:
     if (num == 0) {
       return; // nothing changes
     }
-    if (_bitmap.find_first_set_bit(begidx, endidx) == endidx) {
+    if (find_first_set_bit(begidx, endidx) == endidx) {
       return; // bits already cleared, nothing changes
     }
 
@@ -436,8 +441,7 @@ public:
     auto prefix_postfix_handler = [this](IndexType idx1, IndexType) {
       const IndexType segidx = index_to_segment_index(idx1);
       _full_segments_bitmap.clear_bit(segidx);
-      const Range range_idx = segment_index_to_index_range(segidx);
-      const bool is_empty = (_bitmap.find_first_set_bit(range_idx.beg, range_idx.end) == range_idx.end);
+      const bool is_empty = segment_is_empty(segidx);
       if (is_empty) {
         _nonempty_segments_bitmap.clear_bit(segidx);
       }
