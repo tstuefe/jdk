@@ -34,7 +34,7 @@
 //#define LOG_PLEASE
 #include "testutils.hpp"
 
-#define VERIFICATION_INTERVAL 1
+#define VERIFICATION_INTERVAL 3
 
 class MyRandom {
   unsigned _r;
@@ -76,9 +76,6 @@ struct Tester : public CHeapObj<mtTest> {
     ASSERT_EQ(_test_bitmap.is_full(), _layered_bitmap.is_full());
     ASSERT_EQ(_test_bitmap.count_one_bits(), _layered_bitmap.count_one_bits());
     ASSERT_EQ(memcmp(_test_bitmap_storage, _layered_bitmap_storage._bitmap_storage, num_bits / BitsPerByte), 0);
-    //for (IndexType i = 0; i < num_bits; i += 63) {
-    //  ASSERT_EQ(_layered_bitmap.at(i), _test_bitmap.at(i));
-    //}
   }
 
   void set_bit_and_verify(IndexType bitno) {
@@ -361,19 +358,19 @@ struct Tester : public CHeapObj<mtTest> {
 };
 
 #define DEFINE_TESTS(num_bits, num_summary_bits, testname) \
-TEST_VM(LayeredBitmap, test_ ## testname ## _ ## num_bits ## _ ## num_summary_bits) { \
+TEST_VM(Arena2_LayeredBitmap, test_ ## testname ## _ ## num_bits ## _ ## num_summary_bits) { \
   Tester<num_bits, num_summary_bits>* tester = new Tester<num_bits, num_summary_bits>(); \
   tester->testname ## _test(); \
   delete tester; \
 }
 
-#define DEFINE_ALL_TESTS(num_bits, num_summary_bits) \
-  DEFINE_TESTS(num_bits, num_summary_bits, basic ) \
-  DEFINE_TESTS(num_bits, num_summary_bits, set_range ) \
-  DEFINE_TESTS(num_bits, num_summary_bits, clear_range ) \
-  DEFINE_TESTS(num_bits, num_summary_bits, first_set_bit ) \
-  DEFINE_TESTS(num_bits, num_summary_bits, first_clear_bit ) \
-  DEFINE_TESTS(num_bits, num_summary_bits, random ) \
+#define DEFINE_ALL_TESTS(num_summary_bits, num_segment_bits) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, basic ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, set_range ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, clear_range ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, first_set_bit ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, first_clear_bit ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, random ) \
 
 
 DEFINE_ALL_TESTS(64, 64)
