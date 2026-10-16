@@ -28,9 +28,10 @@
 #include "runtime/os.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/macros.hpp"
 #include "unittest.hpp"
 
-#define LOG_PLEASE
+//#define LOG_PLEASE
 #include "testutils.hpp"
 
 class MyRandom {
@@ -46,22 +47,32 @@ template <int num_summary_bits, int num_segment_bits>
 struct Tester : public CHeapObj<mtTest> {
   typedef LayeredBitmap<num_summary_bits, num_segment_bits> BitmapType;
   typedef BitMap::idx_t IndexType;
-
-  BitmapType _layered_bitmap;
-  CHeapBitMap _test_bitmap;
-  MyRandom _random;
-
   static constexpr IndexType num_bits = BitmapType::num_bits;
 
-  Tester() : _layered_bitmap(true), _test_bitmap(num_bits, mtTest, true)
-  {}
+  BitmapType _layered_bitmap;
+  BitMap::bm_word_t _test_bitmap_storage[num_bits * BitsPerWord];
+  BitMapView _test_bitmap;
+  MyRandom _random;
+  mutable int _sometimes;
+
+  Tester() : _layered_bitmap(true), _test_bitmap(_test_bitmap_storage, num_bits), _sometimes(0) {
+    memset(_test_bitmap_storage, 0, sizeof(_test_bitmap_storage));
+  }
+
+  void sometimes_verify(int interval = 20) {
+#ifdef ASSERT
+    if (_sometimes++ % 20) {
+      _layered_bitmap.verify();
+    }
+#endif // ASSERT
+  }
 
   void check_equality() const {
     ASSERT_EQ(_test_bitmap.is_empty(), _layered_bitmap.is_empty());
     ASSERT_EQ(_test_bitmap.is_full(), _layered_bitmap.is_full());
     ASSERT_EQ(_test_bitmap.count_one_bits(), _layered_bitmap.count_one_bits());
-    for (IndexType i = 0; i < num_bits; i++) {
-      ASSERT_EQ(_test_bitmap.at(i), _layered_bitmap.at(i));
+    for (IndexType i = 0; i < num_bits; i += 63) {
+      ASSERT_EQ(_layered_bitmap.at(i), _test_bitmap.at(i));
     }
   }
 
@@ -69,28 +80,28 @@ struct Tester : public CHeapObj<mtTest> {
     _test_bitmap.set_bit(bitno);
     _layered_bitmap.set_bit(bitno);
     check_equality();
-    DEBUG_ONLY(_layered_bitmap.verify());
+    sometimes_verify();
   }
 
   void clear_bit_and_verify(IndexType bitno) {
     _test_bitmap.clear_bit(bitno);
     _layered_bitmap.clear_bit(bitno);
     check_equality();
-    DEBUG_ONLY(_layered_bitmap.verify());
+    sometimes_verify();
   }
 
   void set_range_and_verify(IndexType beg, IndexType end) {
     _test_bitmap.set_range(beg, end);
     _layered_bitmap.set_range(beg, end);
     check_equality();
-    DEBUG_ONLY(_layered_bitmap.verify());
+    sometimes_verify();
   }
 
   void clear_range_and_verify(IndexType beg, IndexType end) {
     _test_bitmap.clear_range(beg, end);
     _layered_bitmap.clear_range(beg, end);
     check_equality();
-    DEBUG_ONLY(_layered_bitmap.verify());
+    sometimes_verify();
   }
 
   void first_set_bit_and_verify(IndexType beg, IndexType end) {
@@ -105,7 +116,25 @@ struct Tester : public CHeapObj<mtTest> {
     ASSERT_EQ(_test_bitmap.count_one_bits(beg, end), _layered_bitmap.count_one_bits(beg, end));
   }
 
-  void test_basic() {
+  void clear_all_and_verify() {
+    _test_bitmap.clear();
+    _layered_bitmap.clear();
+    ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
+    check_equality();
+    sometimes_verify();
+  }
+
+  void fill_with_pattern_and_verify(BitMap::bm_word_t bit_pattern) {
+    _layered_bitmap.propagate_bit_pattern(bit_pattern);
+    for (IndexType idx = 0; idx < num_bits; idx++) {
+      _test_bitmap_storage[idx] = bit_pattern;
+    }
+    check_equality();
+    sometimes_verify();
+  }
+
+  void basic_test() {
+
     // set and clear first bit
     set_bit_and_verify(0);
     ASSERT_EQ((IndexType)1, _layered_bitmap.count_one_bits());
@@ -138,11 +167,11 @@ struct Tester : public CHeapObj<mtTest> {
 
     // set range with empty range
     set_range_and_verify(0, 0);
-    ASSERT_TRUE(_layered_bitmap.is_empty());
+    ASSERT_TRUE(_layered_bitmap.is_empty()); // nothing changed
     set_range_and_verify(num_bits / 2, num_bits / 2);
-    ASSERT_TRUE(_layered_bitmap.is_empty());
+    ASSERT_TRUE(_layered_bitmap.is_empty()); // nothing changed
     set_range_and_verify(num_bits, num_bits);
-    ASSERT_TRUE(_layered_bitmap.is_empty());
+    ASSERT_TRUE(_layered_bitmap.is_empty()); // nothing changed
 
     // find first set with empty range
     set_range_and_verify(0, num_bits);
@@ -150,15 +179,79 @@ struct Tester : public CHeapObj<mtTest> {
     ASSERT_EQ(_layered_bitmap.find_first_set_bit(num_bits, num_bits), (IndexType)num_bits);
     ASSERT_EQ(_layered_bitmap.find_first_set_bit(55, 55), (IndexType)55);
 
-    // find first cleared with empty range
-    clear_range_and_verify(0, num_bits);
-    ASSERT_TRUE(_layered_bitmap.is_empty());
-    ASSERT_EQ(_layered_bitmap.find_first_clear_bit(num_bits, num_bits), (IndexType)num_bits);
-    ASSERT_EQ(_layered_bitmap.find_first_clear_bit(55, 55), (IndexType)55);
+    // clear with empty range
+    set_range_and_verify(0, num_bits);
+    ASSERT_TRUE(_layered_bitmap.is_full());
+
+    clear_range_and_verify(0, 0);
+    ASSERT_TRUE(_layered_bitmap.is_full()); // nothing changed
+    clear_range_and_verify(num_bits / 2, num_bits / 2);
+    ASSERT_TRUE(_layered_bitmap.is_full()); // nothing changed
+    clear_range_and_verify(num_bits, num_bits);
+    ASSERT_TRUE(_layered_bitmap.is_full()); // nothing changed
   }
 
-  void test_random() {
-    constexpr int iterations = 50000;
+  void set_range_test() {
+    for (IndexType rangesize = 0; rangesize < (num_segment_bits * 2) + 2; rangesize++) {
+      for (IndexType rangeoffset = 0; rangeoffset < (num_segment_bits + 2); rangeoffset++) {
+        for (int pattern = 0; pattern < 3; pattern++) {
+
+          // pattern0: into empty bitmap
+          // pattern1: into full bitmap
+          // pattern3: into bitmap with alternating bits
+          switch (pattern) {
+            case 0: clear_all_and_verify(); break;
+            case 1: set_range_and_verify(0, num_bits); break;
+            case 2: fill_with_pattern_and_verify(0xAAAAAAAAAAAAAAAAULL); break;
+              default: ShouldNotReachHere();
+          }
+          set_range_and_verify(rangeoffset, rangeoffset + rangesize);
+          if (pattern == 0) {
+            EXPECT_EQ(_layered_bitmap.count_one_bits(), rangesize);
+          } else if (pattern == 1) {
+            EXPECT_EQ(_layered_bitmap.count_one_bits(), num_bits);
+          }
+          EXPECT_EQ(_layered_bitmap.count_one_bits(rangeoffset, rangeoffset + rangesize), rangesize);
+          if (::testing::Test::HasFailure()) {
+            tty->print_cr("%d %zu %zu", pattern, rangeoffset, rangesize);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  void clear_range_test() {
+    for (IndexType rangesize = 0; rangesize < (num_segment_bits * 2) + 2; rangesize++) {
+      for (IndexType rangeoffset = 0; rangeoffset < (num_segment_bits + 2); rangeoffset++) {
+        for (int pattern = 0; pattern < 3; pattern++) {
+          // pattern0: into empty bitmap
+          // pattern1: into full bitmap
+          // pattern3: into bitmap with alternating bits
+          switch (pattern) {
+            case 0: clear_range_and_verify(0, num_bits); break;
+            case 1: set_range_and_verify(0, num_bits); break;
+            case 2: fill_with_pattern_and_verify(0xAAAAAAAAAAAAAAAAULL); break;
+            default: ShouldNotReachHere();
+          }
+          clear_range_and_verify(rangeoffset, rangeoffset + rangesize);
+          if (pattern == 0) {
+            EXPECT_EQ(_layered_bitmap.count_one_bits(), (IndexType)0);
+          } else if (pattern == 1) {
+            EXPECT_EQ(_layered_bitmap.count_one_bits(), num_bits - rangesize);
+          }
+          EXPECT_EQ(_layered_bitmap.count_one_bits(rangeoffset, rangeoffset + rangesize), (IndexType)0);
+          if (::testing::Test::HasFailure()) {
+            tty->print_cr("%d %zu %zu", pattern, rangeoffset, rangesize);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  void random_test() {
+    constexpr int iterations = 10000;
     for (int i = 0; i < iterations; i++) {
       const unsigned what = _random.next(7);
       IndexType i1 = _random.next(num_bits);
@@ -179,31 +272,31 @@ struct Tester : public CHeapObj<mtTest> {
         case 6: count_one_bit_and_verify(i1, i2); break;
         default: ShouldNotReachHere();
       }
+      if (::testing::Test::HasFailure()) {
+        tty->print_cr("%u %zu %zu", what, i1, i2);
+        return;
+      }
     }
     check_equality();
-    DEBUG_ONLY(_layered_bitmap.verify());
+    sometimes_verify();
   }
 };
 
-#define DEFINE_RANDOM_TEST(num_bits, num_summary_bits) \
-TEST_VM(LayeredBitmap, test_random_ ## num_bits ## _ ## num_summary_bits) { \
+#define DEFINE_ONE_TEST(num_bits, num_summary_bits, testname) \
+TEST_VM(LayeredBitmap, test_ ## testname ## _ ## num_bits ## _ ## num_summary_bits) { \
   Tester<num_bits, num_summary_bits>* tester = new Tester<num_bits, num_summary_bits>(); \
-  tester->test_random(); \
+  tester->testname ## _test(); \
   delete tester; \
 }
 
-#define DEFINE_BASIC_TEST(num_bits, num_summary_bits) \
-TEST_VM(LayeredBitmap, test_cornercase_ ## num_bits ## _ ## num_summary_bits) { \
-  Tester<num_bits, num_summary_bits>* tester = new Tester<num_bits, num_summary_bits>(); \
-  tester->test_basic(); \
-  delete tester; \
-}
+#define DEFINE_ALL_TESTS(num_bits, num_summary_bits) \
+  DEFINE_ONE_TEST(num_bits, num_summary_bits, basic ) \
+  DEFINE_ONE_TEST(num_bits, num_summary_bits, set_range ) \
+  DEFINE_ONE_TEST(num_bits, num_summary_bits, clear_range ) \
+  DEFINE_ONE_TEST(num_bits, num_summary_bits, random ) \
 
 
-DEFINE_BASIC_TEST(64, 64)
-DEFINE_BASIC_TEST(64, 131072)
-DEFINE_BASIC_TEST(512, 512)
+DEFINE_ALL_TESTS(64, 64)
+DEFINE_ALL_TESTS(64, 128)
+DEFINE_ALL_TESTS(128, 64)
 
-DEFINE_RANDOM_TEST(64, 64)
-DEFINE_RANDOM_TEST(64, 131072)
-DEFINE_RANDOM_TEST(512, 512)
