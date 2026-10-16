@@ -82,8 +82,8 @@ private:
   }
   static void verify_index_range_aligned_to_segment_boundaries(IndexType begidx, IndexType endidx) {
     verify_index_range_incl(begidx, endidx);
-    assert(is_aligned(begidx, num_segment_bits), "not a segment boundary (%zu, %zu", begidx, num_segment_bits);
-    assert(is_aligned(endidx, num_segment_bits), "not a segment boundary (%zu, %zu", endidx, num_segment_bits);
+    assert(is_aligned(begidx, num_segment_bits), "not a segment boundary (%zu, %zu)", begidx, num_segment_bits);
+    assert(is_aligned(endidx, num_segment_bits), "not a segment boundary (%zu, %zu)", endidx, num_segment_bits);
   }
   static void verify_segment_index_excl(IndexType segidx) {
     assert(segidx < num_segments, "out of bounds (segidx %zu, num_segments %zu)",
@@ -178,11 +178,10 @@ private:
   // Given a bit index range [begidx, endidx) aligned to segment boundaries,
   // return number of 1 bits in range
   uintx count_one_bits_in_aligned_range(IndexType begidx, IndexType endidx) const {
-    verify_index_range_aligned_to_segment_boundaries(begidx, endidx);
     const Range range_segidx = index_range_aligned_to_segment_index_range(begidx, endidx);
     const uintx from_full = _full_segments_bitmap.count_one_bits(range_segidx.beg, range_segidx.end) * num_segment_bits;
     // count the ones in not-full not-empty segments
-    WordType diff[num_segments];
+    WordType diff[num_summary_words];
     BitMapView tmpbm(diff, num_segments);
     tmpbm.set_from(_nonempty_segments_bitmap); // all segments that are not empty...
     tmpbm.set_difference(_full_segments_bitmap); // but not full.
@@ -255,14 +254,14 @@ private:
 
   // Given an arbitrary bit index range, calls three handler lambdas:
   // - a PrologueBitHandler lambda which is given bit indices of the bits in range preceding the first fully enclosed segment
-  //   =>  void prologueBitHandler(IndexType begidx, IndexType endidx)
+  //   =>  void prologue_bit_handler(IndexType begidx, IndexType endidx)
   // - a FullSegmentsHandler lambda which is given the bit indices of the fully enclosed segments
-  //   =>  void fullSegmentsHandler(IndexType begidx, IndexType endidx)
+  //   =>  void inner_bit_handler(IndexType begidx, IndexType endidx)
   // - a EpilogueBitHandler lambda which is given bit indices of the bits in range following the last fully enclosed segment
   //   =>  void epilogue_bit_handler(IndexType begidx, IndexType endidx)
   // Example: segment size of 64, begidx=18, endidx=544 would call:
-  //          1) prologue_bit_handler(18, 63)
-  //          2) inner_bit_handler(64, 511)
+  //          1) prologue_bit_handler(18, 64)
+  //          2) inner_bit_handler(64, 512)
   //          3) epilogue_bit_handler(512, 544)
   // If any of the prologue/inner/epilogue ranges is empty, the associated handler is not called
   template <typename PrologueBitHandler, typename InnerBitHandler, typename EpilogueBitHandler>
@@ -434,7 +433,7 @@ public:
       return; // bits already cleared, nothing changes
     }
 
-    // set in master bitmap
+    // clear in master bitmap
     _bitmap.clear_range(begidx, endidx);
 
     // adjust summary bitmaps
@@ -499,8 +498,9 @@ public:
     for (IndexType idx = 0; idx < num_words; idx++) {
       _storage->_bitmap_storage[idx] = bit_pattern;
     }
-    const WordType summary_pattern_full = (bit_pattern == SIZE_MAX) ? SIZE_MAX : 0;
-    const WordType summary_pattern_nonempty = (bit_pattern > 0) ? SIZE_MAX : 0;
+    constexpr WordType fullword = right_n_bits(BitsPerWord);
+    const WordType summary_pattern_full = bit_pattern == fullword ? fullword : 0;
+    const WordType summary_pattern_nonempty = bit_pattern > 0 ? fullword : 0;
     for (IndexType idx = 0; idx < num_summary_words; idx++) {
       _storage->_full_segments_bitmap_storage[idx] = summary_pattern_full;
       _storage->_nonempty_segments_bitmap_storage[idx] = summary_pattern_nonempty;
