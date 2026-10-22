@@ -53,6 +53,7 @@ class PredictableRandom {
 public:
   PredictableRandom(unsigned seed) : _r(seed) {}
   PredictableRandom() : _r(default_seed) {}
+  void reset() { _r = default_seed; }
   unsigned next() { _r = os::next_random(_r); return _r; }
   unsigned next(unsigned boundary) { _r = next(); return _r % boundary; }
 };

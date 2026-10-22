@@ -28,7 +28,7 @@
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
 #include "memory/arena/arenaSlabAllocator.hpp"
-#include "utilities/bitMap.hpp"
+#include "utilities/bitMap.inline.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
@@ -36,7 +36,7 @@
 
 #include "unittest.hpp"
 
-//#define LOG_PLEASE
+#define LOG_PLEASE
 #include "testutils.hpp"
 #include "code/vtableStubs.hpp"
 
@@ -81,7 +81,8 @@ public:
       if (slot < _in_use.size()) {
         out[allocated] = index_to_block(slot);
         allocated ++;
-        slot = _in_use.find_first_set_bit(slot);
+        _in_use.set_bit(slot);
+        slot++;
       }
     }
     _last_allocated = allocated;
@@ -93,6 +94,9 @@ public:
 
   int last_allocated() const { return _last_allocated; }
   int last_deallocated() const { return _last_deallocated; }
+  void reset_counters() {
+    _last_allocated = _last_deallocated = 0;
+  }
 
   static const_blockptr_t  index_to_block(int idx) {
     assert(idx >= 0 && idx < num_blocks, "invalid block index");
@@ -106,7 +110,7 @@ public:
 
   // Sets the whole slab as "in use"
   void set_all_in_use() { _in_use.set_range(0, _in_use.size()); }
-  void set_all_free() { _in_use.clear(); }
+  void set_all_free() { _in_use.clear_range(0, _in_use.size()); }
 };
 
 
@@ -131,28 +135,16 @@ class Tester {
 
   // Setup world as if cache were empty and all slabs were in-use by callers
   void set_all_in_use() {
+    _block_cache.flush();
     _slab_allocator.set_all_in_use();
-    _block_cache.reset();
     _in_use.set_range(0, _in_use.size());
   }
 
   // Setup world as if cache were empty and all slabs were free (in slab)
   void set_all_free() {
-    _in_use.clear();
-    _block_cache.reset();
+    _block_cache.flush();
+    _in_use.clear_range(0, _in_use.size());
     _slab_allocator.set_all_free();
-  }
-
-  // Setup world as if all slabs but N were in-use, and those N reside in the cache,
-  // and the cache is full
-  void set_all_in_use_and_cache_full() {
-    set_all_in_use();
-    const_blockptr_t b[cachesize];
-    for (int i = 0; i < cachesize; i++) {
-      b[i] = _slab_allocator.index_to_block(_random.next(SlabAllocatorType::num_blocks));
-    }
-    _block_cache.bulk_deallocate_block(b, cachesize);
-    ASSERT_EQ(_block_cache.count(), cachesize);
   }
 
   template <bool is_true>
@@ -176,6 +168,26 @@ class Tester {
     return get_random_bit<false>(_in_use);
   }
 
+  // Helper function for test_tick_busy:
+  // Keep cache busy by allocating something
+  // (but avoid overflow and underflow, count should not change, and nothing should have been
+  //  allocated/deallocated from the slab)
+  void keep_cache_busy() {
+    _slab_allocator.reset_counters();
+    const int c1 = _block_cache.count();
+    if (c1 > 0) {
+      allocate_from_cache_and_test();
+      deallocate_to_cache_and_test();
+    } else {
+      deallocate_to_cache_and_test();
+      allocate_from_cache_and_test();
+    }
+    const int c2 = _block_cache.count();
+    ASSERT_EQ(c1, c2);
+    ASSERT_EQ(_slab_allocator.last_allocated(), 0);
+    ASSERT_EQ(_slab_allocator.last_deallocated(), 0);
+  }
+
 public:
 
   Tester() :
@@ -184,7 +196,7 @@ public:
     _in_use(SlabAllocatorType::num_blocks, mtTest, true)
   {}
 
-  void allocate_from_cache_and_test() {
+  void allocate_from_cache_and_test(int* p_block_index = nullptr) {
     DEBUG_ONLY(_block_cache.verify_cache();)
     const int c1 = _block_cache.count();
     const const_blockptr_t b = _block_cache.allocate_block();
@@ -258,6 +270,7 @@ public:
 
   void tick_and_test(bool busy_since_last_tick) {
     DEBUG_ONLY(_block_cache.verify_cache();)
+    _slab_allocator.reset_counters();
     const int c1 = _block_cache.count();
     _block_cache.tick();
     const int c2 = _block_cache.count();
@@ -265,7 +278,7 @@ public:
       // We expect the tick to have backed off and only evicted
       // a single item from the cache
       if (c1 > 0) { // non-empty cache
-        ASSERT_EQ(c2, c2 - 1);
+        ASSERT_EQ(c2, c1 - 1);
         ASSERT_EQ(_slab_allocator.last_deallocated(), 1);
       } else { // empty cache
         ASSERT_EQ(c2, 0);
@@ -342,51 +355,43 @@ public:
   void test_bulk_deallocate_nooverflow_hi_to_lo() { test_bulk_deallocate0<false, 1>(); }
   void test_bulk_deallocate_nooverflow_random() { test_bulk_deallocate0<false, 2>(); }
 
-  void test_bulk_deallocate_corner_cases() {
-    set_all_in_use();
-    const_blockptr_t b = _slab_allocator.index_to_block(47);
-    const int c1 = _block_cache.count();
-    bulk_deallocate_to_cache_and_test(&b, 0);
-    const int c2 = _block_cache.count();
-    bulk_deallocate_to_cache_and_test(&b, 1);
-    const int c3 = _block_cache.count();
-    ASSERT_EQ(c2, c1);
-    ASSERT_EQ(c3, c2 + 1);
-    ASSERT_EQ(_slab_allocator.last_deallocated(), 0);
-  }
-
   void test_tick_nonbusy() {
-    set_all_in_use_and_cache_full();
-    // Tick. Cache is not busy so it gets cleared
+    set_all_in_use();
+    // Fill cache
+    for (int i = 0; i < cachesize; i++) {
+      deallocate_to_cache_and_test();
+    }
+    // Tick. Cache is not busy so it should get cleared
     tick_and_test(false);
     ASSERT_EQ(_block_cache.count(), 0);
   }
 
   void test_tick_busy() {
-    // Now tick tick tick until we are empty, then
-    // tick again to test on an empty cache. On busy caches,
-    // the tick only frees one item.
-    set_all_in_use_and_cache_full();
+    set_all_in_use();
     // Now tick tick tick until we are empty, then
     // tick again to test on an empty cache
     int c1 = _block_cache.count();
     while (c1 > 0) {
-      // Keep cache busy by allocating, then releasing, a single block.
-      deallocate_to_cache_and_test();
-      allocate_from_cache_and_test();
+      keep_cache_busy();
       const int c2 = _block_cache.count();
       // Count should be the same, and nothing should have been allocated/deallocated at slab
       ASSERT_EQ(c2, c1);
       ASSERT_EQ(_slab_allocator.last_allocated(), 0);
       ASSERT_EQ(_slab_allocator.last_deallocated(), 0);
       // Now tick
-      _block_cache.tick();
+      tick_and_test(true);
       const int c3 = _block_cache.count();
       // One block should have been evicted
       ASSERT_EQ(c3, c2 - 1);
       ASSERT_EQ(_slab_allocator.last_deallocated(), 1);
       c1 = c3;
     }
+
+    // One tick more, on an empty cache, should not change anything
+    keep_cache_busy();
+    _block_cache.tick();
+    const int c5 = _block_cache.count();
+    ASSERT_EQ(c5, 0);
   }
 
   void test_random() {
@@ -396,18 +401,27 @@ public:
     for (int cycle = 0; cycle < 10000; cycle++) {
       assert(num_in_use >= 0 && num_in_use < SlabAllocatorType::num_blocks, "Sanity");
       const int op_select = _random.next(16);
-      if (op_select < 8 && num_in_use < SlabAllocatorType::num_blocks) {
+      if (op_select < 12 && num_in_use < SlabAllocatorType::num_blocks) {
         allocate_from_cache_and_test();
         num_in_use++;
         did_allocate_since_last_tick = true;
-      } else if (op_select < 13 && num_in_use > 1) {
+      } else if (op_select < 14 && num_in_use > 1) {
         deallocate_to_cache_and_test();
         num_in_use--;
-      } else if (op_select == 14 && num_in_use > 2) {
-        const_blockptr_t arr[cachesize * 2];
-        const int num_blocks = MIN2(num_in_use, (int)_random.next(16));
+      } else if (op_select == 14 && num_in_use > SlabAllocatorType::num_blocks / 2) {
+        const_blockptr_t arr[CacheType::max_blocks_for_bulk_add];
+        const bool odd = _random.next(2) > 0;
+        const int num_blocks = (int)_random.next(odd ? CacheType::max_blocks_for_bulk_add : 4);
+        CHeapBitMap bm2(_in_use.size(), mtTest, false);
+        bm2.set_from(_in_use);
         for (int i = 0; i < num_blocks; i++) {
-          arr[i] = _slab_allocator.index_to_block(get_random_in_use_block_index());
+          const BitMap::idx_t slot = get_random_bit<true>(bm2);
+          if (slot < bm2.size()) {
+            bm2.clear_bit(slot);
+            arr[i] = _slab_allocator.index_to_block((int)slot);
+          } else {
+            break;
+          }
         }
         bulk_deallocate_to_cache_and_test(arr, num_blocks);
         num_in_use -= num_blocks;
@@ -426,25 +440,24 @@ public:
 
 #define CALL_TEST(XXX) test_##XXX()
 
-#define DEFINE_TESTS(szclass, log2cachesize, testname) \
-TEST_VM(Arena2_BlockCache, test_ ## testname ## _ ## szclass ## _ ## log2cachesize) { \
-  Tester<szclass, log2cachesize> tester; \
+#define DEFINE_TESTS(szclass, cachesize, testname) \
+TEST_VM(Arena2_BlockCache, test_ ## testname ## _ ## szclass ## _ ## cachesize) { \
+  Tester<szclass, cachesize> tester; \
   tester.CALL_TEST(testname); \
 }
 
-#define DEFINE_ALL_TESTS(szclass, log2cachesize) \
-  DEFINE_TESTS(szclass, log2cachesize, allocate ) \
-  DEFINE_TESTS(szclass, log2cachesize, deallocate ) \
-  DEFINE_TESTS(szclass, log2cachesize, bulk_deallocate_overflow_lo_to_hi ) \
-  DEFINE_TESTS(szclass, log2cachesize, bulk_deallocate_overflow_hi_to_lo ) \
-  DEFINE_TESTS(szclass, log2cachesize, bulk_deallocate_overflow_random ) \
-  DEFINE_TESTS(szclass, log2cachesize, bulk_deallocate_nooverflow_lo_to_hi ) \
-  DEFINE_TESTS(szclass, log2cachesize, bulk_deallocate_nooverflow_hi_to_lo ) \
-  DEFINE_TESTS(szclass, log2cachesize, bulk_deallocate_nooverflow_random ) \
-  DEFINE_TESTS(szclass, log2cachesize, bulk_deallocate_corner_cases ) \
-  DEFINE_TESTS(szclass, log2cachesize, tick_busy ) \
-  DEFINE_TESTS(szclass, log2cachesize, tick_nonbusy ) \
-  DEFINE_TESTS(szclass, log2cachesize, random )
+#define DEFINE_ALL_TESTS(szclass, cachesize) \
+  DEFINE_TESTS(szclass, cachesize, allocate ) \
+  DEFINE_TESTS(szclass, cachesize, deallocate ) \
+  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_overflow_lo_to_hi ) \
+  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_overflow_hi_to_lo ) \
+  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_overflow_random ) \
+  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_nooverflow_lo_to_hi ) \
+  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_nooverflow_hi_to_lo ) \
+  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_nooverflow_random ) \
+  DEFINE_TESTS(szclass, cachesize, tick_busy ) \
+  DEFINE_TESTS(szclass, cachesize, tick_nonbusy ) \
+  DEFINE_TESTS(szclass, cachesize, random )
 
 DEFINE_ALL_TESTS(256, 15)
 DEFINE_ALL_TESTS(256, 7)
