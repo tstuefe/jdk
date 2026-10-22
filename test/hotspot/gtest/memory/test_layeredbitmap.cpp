@@ -36,15 +36,6 @@
 
 #define VERIFICATION_INTERVAL 3
 
-class MyRandom {
-  unsigned _r;
-public:
-  MyRandom(unsigned seed) : _r(seed) {}
-  MyRandom() : _r(1500000001) {}
-  unsigned next() { _r = os::next_random(_r); return _r; }
-  unsigned next(unsigned boundary) { _r = next(); return _r % boundary; }
-};
-
 template <int num_summary_bits, int num_segment_bits>
 struct Tester : public CHeapObj<mtTest> {
   typedef LayeredBitmap<num_summary_bits, num_segment_bits> BitmapType;
@@ -55,7 +46,7 @@ struct Tester : public CHeapObj<mtTest> {
   BitmapType _layered_bitmap;
   BitMap::bm_word_t _test_bitmap_storage[BitmapType::num_words];
   BitMapView _test_bitmap;
-  MyRandom _random;
+  PredictableRandom _random;
   mutable int _sometimes;
 
   Tester() : _layered_bitmap(&_layered_bitmap_storage, true),

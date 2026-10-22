@@ -47,6 +47,16 @@ public:
 
 };
 
+class PredictableRandom {
+  unsigned _r;
+  static constexpr unsigned default_seed = 1500000001;
+public:
+  PredictableRandom(unsigned seed) : _r(seed) {}
+  PredictableRandom() : _r(default_seed) {}
+  unsigned next() { _r = os::next_random(_r); return _r; }
+  unsigned next(unsigned boundary) { _r = next(); return _r % boundary; }
+};
+
 #define ASSERT_RANGE_IS_MARKED_WITH(p, size, mark)  ASSERT_TRUE(GtestUtils::is_range_marked(p, size, mark))
 #define ASSERT_RANGE_IS_MARKED(p, size)             ASSERT_TRUE(GtestUtils::is_range_marked(p, size))
 #define EXPECT_RANGE_IS_MARKED_WITH(p, size, mark)  EXPECT_TRUE(GtestUtils::is_range_marked(p, size, mark))
