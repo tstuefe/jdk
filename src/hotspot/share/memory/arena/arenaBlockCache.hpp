@@ -86,6 +86,14 @@ public:
     }
   }
 
+  void verify_block_unique(const const_blockptr_t* blocks, int num_blocks) const {
+    for (int i = 1; i < num_blocks; i++) {
+      for (int j = i + 1; j < num_blocks; j++) {
+        assert(blocks[i] != blocks[j], "duplicate block");
+      }
+    }
+  }
+
   template <bool lo_to_hi>
   void verify_block_order(const const_blockptr_t* blocks, int num_blocks) const {
     for (int i = 1; i < num_blocks; i++) {
@@ -194,6 +202,7 @@ public:
       }
       assert(num_fetched > 0 && num_fetched <= to_fetch, "sanity");
       DEBUG_ONLY(verify_block_order<true>(tmp, num_fetched);)
+      DEBUG_ONLY(verify_block_unique(tmp, num_fetched);)
       // The slab allocator gives us the blocks in low-to-high address order. The first one goes to
       // the caller, the rest into the cache (we need to reverse order).
       const_blockptr_t result = tmp[0];
@@ -284,6 +293,7 @@ public:
     const int c = count();
     assert(c >= 0 && c <= cachesize, "Sanity");
     verify_block_order<false>(_hot._blocks, c);
+    verify_block_unique(_hot._blocks, c);
     for (int i = 1; i < cachesize; i++) {
       if (i < c) {
         verify_block(_hot._blocks[i]);

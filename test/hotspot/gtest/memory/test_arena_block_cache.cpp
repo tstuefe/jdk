@@ -81,6 +81,7 @@ public:
       if (slot < _in_use.size()) {
         out[allocated] = index_to_block(slot);
         allocated ++;
+        slot = _in_use.find_first_set_bit(slot);
       }
     }
     _last_allocated = allocated;
