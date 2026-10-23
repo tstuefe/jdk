@@ -74,8 +74,7 @@ public:
 #ifdef ASSERT
   void verify_block(const_blockptr_t block) const {
     assert(block != nullptr, "null");
-    assert((address)block >= _slab_allocator.base() &&
-           (address)block < _slab_allocator.end(), "Block outside of arena heap (" PTR_FORMAT ")", p2i(block));
+    assert(_slab_allocator.is_in_range(block), "Block outside of arena heap (" PTR_FORMAT ")", p2i(block));
     // A block pointer from the arena heap is always aligned to at least the
     // smallest block size, which is 256, so the lowest byte should always be zero
     assert(is_aligned(block, ArenaSizeClassHelpers::min_block_size), "not properly aligned");
@@ -326,6 +325,15 @@ public:
     zero_out_slots(0, cachesize);
     _hot._is_busy = false;
   }
+
+  // Helper function for tests. Iterates through all blocks in the cache, highest-address first
+  template <typename Function>
+  void iterate(Function fun) const {
+    for (int i = 0; i < count(); i++) {
+      fun(_hot._blocks[i]);
+    }
+  }
+
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENABLOCKCACHE_HPP

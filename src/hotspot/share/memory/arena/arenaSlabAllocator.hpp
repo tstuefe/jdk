@@ -29,6 +29,7 @@
 
 #include "memory/allStatic.hpp"
 #include "memory/arena/arenaBlock.hpp"
+#include "utilities/bitMap.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -47,8 +48,13 @@ struct ArenaSlabAllocator {
   // The returned blocks are guaranteed to be ordered by address, low to high.
   virtual int allocate_blocks(size_t szclass, const_blockptr_t blocks[], int num_blocks) = 0;
 
-  virtual address base() const = 0;
-  virtual address end() const = 0;
+  // Helper function for tests.
+  // Returns a bitmap that maps the slab range, one bit per block, blocks in slab marked
+  virtual void get_occupancy_map(BitMap& out) const = 0;
+
+  // returns true if b is in range of this slab
+  virtual bool is_in_range(const_blockptr_t b) const = 0;
+
 };
 
 
