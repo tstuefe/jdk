@@ -36,7 +36,7 @@
 
 #include "unittest.hpp"
 
-#define LOG_PLEASE
+//#define LOG_PLEASE
 #include "testutils.hpp"
 
 
@@ -181,7 +181,7 @@ class AllocationPredictionModel {
   }
 
   // model deallocation of a bunch of blocks, given by a bitmap
-  void model_dellocation(const BitMap& deallocated_blocks) {
+  void model_deallocation(const BitMap& deallocated_blocks) {
     DEBUG_ONLY(verify());
     assert(!_owned_by_cache.intersects(deallocated_blocks), "Sanity");
     assert(!_owned_by_slab.intersects(deallocated_blocks), "Sanity");
@@ -284,17 +284,17 @@ public:
   }
 
   // model deallocation of a single block
-  void model_dellocation(const_blockptr_t block) {
+  void model_deallocation(const_blockptr_t block) {
     DEBUG_ONLY(verify());
     const idx_t idx = _b2i.block_to_index(block);
     assert(_owned_by_caller.at(idx), "Sanity");
     CHeapBitMap tmp(num_blocks, mtTest, true);
     tmp.set_bit(idx);
-    model_dellocation(tmp);
+    model_deallocation(tmp);
   }
 
   // model deallocation of a bunch of blocks
-  void model_bulk_dellocation(const const_blockptr_t block[], int num) {
+  void model_bulk_deallocation(const const_blockptr_t block[], int num) {
     DEBUG_ONLY(verify());
     CHeapBitMap tmp(num_blocks, mtTest, true);
     for (int i = 0; i < num; ++i) {
@@ -302,7 +302,7 @@ public:
       assert(_owned_by_caller.at(idx), "Sanity");
       tmp.set_bit(idx);
     }
-    model_dellocation(tmp);
+    model_deallocation(tmp);
   }
 
   // Model a tick.
@@ -400,7 +400,6 @@ class Tester {
     const int c1 = _block_cache.count();
     if (c1 > 0) {
       const const_blockptr_t b = allocate_from_cache_and_test_expect_success();
-      ASSERT_NE(b, nullptr);
       deallocate_to_cache_and_test(b);
     } else {
       const const_blockptr_t b = _model.get_random_caller_owned_block(_random);
@@ -458,7 +457,7 @@ public:
 
     const const_blockptr_t b = (block == nullptr) ? _model.get_random_caller_owned_block(_random) : block;
     assert(b != nullptr, "no in-use blocks left to deallocate?");
-    _model.model_dellocation(b);
+    _model.model_deallocation(b);
     _block_cache.deallocate_block(b);
 
     reality_test();
@@ -469,7 +468,7 @@ public:
     DEBUG_ONLY(_block_cache.verify_cache();)
     reality_test();
 
-    _model.model_bulk_dellocation(blocks, num);
+    _model.model_bulk_deallocation(blocks, num);
     _block_cache.bulk_deallocate_block(blocks, num);
 
     reality_test();
@@ -646,14 +645,3 @@ DEFINE_ALL_TESTS(256, 4)
 DEFINE_ALL_TESTS(256, 2)
 DEFINE_ALL_TESTS(1024, 7)
 DEFINE_ALL_TESTS(32768, 7)
-
-
-
-
-
-
-
-
-
-
-
