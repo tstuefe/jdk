@@ -56,6 +56,7 @@ public:
   void reset() { _r = default_seed; }
   unsigned next() { _r = os::next_random(_r); return _r; }
   unsigned next(unsigned boundary) { _r = next(); return _r % boundary; }
+  bool tosscoin() { return next(2u) > 0; }
 };
 
 #define ASSERT_RANGE_IS_MARKED_WITH(p, size, mark)  ASSERT_TRUE(GtestUtils::is_range_marked(p, size, mark))
