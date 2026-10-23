@@ -298,8 +298,8 @@ public:
     DEBUG_ONLY(verify());
     CHeapBitMap tmp(num_blocks, mtTest, true);
     for (int i = 0; i < num; ++i) {
-      assert(_owned_by_caller.at(i), "Sanity");
       const idx_t idx = _b2i.block_to_index(block[i]);
+      assert(_owned_by_caller.at(idx), "Sanity");
       tmp.set_bit(idx);
     }
     model_dellocation(tmp);
