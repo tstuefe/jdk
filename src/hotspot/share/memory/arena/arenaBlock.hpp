@@ -109,6 +109,7 @@ public:
       _num_blocks(num_blocks)
   {
     assert(num_blocks > 0, "num_blocks must be positive");
+    assert(is_aligned(_base, szclass), "Base pointer must be aligned to size class: " PTR_FORMAT, p2i(_base));
   }
 
   const_blockptr_t base() const { return _base; }
@@ -137,6 +138,20 @@ public:
     return _base + (block_index * szclass);
   }
 
+  // Given a pointer, not necessarily aligned, that points into this range,
+  // return the index of the containing block
+  int index_of_containing_block(const_address p) const {
+    DEBUG_ONLY(check_contains(p));
+    return block_to_index(start_of_containing_block(p));
+  }
+
+  // Given a pointer, not necessarily aligned, that points into this range,
+  // return the start address of the containing block
+  const_blockptr_t start_of_containing_block(const_address p) const {
+    DEBUG_ONLY(check_contains(p));
+    return align_down(p, szclass);
+  }
+
   int block_to_index(const_blockptr_t b) const {
     DEBUG_ONLY(check_is_valid_block(b));
     return block_to_index_without_assert(b);
@@ -147,9 +162,18 @@ public:
   }
 
 #ifdef ASSERT
+  void check_contains(const_address p) const {
+    assert(contains(p), "Pointer out of range: " PTR_FORMAT, p2i(p));
+  }
   void check_is_valid_block(const_blockptr_t b) const {
-    assert(contains(b), "Block pointer out of range: " PTR_FORMAT, p2i(b));
+    check_contains(b);
     assert(is_aligned(b - _base, szclass), "Block pointer invalid: " PTR_FORMAT, p2i(b));
+  }
+  void check_is_valid_block_index(int block_index) const {
+    assert(is_valid_block_index(block_index), "Block index invalid: %d", block_index);
+  }
+  void check_is_valid_block_number(int num) const {
+    assert(is_valid_block_number(num), "Invalid number of blocks: %d", num);
   }
 #endif
 };

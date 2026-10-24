@@ -28,8 +28,9 @@
 #include "unittest.hpp"
 
 template <size_t szclass>
-static void do_test(uintptr_t base) {
-  const const_blockptr_t fake_address = (const_blockptr_t)base;
+static void do_test() {
+  static constexpr uintptr_t fake_address_i = LP64_ONLY(32 * G) NOT_LP64(G);
+  const const_blockptr_t fake_address = (const_blockptr_t)fake_address_i;
   constexpr int num_blocks = 1024;
   BlockRange<szclass> range(fake_address, num_blocks);
   ASSERT_TRUE(range.is_valid_block_index(0));
@@ -48,14 +49,18 @@ static void do_test(uintptr_t base) {
 
   ASSERT_TRUE(range.contains(fake_address));
   ASSERT_FALSE(range.contains(fake_address - 1));
+
+  const const_address some_inner_pointer = (const_address)fake_address + szclass + szclass + 17;
+  ASSERT_EQ(2, range.index_of_containing_block(some_inner_pointer));
+  ASSERT_EQ(fake_address + szclass + szclass, range.start_of_containing_block(some_inner_pointer));
+
 }
 
-static constexpr uintptr_t fake_address_i = LP64_ONLY(32 * G) NOT_LP64(G);
 
 TEST_VM(Arena2_BlockRange, aligned_base) {
-  do_test<256>(fake_address_i);
+  do_test<256>();
 }
 
 TEST_VM(Arena2_BlockRange, unaligned_base) {
-  do_test<32 * K>(fake_address_i + 256);
+  do_test<32 * K>();
 }
