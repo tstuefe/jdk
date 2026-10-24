@@ -56,7 +56,7 @@ public:
   STATIC_ASSERT(num_prefetch_on_underflow <= cachesize);
   STATIC_ASSERT(num_evict_on_tick_busy <= cachesize);
   STATIC_ASSERT(num_evict_on_tick_nonbusy <= cachesize);
-  STATIC_ASSERT(ArenaSizeClassHelpers::is_valid_standard_size_class(szclass));
+  STATIC_ASSERT(ArenaBlockHelpers::is_valid_standard_size_class(szclass));
 
   struct alignas(DEFAULT_CACHE_LINE_SIZE) {
     // Blocks are ordered on insert, high-to-low
@@ -77,7 +77,7 @@ public:
     assert(_slab_allocator.is_in_range(block), "Block outside of arena heap (" PTR_FORMAT ")", p2i(block));
     // A block pointer from the arena heap is always aligned to at least the
     // smallest block size, which is 256, so the lowest byte should always be zero
-    assert(is_aligned(block, ArenaSizeClassHelpers::min_block_size), "not properly aligned");
+    assert(is_aligned(block, ArenaBlockHelpers::min_block_size), "not properly aligned");
   }
 
   void verify_blocks(const const_blockptr_t* blocks, int num_blocks) const {

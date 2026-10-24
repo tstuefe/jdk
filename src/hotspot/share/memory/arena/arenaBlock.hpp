@@ -39,7 +39,7 @@ typedef const uint8_t* const_blockptr_t;
 // We have 8 standard size classes: 256, 1K, 32K, 64K, ... 1M
 // Anything beyond that is a huge block and var-sized.
 
-struct ArenaSizeClassHelpers : public AllStatic {
+struct ArenaBlockHelpers : public AllStatic {
 
   static constexpr size_t min_block_size = 256;
   static constexpr size_t max_standard_block_size = M;
@@ -93,6 +93,66 @@ struct ArenaSizeClassHelpers : public AllStatic {
 
 };
 
+// Helper class for ranges of uniformly-sized blocks
+template <size_t szclass>
+class BlockRange {
 
+  const_blockptr_t const _base;
+  const_blockptr_t const _end;
+  const int _num_blocks;
+
+public:
+
+  BlockRange(const_blockptr_t base, int num_blocks)
+    : _base(base),
+      _end(base + (num_blocks * szclass)),
+      _num_blocks(num_blocks)
+  {
+    assert(num_blocks > 0, "num_blocks must be positive");
+  }
+
+  const_blockptr_t base() const { return _base; }
+  const_blockptr_t end() const { return _end; }
+  size_t size_in_bytes() const { return _end - _base; }
+  int num_blocks() const { return _num_blocks; }
+
+  bool contains(const_blockptr_t b) const {
+    return b >= _base && b < _end;
+  }
+
+  bool is_valid_block_index(int block_index) const {
+    return block_index >= 0 && block_index < _num_blocks;
+  }
+
+  bool is_valid_block_number(int num_blocks) const {
+    return num_blocks >= 0 && num_blocks <= _num_blocks;
+  }
+
+  const_blockptr_t index_to_block(int block_index) const {
+    assert(is_valid_block_index(block_index), "invalid block index");
+    return index_to_block_without_asserts(block_index);
+  }
+
+  const_blockptr_t index_to_block_without_asserts(int block_index) const {
+    return _base + (block_index * szclass);
+  }
+
+  int block_to_index(const_blockptr_t b) const {
+    DEBUG_ONLY(check_is_valid_block(b));
+    return block_to_index_without_assert(b);
+  }
+
+  int block_to_index_without_assert(const_blockptr_t b) const {
+    return checked_cast<int>(((const_address)b - (const_address)_base) / szclass);
+  }
+
+#ifdef ASSERT
+  void check_is_valid_block(const_blockptr_t b) const {
+    assert(contains(b), "Block pointer out of range: " PTR_FORMAT, p2i(b));
+    assert(is_aligned(b - _base, szclass), "Block pointer invalid: " PTR_FORMAT, p2i(b));
+  }
+#endif
+};
 
 #endif // SHARE_MEMORY_ARENA_ARENABLOCK
+
