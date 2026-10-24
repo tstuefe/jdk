@@ -57,5 +57,5 @@ TEST_VM(Arena2_BlockRange, aligned_base) {
 }
 
 TEST_VM(Arena2_BlockRange, unaligned_base) {
-  do_test<256>(fake_address_i + 256);
+  do_test<32 * K>(fake_address_i + 256);
 }
