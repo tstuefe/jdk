@@ -117,15 +117,23 @@ public:
   size_t size_in_bytes() const { return _end - _base; }
   int num_blocks() const { return _num_blocks; }
 
+  // True if b inside [base, end)
   bool contains(const_blockptr_t b) const {
     return b >= _base && b < _end;
   }
 
+  // True if b inside [base, end]
+  bool contains_incl(const_blockptr_t b) const {
+    return b >= _base && b < _end;
+  }
+
+  // True if block_index inside [baseindex, endindex)
   bool is_valid_block_index(int block_index) const {
     return block_index >= 0 && block_index < _num_blocks;
   }
 
-  bool is_valid_block_number(int num_blocks) const {
+  // True if block_index inside [baseindex, endindex]
+  bool is_valid_block_incl(int num_blocks) const {
     return num_blocks >= 0 && num_blocks <= _num_blocks;
   }
 
@@ -157,6 +165,11 @@ public:
     return block_to_index_without_assert(b);
   }
 
+  int block_to_index_incl(const_blockptr_t b) const {
+    DEBUG_ONLY(check_is_valid_block_incl(b));
+    return block_to_index_without_assert(b);
+  }
+
   int block_to_index_without_assert(const_blockptr_t b) const {
     return checked_cast<int>(((const_address)b - (const_address)_base) / szclass);
   }
@@ -165,15 +178,22 @@ public:
   void check_contains(const_address p) const {
     assert(contains(p), "Pointer out of range: " PTR_FORMAT, p2i(p));
   }
+  void check_contains_incl(const_address p) const {
+    assert(contains_incl(p), "Pointer out of range: " PTR_FORMAT, p2i(p));
+  }
   void check_is_valid_block(const_blockptr_t b) const {
     check_contains(b);
+    assert(is_aligned(b - _base, szclass), "Block pointer invalid: " PTR_FORMAT, p2i(b));
+  }
+  void check_is_valid_block_incl(const_blockptr_t b) const {
+    check_contains_incl(b);
     assert(is_aligned(b - _base, szclass), "Block pointer invalid: " PTR_FORMAT, p2i(b));
   }
   void check_is_valid_block_index(int block_index) const {
     assert(is_valid_block_index(block_index), "Block index invalid: %d", block_index);
   }
-  void check_is_valid_block_number(int num) const {
-    assert(is_valid_block_number(num), "Invalid number of blocks: %d", num);
+  void check_is_valid_block_incl(int num) const {
+    assert(is_valid_block_incl(num), "Invalid number of blocks: %d", num);
   }
 #endif
 };

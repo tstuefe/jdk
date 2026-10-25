@@ -36,10 +36,10 @@ static void do_test() {
   ASSERT_TRUE(range.is_valid_block_index(0));
   ASSERT_TRUE(range.is_valid_block_index(num_blocks - 1));
   ASSERT_FALSE(range.is_valid_block_index(num_blocks));
-  ASSERT_TRUE(range.is_valid_block_number(0));
-  ASSERT_TRUE(range.is_valid_block_number(num_blocks - 1));
-  ASSERT_TRUE(range.is_valid_block_number(num_blocks));
-  ASSERT_FALSE(range.is_valid_block_number(num_blocks + 1));
+  ASSERT_TRUE(range.is_valid_block_incl(0));
+  ASSERT_TRUE(range.is_valid_block_incl(num_blocks - 1));
+  ASSERT_TRUE(range.is_valid_block_incl(num_blocks));
+  ASSERT_FALSE(range.is_valid_block_incl(num_blocks + 1));
 
   ASSERT_EQ(0, range.block_to_index(fake_address));
   ASSERT_EQ(fake_address, range.index_to_block(0));
