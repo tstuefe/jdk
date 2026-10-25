@@ -336,258 +336,260 @@ public:
 
 }; // end AllocationPredictionModel
 
-template <size_t szclass, int cachesize>
-class Tester {
-  typedef AllocationPredictionModel<szclass, cachesize> ModelType;
-  typedef FakeSlabAllocator<szclass> SlabAllocatorType;
-  typedef ArenaBlockCache<szclass, cachesize> CacheType;
+namespace {
+  template <size_t szclass, int cachesize>
+  class Tester {
+    typedef AllocationPredictionModel<szclass, cachesize> ModelType;
+    typedef FakeSlabAllocator<szclass> SlabAllocatorType;
+    typedef ArenaBlockCache<szclass, cachesize> CacheType;
 
-  SlabAllocatorType _slab_allocator;
-  CacheType _block_cache;
-  PredictableRandom _random;
-  BlockRange<szclass> _blockrange;
-  ModelType _model;
+    SlabAllocatorType _slab_allocator;
+    CacheType _block_cache;
+    PredictableRandom _random;
+    BlockRange<szclass> _blockrange;
+    ModelType _model;
 
-  static constexpr int num_blocks = SlabAllocatorType::num_blocks;
+    static constexpr int num_blocks = SlabAllocatorType::num_blocks;
 
-  // Setup world as if cache were empty and all slabs were in-use by callers
-  void set_all_allocated() {
-    _block_cache.flush();
-    _model.init_all_owned_by_caller();
-    _slab_allocator.set_owns_none();
-  }
-
-  // Setup world as if cache were empty and all slabs were free (in slab)
-  void set_all_free() {
-    _block_cache.flush();
-    _model.init_all_owned_by_slab();
-    _slab_allocator.set_owns_all();
-  }
-
-  // Helper function for test_tick_busy:
-  // Keep cache busy by allocating something
-  // (but avoid overflow and underflow, count should not change, and nothing should have been
-  //  allocated/deallocated from the slab)
-  void keep_cache_busy() {
-    const int c1 = _block_cache.count();
-    if (c1 > 0) {
-      const const_blockptr_t b = allocate_from_cache_and_test_expect_success();
-      deallocate_to_cache_and_test(b);
-    } else {
-      const const_blockptr_t b = _model.get_random_caller_owned_block(_random);
-      ASSERT_NE(b, nullptr);
-      deallocate_to_cache_and_test(b);
-      const const_blockptr_t b2 = allocate_from_cache_and_test_expect_success();
-      ASSERT_EQ(b, b2);
+    // Setup world as if cache were empty and all slabs were in-use by callers
+    void set_all_allocated() {
+      _block_cache.flush();
+      _model.init_all_owned_by_caller();
+      _slab_allocator.set_owns_none();
     }
-    const int c2 = _block_cache.count(); // nothing should have changed
-    ASSERT_EQ(c1, c2);
-  }
 
-  void reality_test() const {
-    _model.reality_test(_block_cache);
-    _model.reality_test(_slab_allocator);
-  }
+    // Setup world as if cache were empty and all slabs were free (in slab)
+    void set_all_free() {
+      _block_cache.flush();
+      _model.init_all_owned_by_slab();
+      _slab_allocator.set_owns_all();
+    }
 
-  const_blockptr_t allocate_from_cache() {
-    DEBUG_ONLY(_block_cache.verify_cache();)
-    reality_test();
+    // Helper function for test_tick_busy:
+    // Keep cache busy by allocating something
+    // (but avoid overflow and underflow, count should not change, and nothing should have been
+    //  allocated/deallocated from the slab)
+    void keep_cache_busy() {
+      const int c1 = _block_cache.count();
+      if (c1 > 0) {
+        const const_blockptr_t b = allocate_from_cache_and_test_expect_success();
+        deallocate_to_cache_and_test(b);
+      } else {
+        const const_blockptr_t b = _model.get_random_caller_owned_block(_random);
+        ASSERT_NE(b, nullptr);
+        deallocate_to_cache_and_test(b);
+        const const_blockptr_t b2 = allocate_from_cache_and_test_expect_success();
+        ASSERT_EQ(b, b2);
+      }
+      const int c2 = _block_cache.count(); // nothing should have changed
+      ASSERT_EQ(c1, c2);
+    }
 
-    const const_blockptr_t prediction = _model.model_allocation();
-    const const_blockptr_t b = _block_cache.allocate_block();
-    EXPECT_EQ(prediction, b);
+    void reality_test() const {
+      _model.reality_test(_block_cache);
+      _model.reality_test(_slab_allocator);
+    }
 
-    reality_test();
-    DEBUG_ONLY(_block_cache.verify_cache();)
+    const_blockptr_t allocate_from_cache() {
+      DEBUG_ONLY(_block_cache.verify_cache();)
+      reality_test();
 
-    return b;
-  }
+      const const_blockptr_t prediction = _model.model_allocation();
+      const const_blockptr_t b = _block_cache.allocate_block();
+      EXPECT_EQ(prediction, b);
 
-public:
+      reality_test();
+      DEBUG_ONLY(_block_cache.verify_cache();)
 
-  Tester() :
-    _block_cache(_slab_allocator),
-    _random(),
-    _blockrange(_slab_allocator.base(), num_blocks),
-    _model(_slab_allocator.base())
-  {}
+      return b;
+    }
 
-  const_blockptr_t allocate_from_cache_and_test_expect_success() {
-    const const_blockptr_t b = allocate_from_cache();
-    EXPECT_NE(b, nullptr);
-    return b;
-  }
+  public:
 
-  void allocate_from_cache_and_test_expect_error() {
-    const const_blockptr_t b = allocate_from_cache();
-    ASSERT_EQ(b, nullptr);
-  }
+    Tester() :
+      _block_cache(_slab_allocator),
+      _random(),
+      _blockrange(_slab_allocator.base(), num_blocks),
+      _model(_slab_allocator.base())
+    {}
 
-  void deallocate_to_cache_and_test(const_blockptr_t block = nullptr) {
-    DEBUG_ONLY(_block_cache.verify_cache();)
-    reality_test();
+    const_blockptr_t allocate_from_cache_and_test_expect_success() {
+      const const_blockptr_t b = allocate_from_cache();
+      EXPECT_NE(b, nullptr);
+      return b;
+    }
 
-    const const_blockptr_t b = (block == nullptr) ? _model.get_random_caller_owned_block(_random) : block;
-    assert(b != nullptr, "no in-use blocks left to deallocate?");
-    _model.model_deallocation(b);
-    _block_cache.deallocate_block(b);
+    void allocate_from_cache_and_test_expect_error() {
+      const const_blockptr_t b = allocate_from_cache();
+      ASSERT_EQ(b, nullptr);
+    }
 
-    reality_test();
-    DEBUG_ONLY(_block_cache.verify_cache();)
-  }
+    void deallocate_to_cache_and_test(const_blockptr_t block = nullptr) {
+      DEBUG_ONLY(_block_cache.verify_cache();)
+      reality_test();
 
-  void bulk_deallocate_to_cache_and_test(const_blockptr_t blocks[], int num) {
-    DEBUG_ONLY(_block_cache.verify_cache();)
-    reality_test();
+      const const_blockptr_t b = (block == nullptr) ? _model.get_random_caller_owned_block(_random) : block;
+      assert(b != nullptr, "no in-use blocks left to deallocate?");
+      _model.model_deallocation(b);
+      _block_cache.deallocate_block(b);
 
-    _model.model_bulk_deallocation(blocks, num);
-    _block_cache.bulk_deallocate_block(blocks, num);
+      reality_test();
+      DEBUG_ONLY(_block_cache.verify_cache();)
+    }
 
-    reality_test();
-    DEBUG_ONLY(_block_cache.verify_cache();)
-  }
+    void bulk_deallocate_to_cache_and_test(const_blockptr_t blocks[], int num) {
+      DEBUG_ONLY(_block_cache.verify_cache();)
+      reality_test();
 
-  void tick_and_test() {
-    DEBUG_ONLY(_block_cache.verify_cache();)
-    reality_test();
+      _model.model_bulk_deallocation(blocks, num);
+      _block_cache.bulk_deallocate_block(blocks, num);
 
-    _model.model_tick();
-    _block_cache.tick();
+      reality_test();
+      DEBUG_ONLY(_block_cache.verify_cache();)
+    }
 
-    reality_test();
-    DEBUG_ONLY(_block_cache.verify_cache();)
-  }
+    void tick_and_test() {
+      DEBUG_ONLY(_block_cache.verify_cache();)
+      reality_test();
 
-  ///////////////
+      _model.model_tick();
+      _block_cache.tick();
 
-  void test_allocate() {
-    set_all_free();
+      reality_test();
+      DEBUG_ONLY(_block_cache.verify_cache();)
+    }
 
-    // Allocate till we used up the slab
-    for (int i = 0; i < SlabAllocatorType::num_blocks; i++) {
-      allocate_from_cache_and_test_expect_success();
-      if (::testing::Test::HasFailure()) {
-        return;
+    ///////////////
+
+    void test_allocate() {
+      set_all_free();
+
+      // Allocate till we used up the slab
+      for (int i = 0; i < SlabAllocatorType::num_blocks; i++) {
+        allocate_from_cache_and_test_expect_success();
+        if (::testing::Test::HasFailure()) {
+          return;
+        }
+      }
+      // Allocate from empty slab
+      allocate_from_cache_and_test_expect_error();
+    }
+
+    void test_deallocate() {
+      set_all_allocated();
+      // Deallocate till we returned all blocks to the cache, sequentially, low to high
+      for (int i = 0; i < num_blocks; i++) {
+        deallocate_to_cache_and_test(_blockrange.index_to_block(i));
+        if (::testing::Test::HasFailure()) {
+          return;
+        }
       }
     }
-    // Allocate from empty slab
-    allocate_from_cache_and_test_expect_error();
-  }
 
-  void test_deallocate() {
-    set_all_allocated();
-    // Deallocate till we returned all blocks to the cache, sequentially, low to high
-    for (int i = 0; i < num_blocks; i++) {
-      deallocate_to_cache_and_test(_blockrange.index_to_block(i));
-      if (::testing::Test::HasFailure()) {
-        return;
-      }
-    }
-  }
-
-  // mode=0 => lo->hi, mode=1 hi->lo, mode=2 random
-  template <bool test_overflow, int mode>
-  void test_bulk_deallocate0() {
-    set_all_allocated();
-    // Test bulk deallocate without overflow
-    constexpr int N = test_overflow ?
-      CacheType::max_blocks_for_bulk_add : cachesize;
-    STATIC_ASSERT(!test_overflow || N > cachesize);
-    const_blockptr_t arr[N];
-    switch(mode) {
-      case 0:
-        for (int i = 0; i < N; i++) {
-          arr[i] = _blockrange.index_to_block(i);
+    // mode=0 => lo->hi, mode=1 hi->lo, mode=2 random
+    template <bool test_overflow, int mode>
+    void test_bulk_deallocate0() {
+      set_all_allocated();
+      // Test bulk deallocate without overflow
+      constexpr int N = test_overflow ?
+                          CacheType::max_blocks_for_bulk_add : cachesize;
+      STATIC_ASSERT(!test_overflow || N > cachesize);
+      const_blockptr_t arr[N];
+      switch(mode) {
+        case 0:
+          for (int i = 0; i < N; i++) {
+            arr[i] = _blockrange.index_to_block(i);
+          }
+          break;
+        case 1:
+          for (int i = 0; i < N; i++) {
+            arr[N - i - 1] = _blockrange.index_to_block(i);
+          }
+          break;
+        case 2: {
+          const int n = _model.get_random_caller_owned_blocks(_random, arr, N);
+          ASSERT_EQ(n, N);
         }
         break;
-      case 1:
-        for (int i = 0; i < N; i++) {
-          arr[N - i - 1] = _blockrange.index_to_block(i);
-        }
-        break;
-      case 2: {
-        const int n = _model.get_random_caller_owned_blocks(_random, arr, N);
-        ASSERT_EQ(n, N);
+        default: ShouldNotReachHere();
       }
-        break;
-      default: ShouldNotReachHere();
-    }
-    bulk_deallocate_to_cache_and_test(arr, N);
-  }
-
-  void test_bulk_deallocate_overflow_lo_to_hi() { test_bulk_deallocate0<true, 0>(); }
-  void test_bulk_deallocate_overflow_hi_to_lo() { test_bulk_deallocate0<true, 1>(); }
-  void test_bulk_deallocate_overflow_random() { test_bulk_deallocate0<true, 2>(); }
-  void test_bulk_deallocate_nooverflow_lo_to_hi() { test_bulk_deallocate0<false, 0>(); }
-  void test_bulk_deallocate_nooverflow_hi_to_lo() { test_bulk_deallocate0<false, 1>(); }
-  void test_bulk_deallocate_nooverflow_random() { test_bulk_deallocate0<false, 2>(); }
-
-  void test_tick_nonbusy() {
-    set_all_allocated();
-
-    // Fill cache
-    for (int i = 0; i < cachesize; i++) {
-      deallocate_to_cache_and_test();
+      bulk_deallocate_to_cache_and_test(arr, N);
     }
 
-    // Tick. Cache is not busy so it should get cleared
-    tick_and_test();
-    ASSERT_EQ(_block_cache.count(), 0);
-  }
+    void test_bulk_deallocate_overflow_lo_to_hi() { test_bulk_deallocate0<true, 0>(); }
+    void test_bulk_deallocate_overflow_hi_to_lo() { test_bulk_deallocate0<true, 1>(); }
+    void test_bulk_deallocate_overflow_random() { test_bulk_deallocate0<true, 2>(); }
+    void test_bulk_deallocate_nooverflow_lo_to_hi() { test_bulk_deallocate0<false, 0>(); }
+    void test_bulk_deallocate_nooverflow_hi_to_lo() { test_bulk_deallocate0<false, 1>(); }
+    void test_bulk_deallocate_nooverflow_random() { test_bulk_deallocate0<false, 2>(); }
 
-  void test_tick_busy() {
-    set_all_allocated();
+    void test_tick_nonbusy() {
+      set_all_allocated();
 
-    // Fill cache
-    for (int i = 0; i < cachesize; i++) {
-      deallocate_to_cache_and_test();
+      // Fill cache
+      for (int i = 0; i < cachesize; i++) {
+        deallocate_to_cache_and_test();
+      }
+
+      // Tick. Cache is not busy so it should get cleared
+      tick_and_test();
+      ASSERT_EQ(_block_cache.count(), 0);
     }
 
-    // Now tick tick tick until we are empty, then
-    // tick again to test on an empty cache
-    int c1 = _block_cache.count();
-    while (c1 > 0) {
+    void test_tick_busy() {
+      set_all_allocated();
+
+      // Fill cache
+      for (int i = 0; i < cachesize; i++) {
+        deallocate_to_cache_and_test();
+      }
+
+      // Now tick tick tick until we are empty, then
+      // tick again to test on an empty cache
+      int c1 = _block_cache.count();
+      while (c1 > 0) {
+        keep_cache_busy();
+        tick_and_test();
+        const int c2 = _block_cache.count();
+        // One block should have been evicted
+        ASSERT_EQ(c2, c1 - 1);
+        c1 = c2;
+      }
+
+      // One tick more, on an empty cache, should not change anything
       keep_cache_busy();
       tick_and_test();
-      const int c2 = _block_cache.count();
-      // One block should have been evicted
-      ASSERT_EQ(c2, c1 - 1);
-      c1 = c2;
+      const int c3 = _block_cache.count();
+      ASSERT_EQ(c3, 0);
     }
 
-    // One tick more, on an empty cache, should not change anything
-    keep_cache_busy();
-    tick_and_test();
-    const int c3 = _block_cache.count();
-    ASSERT_EQ(c3, 0);
-  }
-
-  void test_random() {
-    set_all_free();
-    for (int cycle = 0; cycle < 10000; cycle++) {
-      const int op_select = _random.next(16);
-      if (op_select < 12 && _model.num_owned_by_caller() < num_blocks) {
-        allocate_from_cache_and_test_expect_success();
-      } else if (op_select < 14 && _model.num_owned_by_caller() > 0) {
-        deallocate_to_cache_and_test();
-      } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks / 2) {
-        constexpr int max = CacheType::max_blocks_for_bulk_add;
-        const_blockptr_t arr[max];
-        const int limit = _random.tosscoin() ? MIN2(max, 3) : max;
-        const int num = MAX2(1, (int)_random.next(limit));
-        const int n = _model.get_random_caller_owned_blocks(_random, arr, num);
-        assert(n > 0, "Sanity");
-        bulk_deallocate_to_cache_and_test(arr, n);
-      } else {
-        tick_and_test();
-      }
-      if (::testing::Test::HasFailure()) {
-        tty->print_cr("cycle %d op %d", cycle, op_select);
-        return;
+    void test_random() {
+      set_all_free();
+      for (int cycle = 0; cycle < 10000; cycle++) {
+        const int op_select = _random.next(16);
+        if (op_select < 12 && _model.num_owned_by_caller() < num_blocks) {
+          allocate_from_cache_and_test_expect_success();
+        } else if (op_select < 14 && _model.num_owned_by_caller() > 0) {
+          deallocate_to_cache_and_test();
+        } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks / 2) {
+          constexpr int max = CacheType::max_blocks_for_bulk_add;
+          const_blockptr_t arr[max];
+          const int limit = _random.tosscoin() ? MIN2(max, 3) : max;
+          const int num = MAX2(1, (int)_random.next(limit));
+          const int n = _model.get_random_caller_owned_blocks(_random, arr, num);
+          assert(n > 0, "Sanity");
+          bulk_deallocate_to_cache_and_test(arr, n);
+        } else {
+          tick_and_test();
+        }
+        if (::testing::Test::HasFailure()) {
+          tty->print_cr("cycle %d op %d", cycle, op_select);
+          return;
+        }
       }
     }
-  }
-};
+  };
+}
 
 
 #define CALL_TEST(XXX) test_##XXX()

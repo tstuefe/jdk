@@ -53,82 +53,83 @@ TEST(tribool, TriBool) {
   ASSERT_EQ(flags[3].is_default() == true, true) << "should be default";
 }
 
-template <size_t SZ, typename T>
-struct Tester {
-  static void doit() {
-    // test fill_in(value)
-    control_words.fill_in(TriBool());
-    for (size_t i = 0; i < SZ; ++i) {
-      EXPECT_TRUE(control_words[i].is_default());
-    }
-
-    TriBool F = false;
-    control_words.fill_in(F);
-    for (size_t i = 0; i < SZ; ++i) {
-      EXPECT_TRUE(!control_words[i].is_default() && control_words[i] == false);
-    }
-
-    // test fill_in(beg, end)
-    TriBool Vec[4];
-    Vec[0] = TriBool();
-    Vec[1] = TriBool();
-    Vec[2] = true;
-    Vec[3] = false;
-
-    control_words.fill_in(&Vec[0], Vec + 4);
-
-    if (0 < SZ) {
-      EXPECT_TRUE(control_words[0].is_default());
-    }
-
-    if (1 < SZ) {
-      EXPECT_TRUE(control_words[1].is_default());
-    }
-
-    if (2 < SZ) {
-      EXPECT_TRUE(!control_words[2].is_default() && control_words[2] == true);
-    }
-
-    if (3 < SZ) {
-      EXPECT_TRUE(!control_words[3].is_default() && control_words[3] == false);
-    }
-
-    // test assignment
-    for (size_t i = 0; i < SZ; ++i) {
-      control_words[i] = true;
-      EXPECT_TRUE(!control_words[i].is_default() && control_words[i] == true);
-    }
-
-    for (size_t i = 0; i < SZ; ++i) {
-      control_words[i] = false;
-      EXPECT_TRUE(!control_words[i].is_default() && control_words[i] == false);
-    }
-
-    for (size_t i = 0; i < SZ; ++i) {
-      if ((i%2) == 0) {
-        control_words[i] = TriBool(true);
+namespace {
+  template <size_t SZ, typename T>
+  struct Tester {
+    static void doit() {
+      // test fill_in(value)
+      control_words.fill_in(TriBool());
+      for (size_t i = 0; i < SZ; ++i) {
+        EXPECT_TRUE(control_words[i].is_default());
       }
-      else {
-        control_words[i] = TriBool(false);
-      }
-    }
 
-    // test copy constructor(default)
-    copy = control_words;
-    for (size_t i = 0; i < SZ; ++i) {
-      if ((i%2) == 0) {
-        EXPECT_TRUE(!copy[i].is_default() && copy[i] == true)
+      TriBool F = false;
+      control_words.fill_in(F);
+      for (size_t i = 0; i < SZ; ++i) {
+        EXPECT_TRUE(!control_words[i].is_default() && control_words[i] == false);
+      }
+
+      // test fill_in(beg, end)
+      TriBool Vec[4];
+      Vec[0] = TriBool();
+      Vec[1] = TriBool();
+      Vec[2] = true;
+      Vec[3] = false;
+
+      control_words.fill_in(&Vec[0], Vec + 4);
+
+      if (0 < SZ) {
+        EXPECT_TRUE(control_words[0].is_default());
+      }
+
+      if (1 < SZ) {
+        EXPECT_TRUE(control_words[1].is_default());
+      }
+
+      if (2 < SZ) {
+        EXPECT_TRUE(!control_words[2].is_default() && control_words[2] == true);
+      }
+
+      if (3 < SZ) {
+        EXPECT_TRUE(!control_words[3].is_default() && control_words[3] == false);
+      }
+
+      // test assignment
+      for (size_t i = 0; i < SZ; ++i) {
+        control_words[i] = true;
+        EXPECT_TRUE(!control_words[i].is_default() && control_words[i] == true);
+      }
+
+      for (size_t i = 0; i < SZ; ++i) {
+        control_words[i] = false;
+        EXPECT_TRUE(!control_words[i].is_default() && control_words[i] == false);
+      }
+
+      for (size_t i = 0; i < SZ; ++i) {
+        if ((i%2) == 0) {
+          control_words[i] = TriBool(true);
+        }
+        else {
+          control_words[i] = TriBool(false);
+        }
+      }
+
+      // test copy constructor(default)
+      copy = control_words;
+      for (size_t i = 0; i < SZ; ++i) {
+        if ((i%2) == 0) {
+          EXPECT_TRUE(!copy[i].is_default() && copy[i] == true)
                     << "even value must be true.";
-      }
-      else {
-        EXPECT_TRUE(!copy[i].is_default() && copy[i] == false)
+        }
+        else {
+          EXPECT_TRUE(!copy[i].is_default() && copy[i] == false)
                     << "odd value must be false.";
+        }
       }
-    }
 
-    // test const operator[](fastpath)
-    const TriBoolArray<SZ, T>& cref = control_words;
-    for (size_t i = 0; i < SZ; ++i) {
+      // test const operator[](fastpath)
+      const TriBoolArray<SZ, T>& cref = control_words;
+      for (size_t i = 0; i < SZ; ++i) {
         if ((i%2) == 0) {
           EXPECT_TRUE(!cref[i].is_default() && cref[i] == true)
                       << "even value must be true.";
@@ -137,17 +138,18 @@ struct Tester {
           EXPECT_TRUE(!cref[i].is_default() && cref[i] == false)
                       << "odd value must be false.";
         }
+      }
+
+      EXPECT_GE(sizeof(control_words) * 8, (2 * SZ)) << "allocated too less";
+      EXPECT_LE(sizeof(control_words), (((2 * SZ) / (sizeof(T) * 8) + 1) * sizeof(T)))
+            << "allocated too much";
     }
 
-    EXPECT_GE(sizeof(control_words) * 8, (2 * SZ)) << "allocated too less";
-    EXPECT_LE(sizeof(control_words), (((2 * SZ) / (sizeof(T) * 8) + 1) * sizeof(T)))
-            << "allocated too much";
-  }
-
-  // because doit probably can't allocate jumbo arrays on stack, use static members
-  static TriBoolArray<SZ, T> control_words;
-  static TriBoolArray<SZ, T> copy;
-};
+    // because doit probably can't allocate jumbo arrays on stack, use static members
+    static TriBoolArray<SZ, T> control_words;
+    static TriBoolArray<SZ, T> copy;
+  };
+}
 
 template<size_t SZ, typename T>
 TriBoolArray<SZ, T> Tester<SZ, T>::control_words;

@@ -325,13 +325,13 @@ private:
   template <typename Function>
   void iterate_bit_runs(IndexType begidx, IndexType endidx, Function foo) const {
     verify_index_range_incl(begidx, endidx);
-    IndexType idx = 0, idx2 = 0;
+    IndexType idx = begidx, idx2 = idx;
     bool what = false;
     while (idx != endidx) {
       idx = what ? find_first_set_bit(idx2, endidx) :
                    find_first_clear_bit(idx2, endidx);
       if (idx > idx2) {
-        if (!foo(begidx, idx, what)) {
+        if (!foo(idx2, idx, !what)) {
           return;
         }
       }
