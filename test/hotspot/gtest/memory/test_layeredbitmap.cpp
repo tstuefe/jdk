@@ -69,57 +69,86 @@ struct Tester : public CHeapObj<mtTest> {
     ASSERT_EQ(memcmp(_test_bitmap_storage, _layered_bitmap_storage._bitmap_storage, num_bits / BitsPerByte), 0);
   }
 
-  void set_bit_and_verify(IndexType bitno) {
-    _test_bitmap.set_bit(bitno);
-    _layered_bitmap.set_bit(bitno);
-    check_equality();
-    sometimes_verify();
+  void reset() {
+    _layered_bitmap.clear_range(0, num_bits);
+    _test_bitmap.clear_range(0, num_bits);
+    _random.reset();
   }
 
-  void clear_bit_and_verify(IndexType bitno) {
-    _test_bitmap.clear_bit(bitno);
-    _layered_bitmap.clear_bit(bitno);
-    check_equality();
-    sometimes_verify();
+#define POST_CHECK \
+    check_equality(); \
+    sometimes_verify(); \
+
+#define VOID_XXX_AND_VERIFY_0(function) \
+  void function ## _and_verify() { \
+    _layered_bitmap.function(); \
+    _test_bitmap.function(); \
+    POST_CHECK \
   }
 
-  void set_range_and_verify(IndexType beg, IndexType end) {
-    _test_bitmap.set_range(beg, end);
-    _layered_bitmap.set_range(beg, end);
-    check_equality();
-    sometimes_verify();
+#define VOID_XXX_AND_VERIFY_1(function, ArgType, arg) \
+  void function ## _and_verify(ArgType arg) { \
+    _layered_bitmap.function(arg); \
+    _test_bitmap.function(arg); \
+    POST_CHECK \
   }
 
-  void clear_range_and_verify(IndexType beg, IndexType end) {
-    _test_bitmap.clear_range(beg, end);
-    _layered_bitmap.clear_range(beg, end);
-    check_equality();
-    sometimes_verify();
+#define VOID_XXX_AND_VERIFY_2(function, ArgType1, arg1, ArgType2, arg2) \
+  void function ## _and_verify(ArgType1 arg1, ArgType2 arg2) { \
+    _layered_bitmap.function(arg1, arg2); \
+    _test_bitmap.function(arg1, arg2); \
+    POST_CHECK \
   }
 
-  IndexType first_set_bit_and_verify(IndexType beg, IndexType end) {
-    const IndexType idx = _layered_bitmap.find_first_set_bit(beg, end);
-    EXPECT_EQ(idx, _test_bitmap.find_first_set_bit(beg, end));
-    return idx;
+#define NONVOID_XXX_AND_VERIFY_0(function, ReturnType) \
+  ReturnType function ## _and_verify() { \
+    const ReturnType v1 = _layered_bitmap.function(); \
+    const ReturnType v2 = _test_bitmap.function(); \
+    EXPECT_EQ(v1, v2); \
+    POST_CHECK \
+    return v1; \
   }
 
-  IndexType first_clear_bit_and_verify(IndexType beg, IndexType end) {
-    const IndexType idx = _layered_bitmap.find_first_clear_bit(beg, end);
-    EXPECT_EQ(idx, _test_bitmap.find_first_clear_bit(beg, end));
-    return idx;
+#define NONVOID_XXX_AND_VERIFY_1(function, ReturnType, ArgType, arg) \
+  ReturnType function ## _and_verify(ArgType arg) { \
+    const ReturnType v1 = _layered_bitmap.function(arg); \
+    const ReturnType v2 = _test_bitmap.function(arg); \
+    EXPECT_EQ(v1, v2); \
+    POST_CHECK \
+    return v1; \
   }
 
-  void count_one_bit_and_verify(IndexType beg, IndexType end) {
-    ASSERT_EQ(_test_bitmap.count_one_bits(beg, end), _layered_bitmap.count_one_bits(beg, end));
+#define NONVOID_XXX_AND_VERIFY_2(function, ReturnType, ArgType1, arg1, ArgType2, arg2) \
+  ReturnType function ## _and_verify(ArgType1 arg1, ArgType2 arg2) { \
+    const ReturnType v1 = _layered_bitmap.function(arg1, arg2); \
+    const ReturnType v2 = _test_bitmap.function(arg1, arg2); \
+    EXPECT_EQ(v1, v2); \
+    POST_CHECK \
+    return v1; \
   }
 
-  void clear_all_and_verify() {
-    _test_bitmap.clear();
-    _layered_bitmap.clear();
-    ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
-    check_equality();
-    sometimes_verify();
-  }
+  VOID_XXX_AND_VERIFY_1(set_bit, IndexType, bitno);
+  VOID_XXX_AND_VERIFY_1(clear_bit, IndexType, bitno);
+  VOID_XXX_AND_VERIFY_2(set_range, IndexType, beg, IndexType, end);
+  VOID_XXX_AND_VERIFY_2(clear_range, IndexType, beg, IndexType, end);
+
+  NONVOID_XXX_AND_VERIFY_2(find_first_set_bit, IndexType, IndexType, beg, IndexType, end);
+  NONVOID_XXX_AND_VERIFY_2(find_first_clear_bit, IndexType, IndexType, beg, IndexType, end);
+  NONVOID_XXX_AND_VERIFY_2(count_one_bits, IndexType, IndexType, beg, IndexType, end);
+
+  NONVOID_XXX_AND_VERIFY_1(at, bool, IndexType, idx);
+
+  VOID_XXX_AND_VERIFY_0(clear);
+  NONVOID_XXX_AND_VERIFY_0(is_empty, bool);
+  NONVOID_XXX_AND_VERIFY_0(is_full, bool);
+
+  NONVOID_XXX_AND_VERIFY_1(is_same, bool, const BitMap&, other);
+  NONVOID_XXX_AND_VERIFY_1(set_union_with_result, bool, const BitMap&, other);
+  NONVOID_XXX_AND_VERIFY_1(set_difference_with_result, bool, const BitMap&, other);
+  NONVOID_XXX_AND_VERIFY_1(set_intersection_with_result, bool, const BitMap&, other);
+  NONVOID_XXX_AND_VERIFY_1(contains, bool, const BitMap&, other);
+  NONVOID_XXX_AND_VERIFY_1(intersects, bool, const BitMap&, other);
+  VOID_XXX_AND_VERIFY_1(set_from, const BitMap&, other);
 
   void fill_with_pattern_and_verify(BitMap::bm_word_t bit_pattern) {
     _layered_bitmap.propagate_bit_pattern(bit_pattern);
@@ -190,19 +219,19 @@ struct Tester : public CHeapObj<mtTest> {
     ASSERT_TRUE(_layered_bitmap.is_full()); // nothing changed
   }
 
-  void first_set_bit_test(IndexType startidx, IndexType begidx, IndexType endidx) {
+  void first_set_bit_test_helper(IndexType startidx, IndexType begidx, IndexType endidx) {
     const bool empty = begidx == endidx;
-    ASSERT_EQ(first_set_bit_and_verify(startidx, endidx), begidx);
-    ASSERT_EQ(first_set_bit_and_verify(startidx, num_bits), empty ? num_bits : begidx);
+    ASSERT_EQ(find_first_set_bit_and_verify(startidx, endidx), begidx);
+    ASSERT_EQ(find_first_set_bit_and_verify(startidx, num_bits), empty ? num_bits : begidx);
   }
 
   void first_set_bit_test(IndexType begidx, IndexType endidx) {
-    clear_all_and_verify();
+    clear_and_verify();
     for (IndexType begidx_0 = begidx; begidx_0 <= endidx; begidx_0++) {
       for (IndexType endidx_0 = begidx_0; endidx_0 <= endidx; endidx_0++) {
         set_range_and_verify(begidx_0, endidx_0);
-        first_set_bit_test(0, begidx_0, endidx_0);
-        first_set_bit_test(begidx_0 / 3, begidx_0, endidx_0);
+        first_set_bit_test_helper(0, begidx_0, endidx_0);
+        first_set_bit_test_helper(begidx_0 / 3, begidx_0, endidx_0);
         clear_range_and_verify(begidx_0, endidx_0);
         if (::testing::Test::HasFailure()) {
           tty->print_cr("%zu %zu", begidx_0, endidx_0);
@@ -217,10 +246,10 @@ struct Tester : public CHeapObj<mtTest> {
     first_set_bit_test(num_bits - num_segment_bits * 2, num_bits);
   }
 
-  void first_clear_bit_test(IndexType startidx, IndexType begidx, IndexType endidx) {
+  void first_clear_bit_test_helper(IndexType startidx, IndexType begidx, IndexType endidx) {
     const bool empty = begidx == endidx;
-    ASSERT_EQ(first_clear_bit_and_verify(startidx, endidx), begidx);
-    ASSERT_EQ(first_clear_bit_and_verify(startidx, num_bits), empty ? num_bits : begidx);
+    ASSERT_EQ(find_first_clear_bit_and_verify(startidx, endidx), begidx);
+    ASSERT_EQ(find_first_clear_bit_and_verify(startidx, num_bits), empty ? num_bits : begidx);
   }
 
   void first_clear_bit_test(IndexType begidx, IndexType endidx) {
@@ -228,8 +257,8 @@ struct Tester : public CHeapObj<mtTest> {
     for (IndexType begidx_0 = begidx; begidx_0 <= endidx; begidx_0++) {
       for (IndexType endidx_0 = begidx_0; endidx_0 <= endidx; endidx_0++) {
         clear_range_and_verify(begidx_0, endidx_0);
-        first_clear_bit_test(0, begidx_0, endidx_0);
-        first_clear_bit_test(begidx_0 / 3, begidx_0, endidx_0);
+        first_clear_bit_test_helper(0, begidx_0, endidx_0);
+        first_clear_bit_test_helper(begidx_0 / 3, begidx_0, endidx_0);
         set_range_and_verify(begidx_0, endidx_0);
         if (::testing::Test::HasFailure()) {
           tty->print_cr("%zu %zu", begidx_0, endidx_0);
@@ -253,7 +282,7 @@ struct Tester : public CHeapObj<mtTest> {
           // pattern1: into full bitmap
           // pattern2: into bitmap with alternating bits
           switch (pattern) {
-            case 0: clear_all_and_verify(); break;
+            case 0: clear_and_verify(); break;
             case 1: set_range_and_verify(0, num_bits); break;
             case 2: fill_with_pattern_and_verify(0xAAAAAAAAAAAAAAAAULL); break;
             default: ShouldNotReachHere();
@@ -279,7 +308,7 @@ struct Tester : public CHeapObj<mtTest> {
     set_range_test(num_bits - 2 * num_segment_bits, num_bits);
   }
 
-  void clear_range_test(IndexType begidx, IndexType endidx) {
+  void clear_range_test_helper(IndexType begidx, IndexType endidx) {
     for (IndexType begidx_0 = begidx; begidx_0 <= endidx; begidx_0++) {
       for (IndexType endidx_0 = begidx_0; endidx_0 <= endidx; endidx_0++) {
         const IndexType rangesize = endidx_0 - begidx_0;
@@ -310,8 +339,117 @@ struct Tester : public CHeapObj<mtTest> {
   }
 
   void clear_range_test() {
-    clear_range_test(0, 2 * num_segment_bits);
-    clear_range_test(num_bits - 2 * num_segment_bits, num_bits);
+    clear_range_test_helper(0, 2 * num_segment_bits);
+    clear_range_test_helper(num_bits - 2 * num_segment_bits, num_bits);
+  }
+
+  void convert_to_flat_bitmap_test() const {
+    CHeapBitMap tmp(num_bits, mtTest, false);
+    _layered_bitmap.convert_to_flat_bitmap(tmp);
+    ASSERT_TRUE(_layered_bitmap.is_same(tmp));
+    ASSERT_TRUE(_test_bitmap.is_same(tmp));
+  }
+
+  void set_from_test() {
+    // test conversion from/to bitmap, and is_same
+    CHeapBitMap tmp(num_bits, mtTest, false);
+    for (IndexType idx = 0; idx < num_bits; idx++) {
+      tmp.at_put(idx, _random.tosscoin());
+    }
+    set_from_and_verify(tmp);
+
+    CHeapBitMap tmp2(num_bits, mtTest, false);
+    _layered_bitmap.convert_to_flat_bitmap(tmp2);
+    ASSERT_TRUE(tmp.is_same(tmp2));
+    ASSERT_TRUE(_layered_bitmap.is_same(tmp));
+
+    tmp.clear();
+    clear_and_verify();
+    ASSERT_TRUE(_layered_bitmap.is_same(tmp));
+
+    set_bit_and_verify(0);
+    ASSERT_FALSE(_layered_bitmap.is_same(tmp));
+  }
+
+  void set_union_test() {
+    constexpr IndexType some_idx = num_bits / 2 + 3;
+    CHeapBitMap tmp(num_bits, mtTest, true);
+    tmp.set_bit(some_idx);
+
+    set_range_and_verify(0, num_bits);
+    clear_bit_and_verify(some_idx);
+    ASSERT_FALSE(is_full_and_verify());
+
+    const bool changed = set_union_with_result_and_verify(tmp);
+    ASSERT_TRUE(changed);
+    ASSERT_TRUE(is_full_and_verify());
+
+    const bool changed2 = set_union_with_result_and_verify(tmp);
+    ASSERT_FALSE(changed2);
+    ASSERT_TRUE(is_full_and_verify());
+  }
+
+  void set_difference_test() {
+    constexpr IndexType some_idx = num_bits / 2 + 3;
+    CHeapBitMap tmp(num_bits, mtTest, true);
+    tmp.set_bit(some_idx);
+
+    set_range_and_verify(0, num_bits);
+    ASSERT_TRUE(is_full_and_verify());
+
+    const bool changed = set_difference_with_result_and_verify(tmp);
+    ASSERT_TRUE(changed);
+    ASSERT_FALSE(is_full_and_verify());
+    ASSERT_FALSE(at_and_verify(some_idx));
+
+    const bool changed2 = set_difference_with_result_and_verify(tmp);
+    ASSERT_FALSE(changed2);
+    ASSERT_FALSE(is_full_and_verify());
+  }
+
+  void set_intersection_test() {
+    constexpr IndexType some_idx = num_bits / 2 + 3;
+    CHeapBitMap tmp(num_bits, mtTest, true);
+    tmp.set_range(some_idx, num_bits);
+
+    set_range_and_verify(0, some_idx + 3);
+    ASSERT_FALSE(is_full_and_verify());
+
+    const bool changed = set_intersection_with_result_and_verify(tmp);
+    ASSERT_TRUE(changed);
+    ASSERT_FALSE(is_full_and_verify());
+    const IndexType idx1 = find_first_set_bit_and_verify(0, num_bits);
+    const IndexType idx2 = find_first_clear_bit_and_verify(idx1, num_bits);
+    ASSERT_EQ(idx1, some_idx);
+    ASSERT_EQ(idx2, some_idx + 3);
+
+    const bool changed2 = set_intersection_with_result_and_verify(tmp);
+    ASSERT_FALSE(changed2);
+  }
+
+  void contains_test() {
+    constexpr IndexType some_idx = num_bits / 2 + 3;
+    CHeapBitMap tmp(num_bits, mtTest, true);
+    tmp.set_range(some_idx, num_bits);
+    clear_and_verify();
+    ASSERT_FALSE(contains_and_verify(tmp));
+    set_range_and_verify(0, num_bits - 1);
+    ASSERT_FALSE(contains_and_verify(tmp));
+    set_bit_and_verify(num_bits - 1);
+    ASSERT_TRUE(contains_and_verify(tmp));
+  }
+
+  void intersects_test() {
+    constexpr IndexType some_idx = num_bits / 2 + 3;
+    CHeapBitMap tmp(num_bits, mtTest, true);
+    tmp.set_range(some_idx, num_bits);
+    clear_and_verify();
+    ASSERT_FALSE(intersects_and_verify(tmp));
+    set_bit_and_verify(some_idx);
+    ASSERT_TRUE(intersects_and_verify(tmp));
+    clear_and_verify();
+    set_range_and_verify(0, some_idx);
+    ASSERT_FALSE(intersects_and_verify(tmp));
   }
 
   void random_test() {
@@ -333,9 +471,9 @@ struct Tester : public CHeapObj<mtTest> {
         case 1: clear_bit_and_verify(begidx); break;
         case 2: set_range_and_verify(begidx, endidx); break;
         case 3: clear_range_and_verify(begidx, endidx); break;
-        case 4: first_set_bit_and_verify(begidx, endidx); break;
-        case 5: first_clear_bit_and_verify(begidx, endidx); break;
-        case 6: count_one_bit_and_verify(begidx, endidx); break;
+        case 4: find_first_set_bit_and_verify(begidx, endidx); break;
+        case 5: find_first_clear_bit_and_verify(begidx, endidx); break;
+        case 6: count_one_bits_and_verify(begidx, endidx); break;
         default: ShouldNotReachHere();
       }
       if (::testing::Test::HasFailure()) {
@@ -361,6 +499,13 @@ TEST_VM(Arena2_LayeredBitmap, test_ ## testname ## _ ## num_bits ## _ ## num_sum
   DEFINE_TESTS(num_summary_bits, num_segment_bits, clear_range ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, first_set_bit ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, first_clear_bit ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, convert_to_flat_bitmap ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, set_from ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, set_union ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, set_difference ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, set_intersection ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, contains ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, intersects ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, random ) \
 
 

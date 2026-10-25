@@ -319,6 +319,36 @@ private:
     }
   }
 
+  // iterate bit runs
+  // calls bool foo(idx_t beg, idx_t end, bool bitvalue)
+  //            returning false stops the iteration
+  template <typename Function>
+  void iterate_bit_runs(IndexType begidx, IndexType endidx, Function foo) const {
+    verify_index_range_incl(begidx, endidx);
+    IndexType idx = 0, idx2 = 0;
+    bool what = false;
+    while (idx != endidx) {
+      idx = what ? find_first_set_bit(idx2, endidx) :
+                   find_first_clear_bit(idx2, endidx);
+      if (idx > idx2) {
+        if (!foo(begidx, idx, what)) {
+          return;
+        }
+      }
+      idx2 = idx;
+      what = !what;
+    }
+  }
+
+  // called when the bitmap was set from outer values and
+  // we need to recalculate the summaries.
+  void recalculate_summary_bitmaps() {
+    for (IndexType segidx = 0; segidx < num_segments; segidx++) {
+      _full_segments_bitmap.at_put(segidx, segment_is_full(segidx));
+      _nonempty_segments_bitmap.at_put(segidx, !segment_is_empty(segidx));
+    }
+  }
+
 public:
 
   LayeredBitmap(Storage* storage, bool do_clear)
@@ -489,6 +519,64 @@ public:
     return _full_segments_bitmap.is_full();
   }
 
+  // Set operations.
+  void set_union(const BitMap& bits) {
+    (void) set_union_with_result(bits);
+  }
+
+  void set_difference(const BitMap& bits) {
+    (void) set_difference_with_result(bits);
+  }
+
+  void set_intersection(const BitMap& bits) {
+    (void) set_intersection_with_result(bits);
+  }
+
+  // Returns true iff "this" is a superset of "bits".
+  bool contains(const BitMap& bits) const {
+    return _bitmap.contains(bits);
+  }
+
+  // Returns true iff "this and "bits" have a non-empty intersection.
+  bool intersects(const BitMap& bits) const {
+    return _bitmap.intersects(bits);
+  }
+
+  // Returns result of whether this map changed
+  // during the operation
+  bool set_union_with_result(const BitMap& bits) {
+    const bool changed = _bitmap.set_union_with_result(bits);
+    if (changed) {
+      recalculate_summary_bitmaps();
+    }
+    return changed;
+  }
+
+  bool set_difference_with_result(const BitMap& bits) {
+    const bool changed = _bitmap.set_difference_with_result(bits);
+    if (changed) {
+      recalculate_summary_bitmaps();
+    }
+    return changed;
+  }
+
+  bool set_intersection_with_result(const BitMap& bits) {
+    const bool changed = _bitmap.set_intersection_with_result(bits);
+    if (changed) {
+      recalculate_summary_bitmaps();
+    }
+    return changed;
+  }
+
+  void set_from(const BitMap& bits) {
+    _bitmap.set_from(bits);
+    recalculate_summary_bitmaps();
+  }
+
+  bool is_same(const BitMap& bits) const {
+    return _bitmap.is_same(bits);
+  }
+
   void clear() {
     memset(_storage, 0, sizeof(Storage));
   }
@@ -532,6 +620,11 @@ public:
     }
   }
 #endif // ASSERT
+
+  // Convert this bitmap to a flat bitmap.
+  void convert_to_flat_bitmap(BitMap& out) const {
+    out.set_from(_bitmap);
+  }
 
 };
 
