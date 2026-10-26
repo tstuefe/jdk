@@ -199,76 +199,120 @@ private:
     return from_half_full + from_full;
   }
 
+  // Helper function, calls find_X_X_bit on a bitmap
+  template <bool forward, bool set>
+  IndexType find_X_X_bit_in_master_bitmap(IndexType begidx, IndexType endidx) const {
+    if (forward) {
+      if (set) {
+        return _bitmap.find_first_set_bit(begidx, endidx);
+      } else {
+        return _bitmap.find_first_clear_bit(begidx, endidx);
+      }
+    } else {
+      if (set) {
+        return _bitmap.find_last_set_bit(begidx, endidx);
+      } else {
+        return _bitmap.find_last_clear_bit(begidx, endidx);
+      }
+    }
+  }
+
   // Given a bit index range [begidx, endidx) aligned to segment boundaries,
-  // returns the bit index for the first 1 or 0 bit
-  // X=true: find first 1 bit
-  // X=false: find first 0 bit
-  template <bool X>
-  IndexType find_first_X_bit_in_aligned_range(IndexType begidx, IndexType endidx) const {
+  // returns the bit index for the first|last 1|0 bit
+  template <bool forward, bool set>
+  IndexType find_X_X_bit_in_aligned_range(IndexType begidx, IndexType endidx) const {
     verify_index_range_aligned_to_segment_boundaries(begidx, endidx);
     IndexType result = endidx;
     // search in summary first
     const Range range_segidx = index_range_aligned_to_segment_index_range(begidx, endidx);
-    const IndexType segidx = X ? _nonempty_segments_bitmap.find_first_set_bit(range_segidx.beg, range_segidx.end) :
-                                 _full_segments_bitmap.find_first_clear_bit(range_segidx.beg, range_segidx.end);
-    // refine search inside segment
+    // Search the segment index for the first|last 1|0 bit
+    IndexType segidx = 0;
+    if (forward) {
+      if (set) {
+        segidx = _nonempty_segments_bitmap.find_first_set_bit(range_segidx.beg, range_segidx.end);
+      } else {
+        segidx = _full_segments_bitmap.find_first_clear_bit(range_segidx.beg, range_segidx.end);
+      }
+    } else {
+      if (set) {
+        segidx = _nonempty_segments_bitmap.find_last_set_bit(range_segidx.beg, range_segidx.end);
+      } else {
+        segidx = _full_segments_bitmap.find_last_clear_bit(range_segidx.beg, range_segidx.end);
+      }
+    }
     if (segidx < range_segidx.end) {
-      const Range range_idx = segment_index_to_index_range(segidx);
-      result = X ? _bitmap.find_first_set_bit(range_idx.beg, range_idx.end) :
-                _bitmap.find_first_clear_bit(range_idx.beg, range_idx.end);
-      assert(result < range_idx.end, "Summary bitmaps out of sync??"); // we should have found a bit
+      // Now search inside the segment
+      const Range range_idx_aligned = segment_index_to_index_range(segidx);
+      result = find_X_X_bit_in_master_bitmap<forward, set>(range_idx_aligned.beg, range_idx_aligned.end);
+      // We should have found something, since the summary bitmaps say so
+      assert(result < range_idx_aligned.end, "Summary bitmaps out of sync??");
     }
     assert(result <= endidx, "Sanity");
     return result;
   }
 
-  // Helper for find_first_set_bit and find_first_clear_bit
-  // X=true: find first 1 bit
-  // X=false: find first 0 bit
-  template <bool X>
-  IndexType find_first_X_bit(IndexType begidx, IndexType endidx) const {
+  template <bool forward, bool set>
+  IndexType find_X_X_bit(IndexType begidx, IndexType endidx) const {
     verify_index_range_incl(begidx, endidx);
     if (begidx == endidx) {
       return endidx;
     }
-
-    IndexType result = 0;
+    IndexType result = endidx;
     auto outer_search = [this, &result](IndexType idx1, IndexType idx2) {
-      // search not-fully-enclosed segments in the master bitmap directly
-      result = X ? _bitmap.find_first_set_bit(idx1, idx2) :
-                   _bitmap.find_first_clear_bit(idx1, idx2);
-      return result == idx2; // false => found it, stop looking
+      // search outer bits in the master bitmap directly
+      const IndexType idx = find_X_X_bit_in_master_bitmap<forward, set>(idx1, idx2);
+      if (idx < idx2) {
+        result = idx;
+        return false; // stop looking
+      }
+      return true;
     };
-
     auto inner_search = [this, &result](IndexType idx1, IndexType idx2) {
-      // The inner search will use the summary bitmaps
-      result = find_first_X_bit_in_aligned_range<X>(idx1, idx2);
-      return result == idx2; // false => found it, stop looking
+      const IndexType idx = find_X_X_bit_in_aligned_range<forward, set>(idx1, idx2);
+      if (idx < idx2) {
+        result = idx;
+        return false; // stop looking
+      }
+      return true;
     };
 
-    process_index_range_until(begidx, endidx,
-              outer_search, inner_search, outer_search);
+    if (forward) {
+      process_index_range_forward(begidx, endidx, outer_search, inner_search);
+    } else {
+      process_index_range_backward(begidx, endidx, outer_search, inner_search);
+    }
 
     return result;
   }
 
-  // Given an arbitrary bit index range, calls three handler lambdas:
-  // - a PrologueBitHandler lambda which is given bit indices of the bits in range preceding the first fully enclosed segment
-  //   =>  void prologue_bit_handler(IndexType begidx, IndexType endidx)
-  // - a FullSegmentsHandler lambda which is given the bit indices of the fully enclosed segments
-  //   =>  void inner_bit_handler(IndexType begidx, IndexType endidx)
-  // - a EpilogueBitHandler lambda which is given bit indices of the bits in range following the last fully enclosed segment
-  //   =>  void epilogue_bit_handler(IndexType begidx, IndexType endidx)
-  // Example: segment size of 64, begidx=18, endidx=544 would call:
-  //          1) prologue_bit_handler(18, 64)
-  //          2) inner_bit_handler(64, 512)
-  //          3) epilogue_bit_handler(512, 544)
-  // If any of the prologue/inner/epilogue ranges is empty, the associated handler is not called
-  template <typename PrologueBitHandler, typename InnerBitHandler, typename EpilogueBitHandler>
+  // Given an arbitrary bit index range, and two BitsHandler lambdas (outer_bits_handler, inner_bits_handler),
+  // calls them up to three times.
+  //
+  // The lambdas have the format:
+  // bool foo(idx_t beg, idx_t end);
+  //
+  // If forward=true, the function calls:
+  // 1) the outer_bits_handler for bit range preceding the first segment-aligned bit index
+  // 2) the inner_bits_handler for bits from the first to the last segment-aligned bit indexes
+  // 3) the outer_bits_handler again for bits following the last segment-aligned bit
+  //
+  // If forward=false, the order is reversed.
+  //
+  // The handlers are not called for empty ranges.
+  //
+  // A handler returns true to continue with the next handler, false to abort the sequence.
+  //
+  // Example: segment size of 64, begidx=18, endidx=544, forward=true would call:
+  //          1) outer_bits_handler(18, 64)
+  //          2) inner_bits_handler(64, 512)
+  //          3) outer_bits_handler(512, 544)
+  //
+  // Example: segment size of 64, begidx=18, endidx=20, forward=false would call:
+  //          3) outer_bits_handler(18, 20)
+  template <typename OuterBitsHandler, typename InnerBitsHandler, bool forward>
   static void process_index_range(IndexType begidx, IndexType endidx,
-                                  PrologueBitHandler prologue_bit_handler,
-                                  InnerBitHandler inner_bit_handler,
-                                  EpilogueBitHandler epilogue_bit_handler)
+                                  OuterBitsHandler outer_bits_handler,
+                                  InnerBitsHandler inner_bits_handler)
   {
     verify_index_range_incl(begidx, endidx);
     if (begidx == endidx) {
@@ -277,67 +321,41 @@ private:
     const IndexType begidx_aligned = index_align_up_segment_start(begidx);
     const IndexType endidx_aligned = index_align_down_segment_start(endidx);
     if (begidx_aligned > endidx_aligned) { // same segment
-      prologue_bit_handler(begidx, endidx);
+      outer_bits_handler(begidx, endidx);
     } else {
-      if (begidx < begidx_aligned) {
-        prologue_bit_handler(begidx, begidx_aligned);
+      const bool have_prologue_bits = begidx < begidx_aligned;
+      const bool have_inner_bits = begidx_aligned < endidx_aligned;
+      const bool have_epilogue_bits = endidx_aligned < endidx;
+      if (forward && have_prologue_bits) {
+        if (!outer_bits_handler(begidx, begidx_aligned)) return;
       }
-      if (begidx_aligned < endidx_aligned) {
-        inner_bit_handler(begidx_aligned, endidx_aligned);
+      if (!forward && have_epilogue_bits) {
+        if (!outer_bits_handler(endidx_aligned, endidx)) return;
       }
-      if (endidx_aligned < endidx) {
-        epilogue_bit_handler(endidx_aligned, endidx);
+      if (have_inner_bits) {
+        if (!inner_bits_handler(begidx_aligned, endidx_aligned)) return;
+      }
+      if (forward && have_epilogue_bits) {
+        if (!outer_bits_handler(endidx_aligned, endidx)) return;
+      }
+      if (!forward && have_prologue_bits) {
+        if (!outer_bits_handler(begidx, begidx_aligned)) return;
       }
     }
   }
 
-  // Same as process_index_range, but the handlers return a boolean; returning false stops the invocation sequence.
-  template <typename PrologueBitHandler, typename InnerBitHandler, typename EpilogueBitHandler>
-  static void process_index_range_until(IndexType begidx, IndexType endidx,
-                                        PrologueBitHandler prologue_bit_handler,
-                                        InnerBitHandler inner_bit_handler,
-                                        EpilogueBitHandler epilogue_bit_handler)
-  {
-    verify_index_range_incl(begidx, endidx);
-    if (begidx == endidx) {
-      return;
-    }
-    const IndexType begidx_aligned = index_align_up_segment_start(begidx);
-    const IndexType endidx_aligned = index_align_down_segment_start(endidx);
-    if (begidx_aligned > endidx_aligned) { // same segment
-      if (!prologue_bit_handler(begidx, endidx)) return;
-    } else {
-      if (begidx < begidx_aligned) {
-        if (!prologue_bit_handler(begidx, begidx_aligned)) return;
-      }
-      if (begidx_aligned < endidx_aligned) {
-        if (!inner_bit_handler(begidx_aligned, endidx_aligned)) return;
-      }
-      if (endidx_aligned < endidx) {
-        if (!epilogue_bit_handler(endidx_aligned, endidx)) return;
-      }
-    }
+  template <typename OuterBitsHandler, typename InnerBitsHandler>
+  static void process_index_range_forward(IndexType begidx, IndexType endidx,
+                                          OuterBitsHandler outer_bits_handler,
+                                          InnerBitsHandler inner_bits_handler) {
+    process_index_range<OuterBitsHandler, InnerBitsHandler, true>(begidx, endidx, outer_bits_handler, inner_bits_handler);
   }
 
-  // iterate bit runs
-  // calls bool foo(idx_t beg, idx_t end, bool bitvalue)
-  //            returning false stops the iteration
-  template <typename Function>
-  void iterate_bit_runs(IndexType begidx, IndexType endidx, Function foo) const {
-    verify_index_range_incl(begidx, endidx);
-    IndexType idx = begidx, idx2 = idx;
-    bool what = false;
-    while (idx != endidx) {
-      idx = what ? find_first_set_bit(idx2, endidx) :
-                   find_first_clear_bit(idx2, endidx);
-      if (idx > idx2) {
-        if (!foo(idx2, idx, !what)) {
-          return;
-        }
-      }
-      idx2 = idx;
-      what = !what;
-    }
+  template <typename OuterBitsHandler, typename InnerBitsHandler>
+  static void process_index_range_backward(IndexType begidx, IndexType endidx,
+                                           OuterBitsHandler outer_bits_handler,
+                                           InnerBitsHandler inner_bits_handler) {
+    process_index_range<OuterBitsHandler, InnerBitsHandler, false>(begidx, endidx, outer_bits_handler, inner_bits_handler);
   }
 
   // called when the bitmap was set from outer values and
@@ -405,11 +423,19 @@ public:
   }
 
   IndexType find_first_set_bit(IndexType beg, IndexType end) const {
-    return find_first_X_bit<true>(beg, end);
+    return find_X_X_bit<true, true>(beg, end);
   }
 
   IndexType find_first_clear_bit(IndexType beg, IndexType end) const {
-    return find_first_X_bit<false>(beg, end);
+    return find_X_X_bit<true, false>(beg, end);
+  }
+
+  IndexType find_last_set_bit(IndexType beg, IndexType end) const {
+    return find_X_X_bit<false, true>(beg, end);
+  }
+
+  IndexType find_last_clear_bit(IndexType beg, IndexType end) const {
+    return find_X_X_bit<false, false>(beg, end);
   }
 
   // Sets bit range [begidx, endidx)
@@ -427,28 +453,24 @@ public:
     // set in master bitmap
     _bitmap.set_range(begidx, endidx);
 
-    // adjust summary bitmaps
-
-    auto prologue_epilogue_handler = [this](IndexType idx1, IndexType idx2) {
-#ifdef ASSERT
-      const IndexType num_prologue_bits = idx2 - idx1;
-      assert(num_prologue_bits < num_segment_bits && num_prologue_bits > 0, "Sanity");
-#endif
+    // set in summary bitmaps
+    auto outer_bits_handler = [this](IndexType idx1, IndexType) {
       const IndexType segidx = index_to_segment_index(idx1);
       _nonempty_segments_bitmap.set_bit(segidx);
       const bool is_full = segment_is_full(segidx);
       if (is_full) {
         _full_segments_bitmap.set_bit(segidx);
       }
+      return true;
     };
-
-    auto inner_handler = [this](IndexType begidx, IndexType endidx) {
-      const Range range_segidx = index_range_aligned_to_segment_index_range(begidx, endidx);
+    auto inner_bits_handler = [this](IndexType idx1, IndexType idx2) {
+      const Range range_segidx = index_range_aligned_to_segment_index_range(idx1, idx2);
       _nonempty_segments_bitmap.set_range(range_segidx.beg, range_segidx.end);
       _full_segments_bitmap.set_range(range_segidx.beg, range_segidx.end);
+      return true;
     };
 
-    process_index_range(begidx, endidx, prologue_epilogue_handler, inner_handler, prologue_epilogue_handler);
+    process_index_range_forward(begidx, endidx, outer_bits_handler, inner_bits_handler);
   }
 
   // Clears bit range [begidx, endidx)
@@ -466,27 +488,24 @@ public:
     // clear in master bitmap
     _bitmap.clear_range(begidx, endidx);
 
-    // adjust summary bitmaps
-    auto prefix_postfix_handler = [this](IndexType idx1, IndexType) {
+    // clear in summary bitmaps
+    auto outer_bits_handler = [this](IndexType idx1, IndexType) {
       const IndexType segidx = index_to_segment_index(idx1);
       _full_segments_bitmap.clear_bit(segidx);
       const bool is_empty = segment_is_empty(segidx);
       if (is_empty) {
         _nonempty_segments_bitmap.clear_bit(segidx);
       }
+      return true;
     };
-
-    auto inner_handler = [this](IndexType begidx, IndexType endidx) {
-      const Range range_segidx = index_range_aligned_to_segment_index_range(begidx, endidx);
+    auto inner_bits_handler = [this](IndexType idx1, IndexType idx2) {
+      const Range range_segidx = index_range_aligned_to_segment_index_range(idx1, idx2);
       _nonempty_segments_bitmap.clear_range(range_segidx.beg, range_segidx.end);
       _full_segments_bitmap.clear_range(range_segidx.beg, range_segidx.end);
+      return true;
     };
 
-    process_index_range(begidx, endidx,
-       prefix_postfix_handler,
-                       inner_handler,
-                       prefix_postfix_handler);
-
+    process_index_range_forward(begidx, endidx, outer_bits_handler, inner_bits_handler);
   }
 
   bool at(IndexType idx) const {
@@ -496,14 +515,15 @@ public:
   uintx count_one_bits(IndexType begidx, IndexType endidx) const {
     verify_index_range_incl(begidx, endidx);
     uintx result = 0;
-    auto prefix_postfix_handler = [this, &result](IndexType idx1, IndexType idx2) {
+    auto outer_bits_handler = [this, &result](IndexType idx1, IndexType idx2) {
       result += _bitmap.count_one_bits(idx1, idx2);
+      return true;
     };
-    auto inner_handler = [this, &result](IndexType idx1, IndexType idx2) {
+    auto inner_bits_handler = [this, &result](IndexType idx1, IndexType idx2) {
       result += count_one_bits_in_aligned_range(idx1, idx2);
+      return true;
     };
-    process_index_range(begidx, endidx,
-        prefix_postfix_handler, inner_handler, prefix_postfix_handler);
+    process_index_range_forward(begidx, endidx, outer_bits_handler, inner_bits_handler);
     return result;
   }
 
@@ -625,6 +645,7 @@ public:
   void convert_to_flat_bitmap(BitMap& out) const {
     out.set_from(_bitmap);
   }
+
 
 };
 

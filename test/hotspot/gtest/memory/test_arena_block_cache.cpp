@@ -51,7 +51,7 @@ private:
   // no need to allocate them for real.
   static constexpr uintptr_t _fake_start = LP64_ONLY(32 * G) NOT_LP64(G);
   CHeapBitMap _owned_blocks;
-  BlockRange<szclass> _blockrange;
+  BlockRange<int, szclass> _blockrange;
 
 public:
 
@@ -120,7 +120,7 @@ class AllocationPredictionModel {
   CHeapBitMap _owned_by_caller;
   CHeapBitMap _owned_by_cache;
   CHeapBitMap _owned_by_slab;
-  BlockRange<szclass> _blockrange;
+  BlockRange<int, szclass> _blockrange;
   bool _busy;
 
 #ifdef ASSERT
@@ -294,7 +294,7 @@ public:
   void reality_test(const CacheType& cache) const {
     // Build up a bitmap that reflects the cache content
     CHeapBitMap tmp(num_blocks, mtTest, true);
-    const BlockRange<szclass>& blockrange2 = _blockrange;
+    const BlockRange<int, szclass>& blockrange2 = _blockrange;
     auto set_bit_for_block_in_cache = [&tmp,&blockrange2](const_blockptr_t block) {
       const idx_t idx = blockrange2.block_to_index(block);
       tmp.set_bit(idx);
@@ -346,7 +346,7 @@ namespace {
     SlabAllocatorType _slab_allocator;
     CacheType _block_cache;
     PredictableRandom _random;
-    BlockRange<szclass> _blockrange;
+    BlockRange<int, szclass> _blockrange;
     ModelType _model;
 
     static constexpr int num_blocks = SlabAllocatorType::num_blocks;

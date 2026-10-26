@@ -135,6 +135,8 @@ namespace {
 
     NONVOID_XXX_AND_VERIFY_2(find_first_set_bit, IndexType, IndexType, beg, IndexType, end);
     NONVOID_XXX_AND_VERIFY_2(find_first_clear_bit, IndexType, IndexType, beg, IndexType, end);
+    NONVOID_XXX_AND_VERIFY_2(find_last_set_bit, IndexType, IndexType, beg, IndexType, end);
+    NONVOID_XXX_AND_VERIFY_2(find_last_clear_bit, IndexType, IndexType, beg, IndexType, end);
     NONVOID_XXX_AND_VERIFY_2(count_one_bits, IndexType, IndexType, beg, IndexType, end);
 
     NONVOID_XXX_AND_VERIFY_1(at, bool, IndexType, idx);
@@ -220,64 +222,77 @@ namespace {
       ASSERT_TRUE(_layered_bitmap.is_full()); // nothing changed
     }
 
-    void first_set_bit_test_helper(IndexType startidx, IndexType begidx, IndexType endidx) {
-      const bool empty = begidx == endidx;
-      ASSERT_EQ(find_first_set_bit_and_verify(startidx, endidx), begidx);
-      ASSERT_EQ(find_first_set_bit_and_verify(startidx, num_bits), empty ? num_bits : begidx);
+    // Tester scans from [scanrange_beg, scanrange_end)
+    // and we prepared a (1|0) bitrun between [range_beg, range_end)
+    template <bool first, bool set>
+    void find_X_X_bit_test_helper(IndexType scanrange_beg, IndexType scanrange_end,
+                                  IndexType range_beg, IndexType range_end) {
+      const IndexType intersect_beg = MAX2(scanrange_beg, range_beg);
+      const IndexType intersect_end = MIN2(scanrange_end, range_end);
+      const bool non_empty_intersection = (intersect_beg < intersect_end);
+      if (first) { // find first
+        const IndexType expected_hit =
+          non_empty_intersection ? intersect_beg : scanrange_end;
+        if (set) {
+          EXPECT_EQ(find_first_set_bit_and_verify(scanrange_beg, scanrange_end), expected_hit);
+        } else {
+          EXPECT_EQ(find_first_clear_bit_and_verify(scanrange_beg, scanrange_end), expected_hit);
+        }
+      } else { // find last
+        const IndexType expected_hit =
+          non_empty_intersection ? intersect_end - 1 : scanrange_end;
+        if (set) {
+          EXPECT_EQ(find_last_set_bit_and_verify(scanrange_beg, scanrange_end), expected_hit);
+        } else {
+          EXPECT_EQ(find_last_clear_bit_and_verify(scanrange_beg, scanrange_end), expected_hit);
+        }
+      }
+      if (::testing::Test::HasFailure()) {
+        tty->print_cr("find_%s_%s_bit scanrange [%zu, %zu) range [%zu, %zu)",
+          first ? "first" : "last", set ? "set" : "clear",
+          scanrange_beg, scanrange_end, range_beg, range_end);
+        return;
+      }
     }
 
-    void first_set_bit_test(IndexType begidx, IndexType endidx) {
-      clear_and_verify();
-      for (IndexType begidx_0 = begidx; begidx_0 <= endidx; begidx_0++) {
-        for (IndexType endidx_0 = begidx_0; endidx_0 <= endidx; endidx_0++) {
-          set_range_and_verify(begidx_0, endidx_0);
-          first_set_bit_test_helper(0, begidx_0, endidx_0);
-          first_set_bit_test_helper(begidx_0 / 3, begidx_0, endidx_0);
-          clear_range_and_verify(begidx_0, endidx_0);
+    // Iterate through different combinations of ranges
+    template <bool first, bool set>
+    void find_X_X_bit_test(IndexType begidx, IndexType endidx) {
+      for (IndexType range_beg = begidx; range_beg <= endidx; range_beg++) {
+        for (IndexType range_end = range_beg; range_end <= endidx; range_end++) {
+          clear_and_verify();
+          if (set) {
+            set_range_and_verify(range_beg, range_end);
+          } else {
+            set_range_and_verify(0, range_beg);
+            set_range_and_verify(range_end, num_bits);
+          }
+          find_X_X_bit_test_helper<first, set>(0, num_bits, range_beg, range_end);
+          find_X_X_bit_test_helper<first, set>(0, 64, range_beg, range_end);
+          find_X_X_bit_test_helper<first, set>(num_bits - 64, num_bits, range_beg, range_end);
           if (::testing::Test::HasFailure()) {
-            tty->print_cr("%zu %zu", begidx_0, endidx_0);
             return;
           }
         }
       }
     }
 
-    void first_set_bit_test() {
-      first_set_bit_test(0, num_segment_bits * 2);
-      first_set_bit_test(num_bits - num_segment_bits * 2, num_bits);
+    template <bool first, bool set>
+    void find_X_X_bit_test() {
+      // The tests can be quite time consuming, so we just test the first and last 2 segments
+      find_X_X_bit_test<first, set>(0, num_segment_bits * 2);
+      find_X_X_bit_test<first, set>(num_bits - num_segment_bits * 2, num_bits);
     }
 
-    void first_clear_bit_test_helper(IndexType startidx, IndexType begidx, IndexType endidx) {
-      const bool empty = begidx == endidx;
-      ASSERT_EQ(find_first_clear_bit_and_verify(startidx, endidx), begidx);
-      ASSERT_EQ(find_first_clear_bit_and_verify(startidx, num_bits), empty ? num_bits : begidx);
-    }
+    void find_first_set_bit_test()    { find_X_X_bit_test<true, true>(); }
+    void find_first_clear_bit_test()  { find_X_X_bit_test<true, false>(); }
+    void find_last_set_bit_test()     { find_X_X_bit_test<false, true>(); }
+    void find_last_clear_bit_test()   { find_X_X_bit_test<false, false>(); }
 
-    void first_clear_bit_test(IndexType begidx, IndexType endidx) {
-      set_range_and_verify(0, num_bits);
+    template <bool set>
+    void X_range_test(IndexType begidx, IndexType endidx) {
       for (IndexType begidx_0 = begidx; begidx_0 <= endidx; begidx_0++) {
         for (IndexType endidx_0 = begidx_0; endidx_0 <= endidx; endidx_0++) {
-          clear_range_and_verify(begidx_0, endidx_0);
-          first_clear_bit_test_helper(0, begidx_0, endidx_0);
-          first_clear_bit_test_helper(begidx_0 / 3, begidx_0, endidx_0);
-          set_range_and_verify(begidx_0, endidx_0);
-          if (::testing::Test::HasFailure()) {
-            tty->print_cr("%zu %zu", begidx_0, endidx_0);
-            return;
-          }
-        }
-      }
-    }
-
-    void first_clear_bit_test() {
-      first_clear_bit_test(0, num_segment_bits * 2);
-      first_clear_bit_test(num_bits - num_segment_bits * 2, num_bits);
-    }
-
-    void set_range_test(IndexType begidx, IndexType endidx) {
-      for (IndexType begidx_0 = begidx; begidx_0 <= endidx; begidx_0++) {
-        for (IndexType endidx_0 = begidx_0; endidx_0 <= endidx; endidx_0++) {
-          const IndexType rangesize = endidx_0 - begidx_0;
           for (int pattern = 0; pattern < 3; pattern++) {
             // pattern0: into empty bitmap
             // pattern1: into full bitmap
@@ -288,13 +303,14 @@ namespace {
               case 2: fill_with_pattern_and_verify(0xAAAAAAAAAAAAAAAAULL); break;
               default: ShouldNotReachHere();
             }
-            set_range_and_verify(begidx_0, endidx_0);
-            if (pattern == 0) {
-              EXPECT_EQ(_layered_bitmap.count_one_bits(), rangesize);
-            } else if (pattern == 1) {
-              EXPECT_EQ(_layered_bitmap.count_one_bits(), num_bits);
+            if (set) {
+              set_range_and_verify(begidx_0, endidx_0);
+            } else {
+              clear_range_and_verify(begidx_0, endidx_0);
             }
-            EXPECT_EQ(_layered_bitmap.count_one_bits(begidx_0, endidx_0), rangesize);
+            count_one_bits_and_verify(0, num_bits);
+            count_one_bits_and_verify(0, begidx_0);
+            count_one_bits_and_verify(begidx_0, num_bits);
             if (::testing::Test::HasFailure()) {
               tty->print_cr("%d %zu %zu", pattern, begidx_0, endidx_0);
               return;
@@ -304,44 +320,20 @@ namespace {
       }
     }
 
-    void set_range_test() {
-      set_range_test(0, 2 * num_segment_bits);
-      set_range_test(num_bits - 2 * num_segment_bits, num_bits);
+    template <bool set>
+    void X_range_test() {
+      X_range_test<set>(0, 2 * num_segment_bits);
+      X_range_test<set>(num_bits - 2 * num_segment_bits, num_bits);
     }
 
-    void clear_range_test_helper(IndexType begidx, IndexType endidx) {
-      for (IndexType begidx_0 = begidx; begidx_0 <= endidx; begidx_0++) {
-        for (IndexType endidx_0 = begidx_0; endidx_0 <= endidx; endidx_0++) {
-          const IndexType rangesize = endidx_0 - begidx_0;
-          for (int pattern = 0; pattern < 3; pattern++) {
-            // pattern0: into empty bitmap
-            // pattern1: into full bitmap
-            // pattern2: into bitmap with alternating bits
-            switch (pattern) {
-              case 0: clear_range_and_verify(0, num_bits); break;
-              case 1: set_range_and_verify(0, num_bits); break;
-              case 2: fill_with_pattern_and_verify(0xAAAAAAAAAAAAAAAAULL); break;
-              default: ShouldNotReachHere();
-            }
-            clear_range_and_verify(begidx_0, endidx_0);
-            if (pattern == 0) {
-              EXPECT_EQ(_layered_bitmap.count_one_bits(), (IndexType)0);
-            } else if (pattern == 1) {
-              EXPECT_EQ(_layered_bitmap.count_one_bits(), num_bits - rangesize);
-            }
-            EXPECT_EQ(_layered_bitmap.count_one_bits(begidx_0, endidx_0), (IndexType)0);
-            if (::testing::Test::HasFailure()) {
-              tty->print_cr("%d %zu %zu", pattern, begidx_0, endidx_0);
-              return;
-            }
-          }
-        }
-      }
-    }
+    void set_range_test() { X_range_test<true>(); }
+    void clear_range_test() { X_range_test<false>(); }
 
-    void clear_range_test() {
-      clear_range_test_helper(0, 2 * num_segment_bits);
-      clear_range_test_helper(num_bits - 2 * num_segment_bits, num_bits);
+    void count_one_bits_test() {
+      clear_and_verify();
+      ASSERT_EQ(count_one_bits_and_verify(0, num_bits), (IndexType)0);
+      set_range_and_verify(13, 13 + 2 * num_segment_bits);
+      ASSERT_EQ(count_one_bits_and_verify(0, num_bits), (IndexType)2 * num_segment_bits);
     }
 
     void convert_to_flat_bitmap_test() const {
@@ -499,8 +491,11 @@ TEST_VM(Arena2_LayeredBitmap, test_ ## testname ## _ ## num_bits ## _ ## num_sum
   DEFINE_TESTS(num_summary_bits, num_segment_bits, basic ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, set_range ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, clear_range ) \
-  DEFINE_TESTS(num_summary_bits, num_segment_bits, first_set_bit ) \
-  DEFINE_TESTS(num_summary_bits, num_segment_bits, first_clear_bit ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, count_one_bits ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, find_first_set_bit ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, find_first_clear_bit ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, find_last_set_bit ) \
+  DEFINE_TESTS(num_summary_bits, num_segment_bits, find_last_clear_bit ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, convert_to_flat_bitmap ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, set_from ) \
   DEFINE_TESTS(num_summary_bits, num_segment_bits, set_union ) \

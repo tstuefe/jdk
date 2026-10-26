@@ -27,22 +27,23 @@
 #include "utilities/globalDefinitions.hpp"
 #include "unittest.hpp"
 
-template <size_t szclass>
+template <typename IndexType, size_t szclass>
 static void do_test() {
   static constexpr uintptr_t fake_address_i = LP64_ONLY(32 * G) NOT_LP64(G);
   const const_blockptr_t fake_address = (const_blockptr_t)fake_address_i;
-  constexpr int num_blocks = 1024;
-  BlockRange<szclass> range(fake_address, num_blocks);
-  ASSERT_TRUE(range.is_valid_block_index(0));
+  constexpr IndexType num_blocks = 1024;
+  BlockRange<IndexType, szclass> range(fake_address, num_blocks);
+  static constexpr IndexType zero = ((IndexType)0);
+  ASSERT_TRUE(range.is_valid_block_index(zero));
   ASSERT_TRUE(range.is_valid_block_index(num_blocks - 1));
   ASSERT_FALSE(range.is_valid_block_index(num_blocks));
-  ASSERT_TRUE(range.is_valid_block_incl(0));
+  ASSERT_TRUE(range.is_valid_block_incl(zero));
   ASSERT_TRUE(range.is_valid_block_incl(num_blocks - 1));
   ASSERT_TRUE(range.is_valid_block_incl(num_blocks));
   ASSERT_FALSE(range.is_valid_block_incl(num_blocks + 1));
 
-  ASSERT_EQ(0, range.block_to_index(fake_address));
-  ASSERT_EQ(fake_address, range.index_to_block(0));
+  ASSERT_EQ(zero, range.block_to_index(fake_address));
+  ASSERT_EQ(fake_address, range.index_to_block(zero));
 
   ASSERT_EQ(num_blocks - 1,
             range.block_to_index(range.index_to_block(num_blocks - 1)));
@@ -51,16 +52,16 @@ static void do_test() {
   ASSERT_FALSE(range.contains(fake_address - 1));
 
   const const_address some_inner_pointer = (const_address)fake_address + szclass + szclass + 17;
-  ASSERT_EQ(2, range.index_of_containing_block(some_inner_pointer));
+  ASSERT_EQ((IndexType)2, range.index_of_containing_block(some_inner_pointer));
   ASSERT_EQ(fake_address + szclass + szclass, range.start_of_containing_block(some_inner_pointer));
 
 }
 
 
 TEST_VM(Arena2_BlockRange, aligned_base) {
-  do_test<256>();
+  do_test<uintptr_t, 256>();
 }
 
 TEST_VM(Arena2_BlockRange, unaligned_base) {
-  do_test<32 * K>();
+  do_test<int, 32 * K>();
 }
