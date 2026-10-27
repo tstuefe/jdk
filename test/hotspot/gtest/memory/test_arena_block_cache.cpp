@@ -36,6 +36,8 @@
 
 #include "unittest.hpp"
 
+#include "test_arena_helpers.hpp"
+
 //#define LOG_PLEASE
 #include "testutils.hpp"
 
@@ -177,19 +179,6 @@ class AllocationPredictionModel {
     _owned_by_caller.set_difference(deallocated_blocks);
   }
 
-  // Helper function, returns index of a random bit that is set in given bitmap
-  static BitMap::idx_t get_random_bit(PredictableRandom& rand, const BitMap& bm) {
-    const BitMap::idx_t beg = rand.next(SlabAllocatorType::num_blocks);
-    BitMap::idx_t idx = bm.find_first_set_bit(beg);
-    if (idx == bm.size()) {
-      idx = bm.find_first_set_bit(0, beg);
-      if (idx == beg) {
-        idx = bm.size();
-      }
-    }
-    return idx;
-  }
-
 public:
 
   AllocationPredictionModel(const_address block_base) :
@@ -313,25 +302,20 @@ public:
   // Retrieve a single block, randomly, that is in-use by caller;
   // nullptr if none are in use
   const_blockptr_t get_random_caller_owned_block(PredictableRandom& rand) const {
-    const idx_t idx = get_random_bit(rand, _owned_by_caller);
+    const idx_t idx = ArenaTestHelpers::get_random_set_bit(rand, _owned_by_caller);
     return idx == num_blocks ? nullptr : _blockrange.index_to_block(idx);
   }
 
   // Retrieve an array of unique random blocks that are in use by caller;
   // returns number of blocks found.
   int get_random_caller_owned_blocks(PredictableRandom& rand, const_blockptr_t out[], int outlen) const {
-    CHeapBitMap tmp(num_blocks, mtTest, true);
-    tmp.set_from(_owned_by_caller);
-    idx_t idx = 0;
-    for (int i = 0; i < outlen; i ++) {
-      idx = get_random_bit(rand, tmp);
-      if (idx == tmp.size()) {
-        return i;
-      }
-      tmp.clear_bit(idx);
-      out[i] = _blockrange.index_to_block(idx);
+    BitMap::idx_t* arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, outlen, mtTest);
+    const int num = ArenaTestHelpers::get_random_set_bits(rand, _owned_by_caller, arr, outlen);
+    for (int i = 0; i < num; ++i) {
+      out[i] = _blockrange.index_to_block(arr[i]);
     }
-    return outlen;
+    FREE_C_HEAP_ARRAY(arr);
+    return num;
   }
 
 }; // end AllocationPredictionModel

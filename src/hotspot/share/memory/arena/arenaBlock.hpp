@@ -132,8 +132,16 @@ public:
   }
 
   // True if block_index inside [baseindex, endindex]
-  bool is_valid_block_incl(IndexType num_blocks) const {
+  bool is_valid_block_index_incl(IndexType num_blocks) const {
     return num_blocks >= 0 && num_blocks <= _num_blocks;
+  }
+
+  bool is_valid_block(const_blockptr_t b) const {
+    return contains(b) && is_valid_block_index(block_to_index(b));
+  }
+
+  bool is_valid_block_incl(const_blockptr_t b) const {
+    return contains_incl(b) && is_valid_block_index(block_to_index(b));
   }
 
   const_blockptr_t index_to_block(IndexType block_index) const {
@@ -165,7 +173,7 @@ public:
   }
 
   IndexType block_to_index_incl(const_blockptr_t b) const {
-    DEBUG_ONLY(check_is_valid_block_incl(b));
+    DEBUG_ONLY(check_is_valid_block_index_incl(b));
     return block_to_index_without_assert(b);
   }
 
@@ -181,17 +189,15 @@ public:
     assert(contains_incl(p), "Pointer out of range: " PTR_FORMAT, p2i(p));
   }
   void check_is_valid_block(const_blockptr_t b) const {
-    check_contains(b);
-    assert(is_aligned(b - _base, szclass), "Block pointer invalid: " PTR_FORMAT, p2i(b));
+    assert(is_valid_block(b), "Block pointer invalid: " PTR_FORMAT, p2i(b));
   }
-  void check_is_valid_block_incl(const_blockptr_t b) const {
-    check_contains_incl(b);
-    assert(is_aligned(b - _base, szclass), "Block pointer invalid: " PTR_FORMAT, p2i(b));
+  void check_is_valid_block_index_incl(const_blockptr_t b) const {
+    assert(is_valid_block_incl(b), "Block pointer invalid: " PTR_FORMAT, p2i(b));
   }
   void check_is_valid_block_index(IndexType block_index) const {
     assert(is_valid_block_index(block_index), "Block index invalid: %zu", checked_cast<uintptr_t>(block_index));
   }
-  void check_is_valid_block_incl(IndexType num) const {
+  void check_is_valid_block_index_incl(IndexType num) const {
     assert(is_valid_block_incl(num), "Invalid number of blocks: %zu", checked_cast<uintptr_t>(num));
   }
 #endif

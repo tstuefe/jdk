@@ -37,10 +37,18 @@ static void do_test() {
   ASSERT_TRUE(range.is_valid_block_index(zero));
   ASSERT_TRUE(range.is_valid_block_index(num_blocks - 1));
   ASSERT_FALSE(range.is_valid_block_index(num_blocks));
-  ASSERT_TRUE(range.is_valid_block_incl(zero));
-  ASSERT_TRUE(range.is_valid_block_incl(num_blocks - 1));
-  ASSERT_TRUE(range.is_valid_block_incl(num_blocks));
-  ASSERT_FALSE(range.is_valid_block_incl(num_blocks + 1));
+  ASSERT_TRUE(range.is_valid_block_index_incl(zero));
+  ASSERT_TRUE(range.is_valid_block_index_incl(num_blocks - 1));
+  ASSERT_TRUE(range.is_valid_block_index_incl(num_blocks));
+  ASSERT_FALSE(range.is_valid_block_index_incl(num_blocks + 1));
+
+  ASSERT_TRUE(range.is_valid_block(fake_address));
+  ASSERT_TRUE(range.is_valid_block(fake_address + (szclass * num_blocks - 1)));
+  ASSERT_FALSE(range.is_valid_block(fake_address + (szclass * num_blocks)));
+  ASSERT_TRUE(range.is_valid_block_incl(fake_address + (szclass * num_blocks)));
+
+  ASSERT_TRUE(range.is_valid_block_index_incl(num_blocks));
+  ASSERT_FALSE(range.is_valid_block_index_incl(num_blocks + 1));
 
   ASSERT_EQ(zero, range.block_to_index(fake_address));
   ASSERT_EQ(fake_address, range.index_to_block(zero));
