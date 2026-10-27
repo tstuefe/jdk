@@ -41,12 +41,12 @@ struct ArenaSlabAllocator {
   virtual ~ArenaSlabAllocator() = default;
 
   // Given a list of blocks, return them to the associated slab
-  virtual void deallocate_blocks(size_t szclass, const_blockptr_t blocks[], int num_blocks) = 0;
+  virtual void deallocate_blocks(size_t szclass, const_blockptr_t blocks[], unsigned num_blocks) = 0;
 
   // Allocate a number of blocks and return their addresses in the user-provided array;
   // returns the number of blocks actually allocated (which may be smaller if we cannot allocate)
   // The returned blocks are guaranteed to be ordered by address, low to high.
-  virtual int allocate_blocks(size_t szclass, const_blockptr_t blocks[], int num_blocks) = 0;
+  virtual unsigned allocate_blocks(size_t szclass, const_blockptr_t blocks[], unsigned num_blocks) = 0;
 
   // Helper function for tests.
   // Returns a bitmap that maps the slab range, one bit per block, blocks in slab marked

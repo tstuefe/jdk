@@ -36,6 +36,9 @@
 typedef uint8_t* blockptr_t;
 typedef const uint8_t* const_blockptr_t;
 
+static_assert(std::is_pointer_v<blockptr_t>, "Type must be a pointer");
+static_assert(sizeof(std::remove_pointer_t<blockptr_t>) == 1, "Pointer arithmetic must be in byte-sized increments");
+
 // We have 8 standard size classes: 256, 1K, 32K, 64K, ... 1M
 // Anything beyond that is a huge block and var-sized.
 
@@ -94,36 +97,36 @@ struct ArenaBlockHelpers : public AllStatic {
 };
 
 // Helper class for ranges of uniformly-sized blocks
-template <typename IndexType, size_t szclass>
+template <typename IndexType>
 class BlockRange {
   const_blockptr_t const _base;
-  const_blockptr_t const _end;
-  const IndexType _num_blocks;
+  const unsigned _block_size;
+  const unsigned _num_blocks;
+
+  static_assert(std::is_integral_v<IndexType>, "invalid block index type");
+  static_assert(std::is_unsigned_v<IndexType>, "invalid block index type");
 
 public:
 
-  BlockRange(const_blockptr_t base, IndexType num_blocks)
-    : _base(base),
-      _end(base + (num_blocks * szclass)),
-      _num_blocks(num_blocks)
-  {
+  BlockRange(const_blockptr_t base, IndexType block_size, IndexType num_blocks)
+    : _base(base), _block_size(block_size), _num_blocks(num_blocks) {
     assert(num_blocks > 0, "num_blocks must be positive");
-    assert(is_aligned(_base, szclass), "Base pointer must be aligned to size class: " PTR_FORMAT, p2i(_base));
+    assert(is_aligned(_base, block_size), "Base pointer must be aligned to size class: " PTR_FORMAT, p2i(_base));
   }
 
   const_blockptr_t base() const { return _base; }
-  const_blockptr_t end() const { return _end; }
-  size_t size_in_bytes() const { return _end - _base; }
+  size_t size_in_bytes() const { return _block_size * _num_blocks; }
+  const_blockptr_t end() const { return _base + size_in_bytes(); }
   IndexType num_blocks() const { return _num_blocks; }
 
   // True if b inside [base, end)
   bool contains(const_blockptr_t b) const {
-    return b >= _base && b < _end;
+    return b >= _base && b < end();
   }
 
   // True if b inside [base, end]
   bool contains_incl(const_blockptr_t b) const {
-    return b >= _base && b < _end;
+    return b >= _base && b < end();
   }
 
   // True if block_index inside [baseindex, endindex)
@@ -149,8 +152,13 @@ public:
     return index_to_block_without_asserts(block_index);
   }
 
+  const_blockptr_t index_to_block_incl(IndexType block_index) const {
+    assert(is_valid_block_index_incl(block_index), "invalid block index");
+    return index_to_block_without_asserts(block_index);
+  }
+
   const_blockptr_t index_to_block_without_asserts(IndexType block_index) const {
-    return _base + (block_index * szclass);
+    return _base + (block_index * _block_size);
   }
 
   // Given a pointer, not necessarily aligned, that points into this range,
@@ -164,7 +172,7 @@ public:
   // return the start address of the containing block
   const_blockptr_t start_of_containing_block(const_address p) const {
     DEBUG_ONLY(check_contains(p));
-    return align_down(p, szclass);
+    return align_down(p, _block_size);
   }
 
   IndexType block_to_index(const_blockptr_t b) const {
@@ -173,12 +181,12 @@ public:
   }
 
   IndexType block_to_index_incl(const_blockptr_t b) const {
-    DEBUG_ONLY(check_is_valid_block_index_incl(b));
+    DEBUG_ONLY(check_is_valid_block_incl(b));
     return block_to_index_without_assert(b);
   }
 
   IndexType block_to_index_without_assert(const_blockptr_t b) const {
-    return checked_cast<IndexType>(((const_address)b - (const_address)_base) / szclass);
+    return checked_cast<IndexType>((p2u(b) - p2u(_base)) / _block_size);
   }
 
 #ifdef ASSERT
@@ -191,14 +199,14 @@ public:
   void check_is_valid_block(const_blockptr_t b) const {
     assert(is_valid_block(b), "Block pointer invalid: " PTR_FORMAT, p2i(b));
   }
-  void check_is_valid_block_index_incl(const_blockptr_t b) const {
+  void check_is_valid_block_incl(const_blockptr_t b) const {
     assert(is_valid_block_incl(b), "Block pointer invalid: " PTR_FORMAT, p2i(b));
   }
   void check_is_valid_block_index(IndexType block_index) const {
     assert(is_valid_block_index(block_index), "Block index invalid: %zu", checked_cast<uintptr_t>(block_index));
   }
   void check_is_valid_block_index_incl(IndexType num) const {
-    assert(is_valid_block_incl(num), "Invalid number of blocks: %zu", checked_cast<uintptr_t>(num));
+    assert(is_valid_block_index_incl(num), "Invalid number of blocks: %zu", checked_cast<uintptr_t>(num));
   }
 #endif
 };

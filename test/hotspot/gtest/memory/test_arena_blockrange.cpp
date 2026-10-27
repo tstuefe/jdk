@@ -27,12 +27,12 @@
 #include "utilities/globalDefinitions.hpp"
 #include "unittest.hpp"
 
-template <typename IndexType, size_t szclass>
-static void do_test() {
+template <typename IndexType>
+static void do_test(IndexType block_size) {
   static constexpr uintptr_t fake_address_i = LP64_ONLY(32 * G) NOT_LP64(G);
   const const_blockptr_t fake_address = (const_blockptr_t)fake_address_i;
   constexpr IndexType num_blocks = 1024;
-  BlockRange<IndexType, szclass> range(fake_address, num_blocks);
+  BlockRange<IndexType> range(fake_address, block_size, num_blocks);
   static constexpr IndexType zero = ((IndexType)0);
   ASSERT_TRUE(range.is_valid_block_index(zero));
   ASSERT_TRUE(range.is_valid_block_index(num_blocks - 1));
@@ -43,9 +43,9 @@ static void do_test() {
   ASSERT_FALSE(range.is_valid_block_index_incl(num_blocks + 1));
 
   ASSERT_TRUE(range.is_valid_block(fake_address));
-  ASSERT_TRUE(range.is_valid_block(fake_address + (szclass * num_blocks - 1)));
-  ASSERT_FALSE(range.is_valid_block(fake_address + (szclass * num_blocks)));
-  ASSERT_TRUE(range.is_valid_block_incl(fake_address + (szclass * num_blocks)));
+  ASSERT_TRUE(range.is_valid_block(fake_address + (block_size * num_blocks - 1)));
+  ASSERT_FALSE(range.is_valid_block(fake_address + (block_size * num_blocks)));
+  ASSERT_TRUE(range.is_valid_block_incl(fake_address + (block_size * num_blocks)));
 
   ASSERT_TRUE(range.is_valid_block_index_incl(num_blocks));
   ASSERT_FALSE(range.is_valid_block_index_incl(num_blocks + 1));
@@ -59,17 +59,14 @@ static void do_test() {
   ASSERT_TRUE(range.contains(fake_address));
   ASSERT_FALSE(range.contains(fake_address - 1));
 
-  const const_address some_inner_pointer = (const_address)fake_address + szclass + szclass + 17;
+  const const_address some_inner_pointer = (const_address)fake_address + block_size + block_size + 17;
   ASSERT_EQ((IndexType)2, range.index_of_containing_block(some_inner_pointer));
-  ASSERT_EQ(fake_address + szclass + szclass, range.start_of_containing_block(some_inner_pointer));
+  ASSERT_EQ(fake_address + block_size + block_size, range.start_of_containing_block(some_inner_pointer));
 
 }
 
 
 TEST_VM(Arena2_BlockRange, aligned_base) {
-  do_test<uintptr_t, 256>();
-}
-
-TEST_VM(Arena2_BlockRange, unaligned_base) {
-  do_test<int, 32 * K>();
+  do_test<uintptr_t>(256);
+  do_test<unsigned>(32 * K);
 }

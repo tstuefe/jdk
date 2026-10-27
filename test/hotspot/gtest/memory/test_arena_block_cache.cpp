@@ -46,42 +46,42 @@
 template <size_t szclass>
 class FakeSlabAllocator : public ArenaSlabAllocator {
 public:
-  static constexpr int num_blocks = 256;
+  static constexpr unsigned num_blocks = 256;
 
 private:
   // We never write to the blocks handed around in this test, so
   // no need to allocate them for real.
   static constexpr uintptr_t _fake_start = LP64_ONLY(32 * G) NOT_LP64(G);
   CHeapBitMap _owned_blocks;
-  BlockRange<int, szclass> _blockrange;
+  BlockRange<unsigned> _block_range;
 
 public:
 
   FakeSlabAllocator() :
     _owned_blocks(num_blocks, mtTest, false),
-    _blockrange((const_blockptr_t)_fake_start, num_blocks)
+    _block_range((const_blockptr_t)_fake_start, szclass, num_blocks)
   {
     set_owns_all();
   }
 
-  void deallocate_blocks(size_t szclass0, const_blockptr_t blocks[], int len) override {
+  void deallocate_blocks(size_t szclass0, const_blockptr_t blocks[], unsigned len) override {
     assert(szclass0 == szclass, "wrong block class");
-    for (int i = 0; i < len; i++) {
+    for (unsigned i = 0; i < len; i++) {
       const const_blockptr_t b = blocks[i];
       assert(b != nullptr, "block is null");
-      const int block_index = _blockrange.block_to_index(b);
+      const unsigned block_index = _block_range.block_to_index(b);
       ASSERT_FALSE(_owned_blocks.at(block_index));
       _owned_blocks.set_bit(block_index);
     }
   }
 
-  int allocate_blocks(size_t szclass0, const_blockptr_t out[], int outlen) override {
-    int allocated = 0;
+  unsigned allocate_blocks(size_t szclass0, const_blockptr_t out[], unsigned outlen) override {
+    unsigned allocated = 0;
     BitMap::idx_t slot = 0;
     while (allocated < outlen && slot < _owned_blocks.size()) {
       slot = _owned_blocks.find_first_set_bit(slot);
       if (slot < _owned_blocks.size()) {
-        out[allocated] = _blockrange.index_to_block(slot);
+        out[allocated] = _block_range.index_to_block(slot);
         allocated ++;
         _owned_blocks.clear_bit(slot);
         slot++;
@@ -94,10 +94,10 @@ public:
     out.set_from(_owned_blocks);
   }
 
-  const_blockptr_t base() const { return _blockrange.base(); }
+  const_blockptr_t base() const { return _block_range.base(); }
 
   bool is_in_range(const_blockptr_t b) const override {
-    return _blockrange.contains(b);
+    return _block_range.contains(b);
   }
 
   // Sets the whole slab as free, all blocks owned by this slab
@@ -122,7 +122,7 @@ class AllocationPredictionModel {
   CHeapBitMap _owned_by_caller;
   CHeapBitMap _owned_by_cache;
   CHeapBitMap _owned_by_slab;
-  BlockRange<int, szclass> _blockrange;
+  BlockRange<unsigned> _block_range;
   bool _busy;
 
 #ifdef ASSERT
@@ -185,7 +185,7 @@ public:
     _owned_by_caller(num_blocks, mtTest, true),
     _owned_by_cache(num_blocks, mtTest, true),
     _owned_by_slab(num_blocks,  mtTest, true),
-    _blockrange(block_base, num_blocks),
+    _block_range(block_base, szclass, num_blocks),
     _busy(false)
   {}
 
@@ -223,7 +223,7 @@ public:
       const BitMap::idx_t idx = find_lowest_address_block_expect_success(_owned_by_cache);
       _owned_by_cache.clear_bit(idx);
       _owned_by_caller.set_bit(idx);
-      return _blockrange.index_to_block(checked_cast<int>(idx));
+      return _block_range.index_to_block(checked_cast<int>(idx));
     }
 
     // cache is empty; fetch from slab (and prefetch and pre-fill cache, too)
@@ -241,13 +241,13 @@ public:
     _owned_by_cache.clear_bit(idx);
     _owned_by_caller.set_bit(idx);
 
-    return _blockrange.index_to_block(checked_cast<int>(idx));
+    return _block_range.index_to_block(checked_cast<int>(idx));
   }
 
   // model deallocation of a single block
   void model_deallocation(const_blockptr_t block) {
     DEBUG_ONLY(verify());
-    const idx_t idx = _blockrange.block_to_index(block);
+    const idx_t idx = _block_range.block_to_index(block);
     assert(_owned_by_caller.at(idx), "Sanity");
     CHeapBitMap tmp(num_blocks, mtTest, true);
     tmp.set_bit(idx);
@@ -259,7 +259,7 @@ public:
     DEBUG_ONLY(verify());
     CHeapBitMap tmp(num_blocks, mtTest, true);
     for (int i = 0; i < num; ++i) {
-      const idx_t idx = _blockrange.block_to_index(block[i]);
+      const idx_t idx = _block_range.block_to_index(block[i]);
       assert(_owned_by_caller.at(idx), "Sanity");
       tmp.set_bit(idx);
     }
@@ -283,7 +283,7 @@ public:
   void reality_test(const CacheType& cache) const {
     // Build up a bitmap that reflects the cache content
     CHeapBitMap tmp(num_blocks, mtTest, true);
-    const BlockRange<int, szclass>& blockrange2 = _blockrange;
+    const BlockRange<unsigned>& blockrange2 = _block_range;
     auto set_bit_for_block_in_cache = [&tmp,&blockrange2](const_blockptr_t block) {
       const idx_t idx = blockrange2.block_to_index(block);
       tmp.set_bit(idx);
@@ -303,7 +303,7 @@ public:
   // nullptr if none are in use
   const_blockptr_t get_random_caller_owned_block(PredictableRandom& rand) const {
     const idx_t idx = ArenaTestHelpers::get_random_set_bit(rand, _owned_by_caller);
-    return idx == num_blocks ? nullptr : _blockrange.index_to_block(idx);
+    return idx == num_blocks ? nullptr : _block_range.index_to_block(idx);
   }
 
   // Retrieve an array of unique random blocks that are in use by caller;
@@ -312,7 +312,7 @@ public:
     BitMap::idx_t* arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, outlen, mtTest);
     const int num = ArenaTestHelpers::get_random_set_bits(rand, _owned_by_caller, arr, outlen);
     for (int i = 0; i < num; ++i) {
-      out[i] = _blockrange.index_to_block(arr[i]);
+      out[i] = _block_range.index_to_block(arr[i]);
     }
     FREE_C_HEAP_ARRAY(arr);
     return num;
@@ -330,7 +330,7 @@ namespace {
     SlabAllocatorType _slab_allocator;
     CacheType _block_cache;
     PredictableRandom _random;
-    BlockRange<int, szclass> _blockrange;
+    BlockRange<unsigned> _block_range;
     ModelType _model;
 
     static constexpr int num_blocks = SlabAllocatorType::num_blocks;
@@ -393,7 +393,7 @@ namespace {
     Tester() :
       _block_cache(_slab_allocator),
       _random(),
-      _blockrange(_slab_allocator.base(), num_blocks),
+      _block_range(_slab_allocator.base(), szclass, num_blocks),
       _model(_slab_allocator.base())
     {}
 
@@ -449,7 +449,7 @@ namespace {
       set_all_free();
 
       // Allocate till we used up the slab
-      for (int i = 0; i < SlabAllocatorType::num_blocks; i++) {
+      for (unsigned i = 0; i < SlabAllocatorType::num_blocks; i++) {
         allocate_from_cache_and_test_expect_success();
         if (::testing::Test::HasFailure()) {
           return;
@@ -463,7 +463,7 @@ namespace {
       set_all_allocated();
       // Deallocate till we returned all blocks to the cache, sequentially, low to high
       for (int i = 0; i < num_blocks; i++) {
-        deallocate_to_cache_and_test(_blockrange.index_to_block(i));
+        deallocate_to_cache_and_test(_block_range.index_to_block(i));
         if (::testing::Test::HasFailure()) {
           return;
         }
@@ -482,12 +482,12 @@ namespace {
       switch(mode) {
         case 0:
           for (int i = 0; i < N; i++) {
-            arr[i] = _blockrange.index_to_block(i);
+            arr[i] = _block_range.index_to_block(i);
           }
           break;
         case 1:
           for (int i = 0; i < N; i++) {
-            arr[N - i - 1] = _blockrange.index_to_block(i);
+            arr[N - i - 1] = _block_range.index_to_block(i);
           }
           break;
         case 2: {
