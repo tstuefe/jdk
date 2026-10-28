@@ -74,7 +74,7 @@ namespace {
     {
       assert(num_bits <= LayeredBitmap::max_num_bits(), "num_bits too big");
       const size_t canary_pos = LayeredBitmap::bytes_needed(num_bits);
-      _storage[canary_pos - 1] = 'A';
+      _storage[canary_pos] = 'A';
       _test_bitmap.clear();
     }
 

@@ -167,7 +167,7 @@ public:
 
   // Returns size, in bytes, needed for the slab metadata
   static size_t calc_metadata_space(size_t block_size, size_t granule_size, unsigned num_blocks) {
-    const int num_granules = calc_num_granules(block_size, granule_size, num_blocks);
+    const unsigned num_granules = calc_num_granules(block_size, granule_size, num_blocks);
     assert(is_power_of_2(num_blocks), "Sanity");
     return LayeredBitmap::bytes_needed(num_blocks) +
            LayeredBitmap::bytes_needed(num_granules);

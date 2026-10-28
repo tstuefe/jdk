@@ -117,7 +117,7 @@ namespace {
       return n;
     }
 
-    void deallocate_and_verify(uintptr_t block_indexes[], unsigned num) {
+    void deallocate_and_verify(BitMap::idx_t block_indexes[], unsigned num) {
       // check that the released blocks are in use
       CHeapBitMap tmp(_num_blocks, mtTest, true);
       for (unsigned i = 0; i < num; ++i) {
