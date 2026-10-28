@@ -61,32 +61,6 @@ struct ArenaBlockHelpers : public AllStatic {
            is_aligned(szclass, huge_block_granularity);
   }
 
-  static constexpr int size_class_to_id_exact(size_t szclass) {
-    switch (szclass) {
-      case 256: return 0;
-      case K: return 1;
-      case K * 32: return 3;
-      case K * 64: return 4;
-      case K * 128: return 5;
-      case K * 256: return 6;
-      case K * 512: return 7;
-      case M: return 8;
-      default: ShouldNotReachHere();
-    }
-  }
-
-  static constexpr int normalize_size_class(size_t szclass) {
-    if (szclass <= 256) { return 256; }
-    if (szclass <= K) { return K; }
-    if (szclass <= K * 32) { return K * 32; }
-    if (szclass <= K * 64) { return K * 64; }
-    if (szclass <= K * 128) { return K * 128; }
-    if (szclass <= K * 256) { return K * 256; }
-    if (szclass <= K * 512) { return K * 512; }
-    if (szclass <= M) { return M; }
-    return align_up(szclass, huge_block_granularity);
-  }
-
   static constexpr bool is_valid_standard_block(size_t szclass, const_blockptr_t b) {
     return is_aligned(b, szclass);
   }
@@ -116,7 +90,7 @@ public:
   }
 
   const_blockptr_t base() const { return _base; }
-  size_t size_in_bytes() const { return _block_size * _num_blocks; }
+  size_t size_in_bytes() const { return (size_t)_block_size * _num_blocks; }
 
   const_blockptr_t end() const { return _base + size_in_bytes(); }
   IndexType num_blocks() const { return _num_blocks; }
@@ -133,12 +107,12 @@ public:
 
   // True if block_index inside [baseindex, endindex)
   bool is_valid_block_index(IndexType block_index) const {
-    return block_index >= 0 && block_index < _num_blocks;
+    return block_index < _num_blocks;
   }
 
   // True if block_index inside [baseindex, endindex]
   bool is_valid_block_index_incl(IndexType num_blocks) const {
-    return num_blocks >= 0 && num_blocks <= _num_blocks;
+    return num_blocks <= _num_blocks;
   }
 
   bool is_valid_block(const_blockptr_t b) const {
@@ -160,7 +134,7 @@ public:
   }
 
   const_blockptr_t index_to_block_without_asserts(IndexType block_index) const {
-    return _base + (block_index * _block_size);
+    return _base + ((size_t)block_index * _block_size);
   }
 
   // Given a pointer, not necessarily aligned, that points into this range,

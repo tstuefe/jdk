@@ -45,8 +45,7 @@ namespace {
     const address _storage;
     BitmapType _layered_bitmap;
 
-    static constexpr unsigned max_num_bits = 262144;
-    BitMap::bm_word_t _test_bitmap_storage[max_num_bits / sizeof(BitMap::bm_word_t)];
+    BitMap::bm_word_t _test_bitmap_storage[LayeredBitmap::max_num_bits() / BitsPerWord];
     BitMapView _test_bitmap;
     PredictableRandom _random;
     mutable int _sometimes;
@@ -73,13 +72,15 @@ namespace {
       _random(),
       _sometimes(0)
     {
-      assert(num_bits <= max_num_bits, "num_bits too big");
-      _storage[_storage_size - 1] = 'A';
+      assert(num_bits <= LayeredBitmap::max_num_bits(), "num_bits too big");
+      const size_t canary_pos = LayeredBitmap::bytes_needed(num_bits);
+      _storage[canary_pos - 1] = 'A';
       _test_bitmap.clear();
     }
 
     ~Tester() {
-      assert(_storage[_storage_size - 1] == 'A', "overwriter?");
+      const size_t canary_pos = LayeredBitmap::bytes_needed(_layered_bitmap.num_bits());
+      EXPECT_EQ(_storage[canary_pos], 'A');
       os::release_memory((char*)_storage, _storage_size);
     }
 

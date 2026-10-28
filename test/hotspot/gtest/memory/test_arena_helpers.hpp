@@ -32,7 +32,6 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "testutils.hpp"
-#include "jfr/recorder/checkpoint/types/traceid/jfrTraceIdBits.inline.hpp"
 
 struct ArenaTestHelpers : public AllStatic {
   template <bool set>
@@ -64,11 +63,12 @@ struct ArenaTestHelpers : public AllStatic {
     int num = 0;
     tmp.set_from(bm);
     for (int i = 0; i < outlen; i++) {
-      const BitMap::idx_t idx = get_random_set_bit(rand, bm);
+      const BitMap::idx_t idx = get_random_set_bit(rand, tmp);
       if (idx == bm.size()) {
         break;
       }
-      tmp.set_bit(idx);
+      out[num++] = idx;
+      tmp.clear_bit(idx);
     }
     return num;
   }

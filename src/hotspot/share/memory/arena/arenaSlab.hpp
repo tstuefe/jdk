@@ -27,13 +27,11 @@
 #ifndef SHARE_MEMORY_ARENA_ARENASLAB_HPP
 #define SHARE_MEMORY_ARENA_ARENASLAB_HPP
 
-#include <iterator>
-
-#include "interpreter/oopMapCache.hpp"
-#include "utilities/debug.hpp"
-#include "utilities/globalDefinitions.hpp"
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/layeredBitmap.hpp"
+#include "runtime/os.hpp"
+#include "utilities/debug.hpp"
+#include "utilities/globalDefinitions.hpp"
 
 class ArenaSlabBase {
 protected:
@@ -116,15 +114,15 @@ private:
 
   // Ensure this and all lower-address blocks are committed.
   void ensure_committed(IndexType block_index) {
-    _block_range.check_is_valid_block_index(block_index);
+    DEBUG_ONLY(_block_range.check_is_valid_block_index(block_index);)
     const IndexType granule_index = block_index_to_granule_index(block_index);
     const IndexType new_commit_boundary = MAX2(granule_index + 1, _commit_boundary);
     if (new_commit_boundary > _commit_boundary) {
       // We commit a bit more to avoid having to do this too often
       const IndexType new_commit_boundary_overshoot =
-        MIN2(_granule_range.num_blocks(), new_commit_boundary + num_granules_overcommit);
+        MIN2((IndexType)num_granules(), new_commit_boundary + num_granules_overcommit);
       const const_blockptr_t p1 = _granule_range.index_to_block(_commit_boundary);
-      const const_blockptr_t p2 = _granule_range.index_to_block(new_commit_boundary_overshoot);
+      const const_blockptr_t p2 = _granule_range.index_to_block_incl(new_commit_boundary_overshoot);
       commit_memory(p1, p2);
       _commit_boundary = new_commit_boundary_overshoot;
     }
@@ -138,13 +136,24 @@ private:
 
   void increase_block_counter(unsigned num) {
     _num_blocks_in_use += num;
-    assert(_num_blocks_in_use_max <= num_blocks(), "Sanity");
-    _num_blocks_in_use_max = MAX2(_num_blocks_in_use_max, _num_blocks_in_use_max);
+    assert(_num_blocks_in_use <= num_blocks(), "Sanity");
+    _num_blocks_in_use_max = MAX2(_num_blocks_in_use, _num_blocks_in_use_max);
   }
 
   void decrease_block_counter(unsigned num) {
-    assert(_num_blocks_in_use_max >= num, "Sanity");
+    assert(_num_blocks_in_use >= num, "Sanity");
     _num_blocks_in_use -= num;
+  }
+
+  static unsigned calc_block_to_granule_shift(size_t block_size, size_t granule_size) {
+    const unsigned l2_block_size = exact_log2(block_size);
+    const unsigned l2_granule_size = exact_log2(granule_size);
+    assert(l2_block_size <= l2_granule_size, "Sanity");
+    return l2_granule_size - l2_block_size;
+  }
+
+  static unsigned calc_num_granules(size_t block_size, size_t granule_size, unsigned num_blocks) {
+    return num_blocks >> calc_block_to_granule_shift(block_size, granule_size);
   }
 
 public:
@@ -157,9 +166,11 @@ public:
   }
 
   // Returns size, in bytes, needed for the slab metadata
-  static size_t calc_metadata_space(unsigned num_blocks) {
+  static size_t calc_metadata_space(size_t block_size, size_t granule_size, unsigned num_blocks) {
+    const int num_granules = calc_num_granules(block_size, granule_size, num_blocks);
     assert(is_power_of_2(num_blocks), "Sanity");
-    return LayeredBitmap::bytes_needed(num_blocks) * 2;
+    return LayeredBitmap::bytes_needed(num_blocks) +
+           LayeredBitmap::bytes_needed(num_granules);
   }
 
   ArenaSlab(const_address arena_base, size_t arena_size,
@@ -170,8 +181,8 @@ public:
     _block_size(block_size),
     _granule_size(granule_size),
     _num_blocks(num_blocks),
-    _blocks_to_granule_shift(exact_log2(block_size) - exact_log2(granule_size)),
-    _num_granules(num_blocks >> _blocks_to_granule_shift),
+    _blocks_to_granule_shift(calc_block_to_granule_shift(block_size, granule_size)),
+    _num_granules(calc_num_granules(block_size, granule_size, num_blocks)),
     _decay_factor(calc_decay_factor_percent(decay_factor)),
     _release_boundary(release_boundary),
     _granule_range(arena_base, granule_size, _num_granules),
@@ -189,6 +200,7 @@ public:
     assert(is_power_of_2(num_blocks), "Sanity");
     assert(_num_blocks > 0, "Sanity");
     assert(_granule_size >= _block_size, "Sanity");
+    assert(_granule_size >= os::vm_page_size(), "Sanity");
 
     assert(is_aligned(_block_range.base(), ArenaBlockHelpers::slab_alignment), "Sanity");
 
@@ -210,7 +222,7 @@ public:
   unsigned num_blocks() const { return _num_blocks; }
   unsigned num_granules() const { return _num_granules; }
   unsigned blocks_per_granule() const { return 1u << _blocks_to_granule_shift; }
-  
+
   // Allocate a number of blocks and return their addresses in the user-provided array;
   // returns the number of blocks actually allocated (which may be smaller if we cannot allocate)
   // The returned blocks are guaranteed to be ordered by address, low to high.
@@ -227,7 +239,7 @@ public:
       const IndexType granule_idx = block_index_to_granule_index(idx);
       _dirty_bitmap.set_bit(granule_idx);
 
-      assert(highest_block_idx < idx, "Should raise monotonously");
+      assert(n == 0 || highest_block_idx < idx, "Should raise monotonously");
       highest_block_idx = MAX2(idx, highest_block_idx);
 
       const const_blockptr_t block = _block_range.index_to_block(idx);
@@ -235,7 +247,9 @@ public:
       idx++; n++;
     }
     // Make sure the returned memory is committed
-    ensure_committed(highest_block_idx);
+    if (n > 0) {
+      ensure_committed(highest_block_idx);
+    }
 
     // Update counters
     increase_block_counter(n);
@@ -261,13 +275,12 @@ public:
     IndexType idx = 0, idx2 = 0;
     while (idx < num_blocks()) {
       idx = _in_use_bitmap.find_first_clear_bit(idx2, num_blocks());
-      if (idx < num_blocks() - num) {
+      if (idx < num_blocks()) {
         idx2 = _in_use_bitmap.find_first_set_bit(idx, num_blocks());
         if (idx2 - idx >= num) {
-
           // Found a hole large enough for this allocation
-          _in_use_bitmap.set_range(idx, idx2);
-          _dirty_bitmap.set_range(idx, idx2); // huge blocks : granule == block size
+          _in_use_bitmap.set_range(idx, idx + num);
+          _dirty_bitmap.set_range(idx, idx + num); // huge blocks : granule == block size
 
           // Move commit boundary up
           const IndexType highest_block_idx = idx + num - 1;
@@ -279,6 +292,7 @@ public:
           const const_blockptr_t block = _block_range.index_to_block(idx);
           return block;
         }
+        idx = idx2;
       }
     }
     // nothing found
@@ -288,9 +302,9 @@ public:
   // Given a list of blocks, return them to the associated slab
   void deallocate_blocks(const_blockptr_t blocks[], unsigned num) {
     for (unsigned i = 0; i < num; i++) {
-      const int block_index = _block_range.block_to_index(blocks[i]);
+      const IndexType block_index = _block_range.block_to_index(blocks[i]);
       assert(_in_use_bitmap.at(block_index), "double free?");
-      _in_use_bitmap.clear_bit(i);
+      _in_use_bitmap.clear_bit(block_index);
     }
     // Update counters
     decrease_block_counter(num);
@@ -312,7 +326,7 @@ public:
 #ifdef ASSERT
     {
       // check that the full range of this huge block is marked as "dirty" and "in-use"
-      CHeapBitMap tmp(num_blocks(), mtTest, true);
+      CHeapBitMap tmp(num_blocks(), mtInternal, true);
       tmp.set_range(idx, idx2);
       assert(_dirty_bitmap.contains(tmp), "range not fully marked as dirty?");
       assert(_in_use_bitmap.contains(tmp), "range not fully marked as in-use?");
@@ -337,41 +351,23 @@ public:
     assert(_num_blocks_in_use_max >= _num_blocks_in_use, "Sanity");
     _dirty_bitmap.verify();
     // every in-use block must be dirty
-    assert(_dirty_bitmap.contains(_in_use_bitmap), "Sanity");
+    CHeapBitMap tmp(num_blocks(), mtTest, false);
+    CHeapBitMap tmp2(num_blocks(), mtTest, false);
+    _dirty_bitmap.convert_to_flat_bitmap_scaled(tmp, blocks_per_granule());
+    _in_use_bitmap.convert_to_flat_bitmap(tmp2);
+    assert(tmp.contains(tmp2), "Sanity");
     // the commit boundary must be equal or higher than the end of the highest dirty block
     const IndexType granule_idx = _dirty_bitmap.find_last_set_bit(0, num_granules());
     if (granule_idx < num_granules()) {
-      const IndexType block_idx = granule_index_to_first_block_index(granule_idx);
-      assert((block_idx + 1) <= _commit_boundary, "Commit boundary too low?");
-    } else {
-      assert(num_blocks() == _commit_boundary, "Sanity");
+      assert(granule_idx < _commit_boundary, "Commit boundary too low?");
     }
   }
 #endif
 
   unsigned count_in_use_blocks() const  { return checked_cast<unsigned>(_in_use_bitmap.count_one_bits()); }
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
-  unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
+  unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
 
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENASLAB_HPP
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -52,12 +52,10 @@ private:
   const uint16_t _offset_master_bitmap;    // in number of words
   WordType* const _storage;
 
-  static constexpr unsigned max_segment_word_size = 1 << BitsPerShort;
-  static constexpr unsigned max_num_segments = BitsPerWord * max_segment_word_size;
-  static constexpr unsigned max_num_bits = max_num_segments * BitsPerWord;
-
   static constexpr unsigned _log2_bits_per_segment = LogBitsPerWord;
   static constexpr unsigned _num_bits_per_segment = nth_bit(_log2_bits_per_segment);
+
+  static constexpr unsigned _max_num_bits = 262144u;
 
   static unsigned num_segments(unsigned num_bits) { return num_bits >> _log2_bits_per_segment; }
 
@@ -420,17 +418,18 @@ public:
     _offset_master_bitmap(StorageSizesHelper(num_bits)._master_bitmap_base_offset),
     _storage(reinterpret_cast<WordType*>(storage))
   {
-    assert(num_bits <= max_num_bits, "Sanity");
+    assert(num_bits <= _max_num_bits, "Sanity");
     assert(bytes >= bytes_needed(num_bits), "Sanity");
     assert(is_power_of_2(num_bits), "Sanity");
     STATIC_ASSERT(is_power_of_2(_num_bits_per_segment));
     assert(num_bits >= num_bits_per_segment(), "Sanity");
   }
 
-  constexpr IndexType size() const { return _num_bits; }
-  constexpr IndexType num_bits() const { return _num_bits; }
+  IndexType size() const { return _num_bits; }
+  IndexType num_bits() const { return _num_bits; }
+  static constexpr IndexType max_num_bits() { return _max_num_bits; }
   unsigned num_segments() const { return num_segments(_num_bits); }
-  static constexpr unsigned num_bits_per_segment() { return _num_bits_per_segment; }
+  static constexpr IndexType num_bits_per_segment() { return _num_bits_per_segment; }
 
   void set_bit(IndexType idx) {
     verify_index_excl(idx);
@@ -720,6 +719,7 @@ public:
   void convert_to_flat_bitmap_scaled(BitMap& out, int scale) const {
     assert(is_power_of_2(scale), "Sanity");
     assert(out.size() == num_bits() * scale, "Sanity");
+    out.clear();
     IndexType idx = 0;
     while (idx < num_bits()) {
       idx = find_first_set_bit(idx, num_bits());
