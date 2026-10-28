@@ -42,40 +42,37 @@ class Tester {
   const size_t _block_size;
   const size_t _granule_size;
   const unsigned _num_blocks;
-  const ArenaSlab::Storage _storage;
+  const unsigned _release_boundary;
+  const double _decay_factor;
+
+  struct Range { address p; size_t sz; };
+  Range _arena_space;
+  Range _metadata_space;
   ArenaSlab _slab;
   const BlockRange<unsigned> _block_range;
   CHeapBitMap _control;
   PredictableRandom _random;
 
-  static size_t calc_total_storage_size(const ArenaSlab::Storage& storage) {
-    return align_up(storage._blocks_bytes + storage._meta_bytes, os::vm_page_size());
+  static Range allocate_arena_space(size_t block_size, unsigned num_blocks) {
+    // allocate but dont commit
+    const size_t len = align_up(ArenaSlab::calc_arena_space(block_size, num_blocks), os::vm_page_size());
+    char* const p = os::reserve_memory(len, mtTest, false);
+    assert(p != nullptr, "OOM");
+    return Range { (address) p, len };
   }
 
-  static ArenaSlab::Storage allocate_storage_areas(unsigned block_size, unsigned num_blocks) {
-    ArenaSlab::Storage storage;
-    ArenaSlab::calculate_storage_needs(block_size, num_blocks, &storage);
-    const size_t total = calc_total_storage_size(storage);
-
-    address p_total = (address)os::reserve_memory(storage._blocks_bytes, mtTest, false);
-    assert(p_total != nullptr, "OOM");
-    bool b = os::commit_memory((char*)p_total, total, false);
-    assert(!b, "OOM");
-
-    storage._blocks = p_total;
-    storage._meta = p_total + storage._blocks_bytes;
-
-    return storage;
-  }
-
-  static void deallocate_storage_areas(const ArenaSlab::Storage& storage) {
-    const size_t total = calc_total_storage_size(storage);
-    os::release_memory((char*)storage._blocks, total);
+  static Range allocate_metadata_space(unsigned num_blocks) {
+    // needs to be fully accessible
+    const size_t len = align_up(ArenaSlab::calc_metadata_space(num_blocks), os::vm_page_size());
+    char* const p = os::reserve_memory(len, mtTest, false);
+    assert(p != nullptr, "OOM");
+    const bool b = os::commit_memory(p, len, false);
+    return Range { (address) p, len };
   }
 
   void check_equality() const {
-    EXPECT_EQ(_control.count_one_bits(), _slab.num_in_use_blocks());
-    EXPECT_LE(_control.count_one_bits(), _slab.num_dirty_blocks());
+    EXPECT_EQ(_control.count_one_bits(), _slab.count_in_use_blocks());
+    EXPECT_LE(_control.count_one_bits(), _slab.count_dirty_blocks());
   }
 
   int allocate_blocks_and_verify(int num) {
@@ -151,24 +148,25 @@ class Tester {
       ASSERT_GE(n, 1u);
       num_allocated += n;
     }
-    ASSERT_EQ(_slab.num_in_use_blocks(), _num_blocks);
+    ASSERT_EQ(_slab.count_in_use_blocks(), _num_blocks);
   }
 
 public:
 
-  Tester(size_t block_size, size_t granule_size, unsigned num_blocks) :
-    _block_size(block_size),
-    _granule_size(granule_size),
-    _num_blocks(num_blocks),
-    _storage(allocate_storage_areas(block_size, granule_size)),
-    _slab(&_storage, block_size, granule_size, num_blocks, true, true),
-    _block_range(_storage._blocks, block_size, num_blocks),
-    _control(num_blocks, mtTest, true)
-  {
+  Tester(size_t block_size, size_t granule_size, unsigned num_blocks, unsigned release_boundary, double decay_factor) :
+    _block_size(block_size), _granule_size(granule_size), _num_blocks(num_blocks),
+    _release_boundary(release_boundary), _decay_factor(decay_factor),
+    _arena_space(allocate_arena_space(block_size, num_blocks)),
+    _metadata_space(allocate_metadata_space(num_blocks)),
+    _slab(_arena_space.p, _arena_space.sz, _metadata_space.p, _metadata_space.sz,
+          block_size, granule_size, num_blocks, release_boundary, decay_factor),
+    _block_range(_arena_space.p, block_size, num_blocks),
+    _control(num_blocks, mtTest, true) {
   }
 
   ~Tester() {
-    deallocate_storage_areas(_storage);
+    os::release_memory((char*)_arena_space.p, _arena_space.sz);
+    os::release_memory((char*)_metadata_space.p, _metadata_space.sz);
   }
 
   void test_allocate_and_deallocate() {
@@ -191,14 +189,15 @@ public:
 
 #define CALL_TEST(XXX) test_##XXX()
 
-#define DEFINE_TESTS(block_size, granule_size, num_blocks, testname) \
-TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## num_blocks ## _ ## granule_size) { \
-  Tester tester(block_size, granule_size, num_blocks); \
+#define DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, testname) \
+TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size ## _ ## num_blocks ## _ ## release_boundary ## _ ## decay_factor) { \
+  Tester tester(block_size, granule_size, num_blocks, release_boundary, decay_factor); \
   tester.CALL_TEST(testname); \
 }
 
-#define DEFINE_ALL_TESTS(numblocks, granulesize, testname) \
-  DEFINE_TESTS(numblocks, granulesize, testname, allocate_and_deallocate )
+#define DEFINE_ALL_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, allocate_and_deallocate )
 
-DEFINE_ALL_TESTS(256, 4096, 1024)
-DEFINE_ALL_TESTS(256, 2097152, 8192)
+// block_size, granule_size, num_blocks, release_boundary, decay_factor
+DEFINE_ALL_TESTS(256, 4096, 1024, 0, 0)
+DEFINE_ALL_TESTS(256, 2097152, 8192, 0, 0)

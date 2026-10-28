@@ -29,7 +29,6 @@
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/debug.hpp"
-#include "utilities/ostream.hpp"
 
 class LayeredBitmap {
 public:
@@ -53,20 +52,23 @@ private:
   const uint16_t _offset_master_bitmap;    // in number of words
   WordType* const _storage;
 
-  static constexpr unsigned _num_bits_per_word = sizeof(WordType) * BitsPerByte;
-  static constexpr unsigned _num_bits_per_segment = _num_bits_per_word;
+  static constexpr unsigned max_segment_word_size = 1 << BitsPerShort;
+  static constexpr unsigned max_num_segments = BitsPerWord * max_segment_word_size;
+  static constexpr unsigned max_num_bits = max_num_segments * BitsPerWord;
 
-  static unsigned num_segments(unsigned num_bits) { return num_bits / _num_bits_per_segment; }
+  static constexpr unsigned _log2_bits_per_segment = LogBitsPerWord;
+  static constexpr unsigned _num_bits_per_segment = nth_bit(_log2_bits_per_segment);
+
+  static unsigned num_segments(unsigned num_bits) { return num_bits >> _log2_bits_per_segment; }
 
   static size_t num_master_bitmap_words(unsigned num_bits) { return BitMap::calc_size_in_words(num_bits); }
-  size_t num_master_bitmap_words() const { return num_master_bitmap_words(num_bits()); }
+  WordType* master_bitmap_storage() const               { return _storage + _offset_master_bitmap; }
+  size_t num_master_bitmap_words() const                { return num_master_bitmap_words(num_bits()); }
 
   static size_t num_summary_bitmap_words(unsigned num_bits) { return BitMap::calc_size_in_words(num_segments(num_bits)); }
-  size_t num_summary_bitmap_words() const { return num_summary_bitmap_words(num_bits()); }
-
+  size_t num_summary_bitmap_words() const               { return num_summary_bitmap_words(num_bits()); }
   WordType* full_segments_bitmap_storage() const        { return _storage; }
   WordType* nonempty_segments_bitmap_storage() const    { return _storage + _offset_nonempty_summary; }
-  WordType* master_bitmap_storage() const               { return _storage + _offset_master_bitmap; }
 
   BitMapView full_segments_bitmap()                 { return BitMapView(full_segments_bitmap_storage(), num_segments()); }
   BitMapView nonempty_segments_bitmap()             { return BitMapView(nonempty_segments_bitmap_storage(), num_segments()); }
@@ -121,7 +123,7 @@ private:
   // Passing num_bits is allowed and returns num_segments
   IndexType index_to_segment_index(IndexType idx) const {
     verify_index_incl(idx);
-    const IndexType segidx = idx / _num_bits_per_segment;
+    const IndexType segidx = idx >> _log2_bits_per_segment;
     verify_segment_index_incl(segidx);
     return segidx;
   }
@@ -130,7 +132,7 @@ private:
   // Passing num_segments is allowed and returns num_bits
   IndexType segment_index_to_index(IndexType segidx) const {
     verify_segment_index_incl(segidx);
-    const IndexType idx = segidx * _num_bits_per_segment;
+    const IndexType idx = segidx << _log2_bits_per_segment;
     verify_index_incl(idx);
     return idx;
   }
@@ -382,31 +384,51 @@ private:
     }
   }
 
+  // Helpers for divvying up caller-provided storage
+  // toward the individual bitmaps.
+  struct StorageSizesHelper {
+    const size_t _summary_words;
+    const size_t _master_words;
+    static constexpr size_t _full_bitmap_base_offset = 0;
+    const size_t _non_empty_bitmap_base_offset;
+    const size_t _master_bitmap_base_offset;
+    const size_t _end_offset;
+
+    explicit StorageSizesHelper(int num_bits) :
+      _summary_words(BitMap::calc_size_in_words(LayeredBitmap::num_segments(num_bits))),
+      _master_words(BitMap::calc_size_in_words(num_bits)),
+      _non_empty_bitmap_base_offset(_full_bitmap_base_offset + _summary_words),
+      _master_bitmap_base_offset(_non_empty_bitmap_base_offset + _summary_words),
+      _end_offset(_master_bitmap_base_offset + _master_words)
+    {
+      assert(_end_offset == (2 * _summary_words) + _master_words, "Sanity");
+    }
+  };
+
 public:
 
   // How much space this bitmap will need. Caller should query this before constructing
   // the bitmap
-  static size_t bytes_needed_for_bitmaps(int num_bits) {
-    return sizeof(WordType) *
-           (2 * num_summary_bitmap_words(num_bits)) +
-           num_master_bitmap_words(num_bits);
+  static size_t bytes_needed(int num_bits) {
+    const StorageSizesHelper helper(num_bits);
+    return helper._end_offset * BytesPerWord;
   }
 
-  LayeredBitmap(address storage, size_t storage_size, unsigned num_bits) :
+  LayeredBitmap(address storage, size_t bytes, unsigned num_bits) :
     _num_bits(num_bits),
-    _offset_nonempty_summary(num_summary_bitmap_words(num_bits)),
-    _offset_master_bitmap(num_summary_bitmap_words(num_bits) * 2),
+    _offset_nonempty_summary(StorageSizesHelper(num_bits)._non_empty_bitmap_base_offset),
+    _offset_master_bitmap(StorageSizesHelper(num_bits)._master_bitmap_base_offset),
     _storage(reinterpret_cast<WordType*>(storage))
   {
-    assert(storage_size >= bytes_needed_for_bitmaps(num_bits), "Sanity");
-    assert(storage + storage_size >= (const_address)end(), "Sanity");
+    assert(num_bits <= max_num_bits, "Sanity");
+    assert(bytes >= bytes_needed(num_bits), "Sanity");
     assert(is_power_of_2(num_bits), "Sanity");
     STATIC_ASSERT(is_power_of_2(_num_bits_per_segment));
-    assert(num_bits > num_segments(), "Sanity");
+    assert(num_bits >= num_bits_per_segment(), "Sanity");
   }
 
-  constexpr BitMap::idx_t size() const { return _num_bits; }
-  constexpr BitMap::idx_t num_bits() const { return _num_bits; }
+  constexpr IndexType size() const { return _num_bits; }
+  constexpr IndexType num_bits() const { return _num_bits; }
   unsigned num_segments() const { return num_segments(_num_bits); }
   static constexpr unsigned num_bits_per_segment() { return _num_bits_per_segment; }
 
@@ -638,13 +660,15 @@ public:
   }
 
   void clear() {
-    memset(_storage, 0, bytes_needed_for_bitmaps(num_bits()));
+    full_segments_bitmap().clear();
+    nonempty_segments_bitmap().clear();
+    master_bitmap().clear();
   }
 
   // This is mostly for tests. Fills the bitmap with a pattern.
   void propagate_bit_pattern(WordType bit_pattern) {
     for (IndexType idx = 0; idx < num_master_bitmap_words(); idx++) {
-      _storage[idx] = bit_pattern;
+      master_bitmap_storage()[idx] = bit_pattern;
     }
     constexpr WordType fullword = right_n_bits(BitsPerWord);
     const WordType summary_pattern_full = bit_pattern == fullword ? fullword : 0;
@@ -657,6 +681,10 @@ public:
 
 #ifdef ASSERT
   void verify() const {
+    // check that storages for the individual bitmaps don't intersect
+    assert(_offset_nonempty_summary >= full_segments_bitmap().size_in_words(), "Sanity");
+    assert(_offset_master_bitmap >= full_segments_bitmap().size_in_words() +
+           nonempty_segments_bitmap().size_in_words(), "Sanity");
     for (IndexType segidx = 0; segidx < num_segments(); segidx++) {
       const Range range_idx = segment_index_to_index_range(segidx);
       const IndexType popcount = master_bitmap().count_one_bits(range_idx.beg, range_idx.end);

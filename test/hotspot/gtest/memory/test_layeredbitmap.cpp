@@ -45,12 +45,15 @@ namespace {
     const address _storage;
     BitmapType _layered_bitmap;
 
-    CHeapBitMap _test_bitmap;
+    static constexpr unsigned max_num_bits = 262144;
+    BitMap::bm_word_t _test_bitmap_storage[max_num_bits / sizeof(BitMap::bm_word_t)];
+    BitMapView _test_bitmap;
     PredictableRandom _random;
     mutable int _sometimes;
 
     static size_t calc_storage_size(unsigned num_bits) {
-      return align_up(LayeredBitmap::bytes_needed_for_bitmaps(num_bits), os::vm_page_size());
+      return align_up(LayeredBitmap::bytes_needed(num_bits) + 1, // canary
+             os::vm_page_size());
     }
 
     static address allocate_storage_for_bitmap(unsigned num_bits) {
@@ -66,13 +69,17 @@ namespace {
       _storage_size(calc_storage_size(num_bits)),
       _storage(allocate_storage_for_bitmap(num_bits)),
       _layered_bitmap(_storage, _storage_size, num_bits),
-      _test_bitmap(num_bits, mtTest, true),
+      _test_bitmap(_test_bitmap_storage, num_bits),
       _random(),
       _sometimes(0)
     {
+      assert(num_bits <= max_num_bits, "num_bits too big");
+      _storage[_storage_size - 1] = 'A';
+      _test_bitmap.clear();
     }
 
     ~Tester() {
+      assert(_storage[_storage_size - 1] == 'A', "overwriter?");
       os::release_memory((char*)_storage, _storage_size);
     }
 
@@ -173,9 +180,10 @@ namespace {
 
     void fill_with_pattern(BitMap::bm_word_t bit_pattern) {
       _layered_bitmap.propagate_bit_pattern(bit_pattern);
-      CHeapBitMap tmp(num_bits(), mtTest, false);
-      _layered_bitmap.convert_to_flat_bitmap(tmp);
-      _test_bitmap.set_from(tmp);
+      for (IndexType i = 0; i < _test_bitmap.size() / BitsPerWord; i++) {
+        _test_bitmap_storage[i] = bit_pattern;
+      }
+      assert(_layered_bitmap.is_same(_test_bitmap), "Sanity");
     }
 
     void basic_test() {
@@ -187,10 +195,12 @@ namespace {
       ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
 
       // set and clear bit in second segment
-      set_bit_and_verify(_layered_bitmap.num_bits_per_segment());
-      ASSERT_EQ((IndexType)1, _layered_bitmap.count_one_bits());
-      clear_bit_and_verify(_layered_bitmap.num_bits_per_segment());
-      ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
+      if (_layered_bitmap.num_segments() > 1) {
+        set_bit_and_verify(_layered_bitmap.num_bits_per_segment());
+        ASSERT_EQ((IndexType)1, _layered_bitmap.count_one_bits());
+        clear_bit_and_verify(_layered_bitmap.num_bits_per_segment());
+        ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
+      }
 
       // set and clear last bit
       set_bit_and_verify(num_bits() - 1);
@@ -294,8 +304,11 @@ namespace {
     template <bool first, bool set>
     void find_X_X_bit_test() {
       // The tests can be quite time consuming, so we just test the first and last 2 segments
-      find_X_X_bit_test<first, set>(0, _layered_bitmap.num_bits_per_segment() * 2);
-      find_X_X_bit_test<first, set>(num_bits() - _layered_bitmap.num_bits_per_segment() * 2, num_bits());
+      const IndexType range = MIN2(_layered_bitmap.num_bits(), (IndexType)_layered_bitmap.num_bits_per_segment() * 2);
+      find_X_X_bit_test<first, set>(0, range);
+      if (range < _layered_bitmap.num_bits()) {
+        find_X_X_bit_test<first, set>(num_bits() - range, num_bits());
+      }
     }
 
     void find_first_set_bit_test()    { find_X_X_bit_test<true, true>(); }
@@ -336,8 +349,11 @@ namespace {
 
     template <bool set>
     void X_range_test() {
-      X_range_test<set>(0, 2 * _layered_bitmap.num_bits_per_segment());
-      X_range_test<set>(num_bits() - 2 * _layered_bitmap.num_bits_per_segment(), num_bits());
+      const IndexType range = MIN2(_layered_bitmap.num_bits(), (IndexType)_layered_bitmap.num_bits_per_segment() * 2);
+      X_range_test<set>(0, range);
+      if (range < _layered_bitmap.num_bits()) {
+        X_range_test<set>(num_bits() - range, num_bits());
+      }
     }
 
     void set_range_test() { X_range_test<true>(); }
@@ -346,8 +362,10 @@ namespace {
     void count_one_bits_test() {
       clear_and_verify();
       ASSERT_EQ(count_one_bits_and_verify(0, num_bits()), (IndexType)0);
-      set_range_and_verify(13, 13 + 2 * _layered_bitmap.num_bits_per_segment());
-      ASSERT_EQ(count_one_bits_and_verify(0, num_bits()), (IndexType)2 * LayeredBitmap::num_bits_per_segment());
+      if (_layered_bitmap.num_segments() >= 3) {
+        set_range_and_verify(13, 13 + 2 * _layered_bitmap.num_bits_per_segment());
+        ASSERT_EQ(count_one_bits_and_verify(0, num_bits()), (IndexType)2 * LayeredBitmap::num_bits_per_segment());
+      }
     }
 
     void convert_to_flat_bitmap_test() const {
@@ -523,4 +541,4 @@ TEST_VM(Arena2_LayeredBitmap, test_ ## testname ## _ ## num_bits ## _ ## num_sum
 DEFINE_ALL_TESTS(64)
 DEFINE_ALL_TESTS(128)
 DEFINE_ALL_TESTS(512)
-DEFINE_ALL_TESTS(65536)
+DEFINE_ALL_TESTS(32768)

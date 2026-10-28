@@ -43,8 +43,8 @@ static void do_test(IndexType block_size) {
   ASSERT_FALSE(range.is_valid_block_index_incl(num_blocks + 1));
 
   ASSERT_TRUE(range.is_valid_block(fake_address));
-  ASSERT_TRUE(range.is_valid_block(fake_address + (block_size * num_blocks - 1)));
-  ASSERT_FALSE(range.is_valid_block(fake_address + (block_size * num_blocks)));
+  ASSERT_TRUE(range.is_valid_block(fake_address + block_size * (num_blocks - 1)));
+  ASSERT_FALSE(range.is_valid_block(fake_address + block_size * num_blocks));
   ASSERT_TRUE(range.is_valid_block_incl(fake_address + (block_size * num_blocks)));
 
   ASSERT_TRUE(range.is_valid_block_index_incl(num_blocks));

@@ -48,6 +48,7 @@ struct ArenaBlockHelpers : public AllStatic {
   static constexpr size_t max_standard_block_size = M;
   static constexpr size_t max_huge_block_size = G;
   static constexpr size_t huge_block_granularity = 2 * M;
+  static constexpr size_t slab_alignment = huge_block_granularity; // To be able to back it with 2MB pages
 
   static constexpr bool is_valid_standard_size_class(size_t szclass) {
     return szclass == 256 || szclass == K || szclass == K * 32 || szclass == K * 64 ||
@@ -116,6 +117,7 @@ public:
 
   const_blockptr_t base() const { return _base; }
   size_t size_in_bytes() const { return _block_size * _num_blocks; }
+
   const_blockptr_t end() const { return _base + size_in_bytes(); }
   IndexType num_blocks() const { return _num_blocks; }
 
@@ -126,7 +128,7 @@ public:
 
   // True if b inside [base, end]
   bool contains_incl(const_blockptr_t b) const {
-    return b >= _base && b < end();
+    return b >= _base && b <= end();
   }
 
   // True if block_index inside [baseindex, endindex)
@@ -140,11 +142,11 @@ public:
   }
 
   bool is_valid_block(const_blockptr_t b) const {
-    return contains(b) && is_valid_block_index(block_to_index(b));
+    return contains(b) && is_aligned(b, _block_size);
   }
 
   bool is_valid_block_incl(const_blockptr_t b) const {
-    return contains_incl(b) && is_valid_block_index(block_to_index(b));
+    return contains_incl(b) && is_aligned(b, _block_size);
   }
 
   const_blockptr_t index_to_block(IndexType block_index) const {
