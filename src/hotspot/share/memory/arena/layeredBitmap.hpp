@@ -29,6 +29,7 @@
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/unsigned5.hpp"
 
 class LayeredBitmap {
 public:
@@ -169,23 +170,22 @@ private:
     return Range { segment_index_to_index(segidx), segment_index_to_index(segidx + 1) };
   }
 
-  // Helper for segment_is_full|empty
-  template <bool X>
-  bool segment_is_X(IndexType segidx) const {
-    const Range range_idx = segment_index_to_index_range(segidx);
-    return X ?
-      (master_bitmap().find_first_clear_bit(range_idx.beg, range_idx.end) == range_idx.end) :
-      (master_bitmap().find_first_set_bit(range_idx.beg, range_idx.end) == range_idx.end);
+  // Returns the word in the master bitmap representing this segment
+  WordType segment_word(IndexType segidx) const {
+    DEBUG_ONLY(verify_segment_index_excl(segidx));
+    return master_bitmap_storage()[segidx];
   }
 
   // Given a segment index, return true if segment is full in master bitmap
   bool segment_is_full(IndexType segidx) const {
-    return segment_is_X<true>(segidx);
+    const WordType w = segment_word(segidx);
+    return w == ~(WordType)0;
   }
 
   // Given a segment index, return true if segment is empty in master bitmap
   bool segment_is_empty(IndexType segidx) const {
-    return segment_is_X<false>(segidx);
+    const WordType w = segment_word(segidx);
+    return w == 0;
   }
 
   // Given a bit index range [begidx, endidx) aligned to segment boundaries,
@@ -433,43 +433,43 @@ public:
 
   void set_bit(IndexType idx) {
     verify_index_excl(idx);
-
-    if (master_bitmap().at(idx)) {
-      return; // nothing changes
+    const IndexType segidx = idx >> _log2_bits_per_segment;
+    STATIC_ASSERT(_log2_bits_per_segment == LogBitsPerWord);
+    WordType* const p = master_bitmap_storage() + segidx;
+    const WordType w1 = *p;
+    const WordType w2 = w1 | nth_bit<WordType>(idx % BitsPerWord);
+    // Avoid stores if nothing changes
+    if (w2 == w1) {
+      return;
     }
-    master_bitmap().set_bit(idx);
-
-    // Update summary bitmaps
-    const IndexType segidx = index_to_segment_index(idx);
-
-    if (!nonempty_segments_bitmap().at(segidx)) { // avoid unnecessary writes
+    (*p) = w2;
+    // Update summaries. Avoid stores if summaries don't change
+    if (w1 == 0) {
       nonempty_segments_bitmap().set_bit(segidx);
     }
-
-    assert(!full_segments_bitmap().at(segidx), "Cannot have been full before.");
-    if (segment_is_full(segidx)) {
+    if (w2 == ~(WordType)0) {
       full_segments_bitmap().set_bit(segidx);
     }
   }
 
   void clear_bit(IndexType idx) {
     verify_index_excl(idx);
-
-    if (!master_bitmap().at(idx)) {
-      return; // nothing changes
+    const IndexType segidx = idx >> _log2_bits_per_segment;
+    STATIC_ASSERT(_log2_bits_per_segment == LogBitsPerWord);
+    WordType* const p = master_bitmap_storage() + segidx;
+    const WordType w1 = *p;
+    const WordType w2 = w1 & ~nth_bit<WordType>(idx % BitsPerWord);
+    // Avoid stores if nothing changes
+    if (w2 == w1) {
+      return;
     }
-    master_bitmap().clear_bit(idx);
-
-    // Update summary bitmaps
-    const IndexType segidx = index_to_segment_index(idx);
-
-    if (full_segments_bitmap().at(segidx)) {
-      full_segments_bitmap().clear_bit(segidx);
-    }
-
-    assert(nonempty_segments_bitmap().at(segidx), "Cannot have been empty before.");
-    if (segment_is_empty(segidx)) {
+    (*p) = w2;
+    // Update summaries. Avoid stores if summaries don't change
+    if (w2 == 0) {
       nonempty_segments_bitmap().clear_bit(segidx);
+    }
+    if (w1 == ~(WordType)0) {
+      full_segments_bitmap().clear_bit(segidx);
     }
   }
 
