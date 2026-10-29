@@ -255,12 +255,23 @@ private:
     }
     if (segidx < range_segidx.end) {
       // Now search inside the segment
-      const Range range_idx_aligned = segment_index_to_index_range(segidx);
-      result = find_X_X_bit_in_master_bitmap<forward, set>(range_idx_aligned.beg, range_idx_aligned.end);
-      // We should have found something, since the summary bitmaps say so
-      assert(result < range_idx_aligned.end, "Summary bitmaps out of sync??");
+      const WordType w = segment_word(segidx);
+      if (forward) {
+        if (set) {
+          result = count_trailing_zeros(w);
+        } else {
+          result = count_trailing_zeros(~w);
+        }
+      } else {
+        if (set) {
+          result = BitsPerWord - 1 - count_leading_zeros(w);
+        } else {
+          result = BitsPerWord - 1 - count_leading_zeros(~w);
+        }
+      }
+      assert(result < BitsPerWord, "Sanity");
+      result += segment_index_to_index(segidx);
     }
-    assert(result <= endidx, "Sanity");
     return result;
   }
 
