@@ -150,7 +150,7 @@ private:
     return align_up(idx, _num_bits_per_segment);
   }
 
-  struct Range { IndexType beg; IndexType end; };
+  struct Range { const IndexType beg; const IndexType end; };
 
   // Given an index range that is aligned to segment boundaries, return the segment index range
   Range index_range_aligned_to_segment_index_range(IndexType begidx, IndexType endidx) const {
@@ -508,9 +508,6 @@ public:
     if (num == 0) {
       return; // nothing changes
     }
-    if (find_first_clear_bit(begidx, endidx) == endidx) {
-      return; // bits already set, nothing changes
-    }
 
     // set in master bitmap
     master_bitmap().set_range(begidx, endidx);
@@ -519,8 +516,7 @@ public:
     auto outer_bits_handler = [this](IndexType idx1, IndexType) {
       const IndexType segidx = index_to_segment_index(idx1);
       nonempty_segments_bitmap().set_bit(segidx);
-      const bool is_full = segment_is_full(segidx);
-      if (is_full) {
+      if (segment_is_full(segidx)) {
         full_segments_bitmap().set_bit(segidx);
       }
       return true;
@@ -543,9 +539,6 @@ public:
     if (num == 0) {
       return; // nothing changes
     }
-    if (find_first_set_bit(begidx, endidx) == endidx) {
-      return; // bits already cleared, nothing changes
-    }
 
     // clear in master bitmap
     master_bitmap().clear_range(begidx, endidx);
@@ -554,8 +547,7 @@ public:
     auto outer_bits_handler = [this](IndexType idx1, IndexType) {
       const IndexType segidx = index_to_segment_index(idx1);
       full_segments_bitmap().clear_bit(segidx);
-      const bool is_empty = segment_is_empty(segidx);
-      if (is_empty) {
+      if (segment_is_empty(segidx)) {
         nonempty_segments_bitmap().clear_bit(segidx);
       }
       return true;
