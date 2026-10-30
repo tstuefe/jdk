@@ -193,6 +193,19 @@ TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size #
 #define DEFINE_ALL_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, allocate_and_deallocate )
 
-// block_size, granule_size, num_blocks, release_boundary, decay_factor
-DEFINE_ALL_TESTS(256, 16384, 65536, 0, 0)
-DEFINE_ALL_TESTS(256, 65536, 65536, 0, 0)
+//               block_size
+//                        granule_size
+//                                  num_blocks
+//                                            release_boundary, decay_factor
+// Note: Granules >= 2MB use large pages (todo)
+
+DEFINE_ALL_TESTS(256,     16384,    16384,    0, 0)   // 4MB
+DEFINE_ALL_TESTS(256,     65536,    8192,     0, 0)   // 2MB
+DEFINE_ALL_TESTS(256,     2097152,  16384,    0, 0)
+
+DEFINE_ALL_TESTS(32768,   32768,    2048,     0, 0)   // 64MB
+DEFINE_ALL_TESTS(32768,   65536,    2048,     0, 0)
+DEFINE_ALL_TESTS(32768,   2097152,  2048,     0, 0)
+
+DEFINE_ALL_TESTS(1048576, 1048576,  32,       0, 0)   // 32MB
+DEFINE_ALL_TESTS(1048576, 2097152,  32,       0, 0)   // 32MB
