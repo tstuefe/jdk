@@ -489,8 +489,8 @@ namespace {
     }
 
     void intersects_test() {
-      const IndexType some_idx1 = num_bits() / 5;
-      const IndexType some_idx2 = num_bits() / 3;
+      const IndexType some_idx1 = num_bits() / 3;
+      const IndexType some_idx2 = num_bits() / 2;
 
       if (some_idx1 == some_idx2) {
         return;
@@ -578,4 +578,5 @@ DEFINE_ALL_TESTS(64)
 DEFINE_ALL_TESTS(127)
 DEFINE_ALL_TESTS(128)
 DEFINE_ALL_TESTS(512)
+DEFINE_ALL_TESTS(718)
 DEFINE_ALL_TESTS(32768)
