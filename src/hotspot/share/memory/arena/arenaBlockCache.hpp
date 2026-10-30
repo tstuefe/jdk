@@ -58,15 +58,13 @@ public:
   STATIC_ASSERT(num_evict_on_tick_nonbusy <= cachesize);
   STATIC_ASSERT(ArenaBlockHelpers::is_valid_standard_size_class(szclass));
 
-  struct alignas(DEFAULT_CACHE_LINE_SIZE) {
-    // Blocks are ordered on insert, high-to-low
-    // (const pointers since we never change block content from here)
-    const_blockptr_t _blocks[cachesize];
-    // Number of items in cache
-    uint8_t _count;
-    // true if block requests came in since the last tick
-    bool _is_busy;
-  } _hot;
+  // Blocks are ordered on insert, high-to-low
+  // (const pointers since we never change block content from here)
+  const_blockptr_t _blocks[cachesize];
+  // Number of items in cache
+  uint8_t _count;
+  // true if block requests came in since the last tick
+  bool _is_busy;
 
   // The slab allocator to bother on overflow and underflow
   ArenaSlabAllocator& _slab_allocator;
@@ -101,7 +99,7 @@ public:
 
   void set_count(int n) {
     assert(n >= 0 && n <= cachesize, "n too large");
-    _hot._count = n;
+    _count = n;
   }
 
   // Given a block pointer, insert it to the cache. If cache is full, returns the highest-address
@@ -115,18 +113,18 @@ public:
     const int c = num_in_cache;
 #ifdef ASSERT
     for (int i = 0; i < c; i++) {
-      assert(_hot._blocks[i] != block, "block already in cache??");
+      assert(_blocks[i] != block, "block already in cache??");
     }
 #endif
     if (c == cachesize) {
       int pos = c - 1;
-      while (pos >= 0 && _hot._blocks[pos] < block) {
+      while (pos >= 0 && _blocks[pos] < block) {
         pos--;
       }
       while (pos >= 0) {
-        assert(_hot._blocks[pos] > block, "block order?");
-        const const_blockptr_t b2 = _hot._blocks[pos];
-        _hot._blocks[pos] = block;
+        assert(_blocks[pos] > block, "block order?");
+        const const_blockptr_t b2 = _blocks[pos];
+        _blocks[pos] = block;
         block = b2;
         pos --;
       }
@@ -134,17 +132,17 @@ public:
     } else {
       assert(c < cachesize, "Sanity");
       int pos = c;
-      while (pos > 0 && _hot._blocks[pos - 1] < block) {
+      while (pos > 0 && _blocks[pos - 1] < block) {
         pos--;
       }
       while (pos < c) {
-        assert(_hot._blocks[pos] < block, "block order?");
-        const const_blockptr_t b2 = _hot._blocks[pos];
-        _hot._blocks[pos] = block;
+        assert(_blocks[pos] < block, "block order?");
+        const const_blockptr_t b2 = _blocks[pos];
+        _blocks[pos] = block;
         block = b2;
         pos ++;
       }
-      _hot._blocks[pos] = block;
+      _blocks[pos] = block;
       return nullptr;
     }
   }
@@ -157,14 +155,14 @@ public:
     assert(pos < cachesize && pos > 0, "Sanity");
     assert(pos + num <= cachesize, "Sanity");
     for (int i = 0; i < num; i++) {
-      _hot._blocks[i] = _hot._blocks[pos + i];
+      _blocks[i] = _blocks[pos + i];
     }
     DEBUG_ONLY(zero_out_slots(num, cachesize - num);)
   }
 
   void zero_out_slots(int pos, int count) {
     for (int i = 0; i < count; i++) {
-      _hot._blocks[pos + i] = nullptr;
+      _blocks[pos + i] = nullptr;
     }
   }
 
@@ -173,10 +171,10 @@ public:
   ArenaBlockCache(ArenaSlabAllocator& slab_allocator) : _slab_allocator(slab_allocator) {
     zero_out_slots(0, cachesize);
     set_count(0);
-    _hot._is_busy = false;
+    _is_busy = false;
   }
 
-  int count() const { return _hot._count; }
+  int count() const { return _count; }
 
   void deallocate_block(const_blockptr_t block) {
     DEBUG_ONLY(verify_block(block);)
@@ -189,7 +187,7 @@ public:
       const_blockptr_t eviction_set [num_evict_on_overflow + 1];
       eviction_set[0] = block;
       for (int i = 0; i < num_evict_on_overflow; i++) {
-        eviction_set[i + 1] = _hot._blocks[i];
+        eviction_set[i + 1] = _blocks[i];
       }
       _slab_allocator.deallocate_blocks(szclass, eviction_set, num_evict_on_overflow + 1);
       constexpr int c2 = cachesize - num_evict_on_overflow;
@@ -202,7 +200,7 @@ public:
 
   const_blockptr_t allocate_block() {
     // Remove block with lowest address. This is the top block and typically the hottest.
-    _hot._is_busy = true;
+    _is_busy = true;
     int c = count();
     if (c == 0) {
       // Underflow: Refill cache from slab allocator. We prefetch a few blocks to reduce calls into
@@ -221,7 +219,7 @@ public:
       const_blockptr_t result = tmp[0];
       for (int i = 1; i < num_fetched; i++) {
         const int j = num_fetched - i - 1;
-        _hot._blocks[j] = tmp[i];
+        _blocks[j] = tmp[i];
       }
       set_count(num_fetched - 1);
       return result;
@@ -230,8 +228,8 @@ public:
 
     // standard path: take single block from the cache.
     c --;
-    const const_blockptr_t result = _hot._blocks[c];
-    DEBUG_ONLY(_hot._blocks[c] = nullptr;)
+    const const_blockptr_t result = _blocks[c];
+    DEBUG_ONLY(_blocks[c] = nullptr;)
     set_count(c);
     return result;
   }
@@ -267,7 +265,7 @@ public:
       assert(num_in_cache == cachesize, "sanity");
       assert(num_evict_on_overflow + num_in_eviction_set <= eviction_set_max_size, "sanity");
       for (int i = 0; i < num_evict_on_overflow; i++) {
-        evict_set[num_in_eviction_set] = _hot._blocks[i];
+        evict_set[num_in_eviction_set] = _blocks[i];
         num_in_eviction_set++;
       }
       num_in_cache -= num_evict_on_overflow;
@@ -287,10 +285,10 @@ public:
   void tick() {
     DEBUG_ONLY(verify_cache();)
     const int c = count();
-    const int max_to_evict = _hot._is_busy ? num_evict_on_tick_busy : num_evict_on_tick_nonbusy;
+    const int max_to_evict = _is_busy ? num_evict_on_tick_busy : num_evict_on_tick_nonbusy;
     const int num_to_evict = MIN2(c, max_to_evict);
     if (num_to_evict > 0) {
-      _slab_allocator.deallocate_blocks(szclass, _hot._blocks, num_to_evict);
+      _slab_allocator.deallocate_blocks(szclass, _blocks, num_to_evict);
       const int c2 = c - num_to_evict;
       if (c2 > 0) {
         compress_cache(num_to_evict, c2);
@@ -299,18 +297,18 @@ public:
       }
       set_count(c2);
     }
-    _hot._is_busy = false; // reset flag
+    _is_busy = false; // reset flag
   }
 
 #ifdef ASSERT
   void verify_cache() const {
     const int c = count();
     assert(c >= 0 && c <= cachesize, "Sanity");
-    verify_blocks(_hot._blocks, c);
-    verify_block_order<false>(_hot._blocks, c);
+    verify_blocks(_blocks, c);
+    verify_block_order<false>(_blocks, c);
     // Check that (at least in debug builds) the unused slots are zero'd out
     for (int i = c; i < cachesize; i++) {
-      assert(_hot._blocks[i] == nullptr, "Sanity");
+      assert(_blocks[i] == nullptr, "Sanity");
     }
   }
 #endif // ASSERT
@@ -319,18 +317,18 @@ public:
     DEBUG_ONLY(verify_cache();)
     const int c = count();
     if (c > 0) {
-      _slab_allocator.deallocate_blocks(szclass, _hot._blocks, c);
+      _slab_allocator.deallocate_blocks(szclass, _blocks, c);
     }
     set_count(0);
     zero_out_slots(0, cachesize);
-    _hot._is_busy = false;
+    _is_busy = false;
   }
 
   // Helper function for tests. Iterates through all blocks in the cache, highest-address first
   template <typename Function>
   void iterate(Function fun) const {
     for (int i = 0; i < count(); i++) {
-      fun(_hot._blocks[i]);
+      fun(_blocks[i]);
     }
   }
 
