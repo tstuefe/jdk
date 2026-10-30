@@ -49,6 +49,7 @@ namespace {
     BitMapView _test_bitmap;
     PredictableRandom _random;
     mutable int _sometimes;
+    static constexpr unsigned num_bits_per_segment = BitsPerWord;
 
     static size_t calc_storage_size(unsigned num_bits) {
       return align_up(LayeredBitmap::bytes_needed(num_bits) + 1, // canary
@@ -68,6 +69,7 @@ namespace {
       _storage_size(calc_storage_size(num_bits)),
       _storage(allocate_storage_for_bitmap(num_bits)),
       _layered_bitmap(_storage, _storage_size, num_bits),
+      _test_bitmap_storage {0},
       _test_bitmap(_test_bitmap_storage, num_bits),
       _random(),
       _sometimes(0)
@@ -181,10 +183,23 @@ namespace {
 
     void fill_with_pattern(BitMap::bm_word_t bit_pattern) {
       _layered_bitmap.propagate_bit_pattern(bit_pattern);
-      for (IndexType i = 0; i < _test_bitmap.size() / BitsPerWord; i++) {
+      for (IndexType i = 0; i < _test_bitmap.size_in_words(); i++) {
         _test_bitmap_storage[i] = bit_pattern;
       }
       assert(_layered_bitmap.is_same(_test_bitmap), "Sanity");
+    }
+
+    bool is_only_range_set(IndexType beg, IndexType end) {
+      IndexType idx = find_first_set_bit_and_verify(0, num_bits());
+      if (idx != beg) {
+        return false;
+      }
+      idx = find_first_clear_bit_and_verify(idx, num_bits());
+      if (idx != end) {
+        return false;
+      }
+      idx = find_first_set_bit_and_verify(idx, num_bits());
+      return idx == num_bits();
     }
 
     void basic_test() {
@@ -192,26 +207,30 @@ namespace {
       // set and clear first bit
       set_bit_and_verify(0);
       ASSERT_EQ((IndexType)1, _layered_bitmap.count_one_bits());
+      ASSERT_TRUE(is_only_range_set(0, 1));
       clear_bit_and_verify(0);
       ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
+      ASSERT_TRUE(_layered_bitmap.is_empty());
 
       // set and clear bit in second segment
-      if (_layered_bitmap.num_segments() > 1) {
-        set_bit_and_verify(_layered_bitmap.num_bits_per_segment());
-        ASSERT_EQ((IndexType)1, _layered_bitmap.count_one_bits());
+      if (num_bits() > num_bits_per_segment + 2) {
+        set_bit_and_verify(num_bits_per_segment);
+        ASSERT_TRUE(is_only_range_set(num_bits_per_segment,
+                                      num_bits_per_segment + 1));
         clear_bit_and_verify(_layered_bitmap.num_bits_per_segment());
-        ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
+        ASSERT_TRUE(_layered_bitmap.is_empty());
       }
 
       // set and clear last bit
       set_bit_and_verify(num_bits() - 1);
-      ASSERT_EQ((IndexType)1, _layered_bitmap.count_one_bits());
+      ASSERT_TRUE(is_only_range_set(num_bits() - 1, num_bits()));
       clear_bit_and_verify(num_bits() - 1);
-      ASSERT_EQ((IndexType)0, _layered_bitmap.count_one_bits());
+      ASSERT_TRUE(_layered_bitmap.is_empty());
 
       // set all
       set_range_and_verify(0, num_bits());
       ASSERT_TRUE(_layered_bitmap.is_full());
+      ASSERT_TRUE(is_only_range_set(0, num_bits()));
       ASSERT_FALSE(_layered_bitmap.is_empty());
       ASSERT_EQ(_layered_bitmap.count_one_bits(), num_bits());
 
@@ -233,7 +252,7 @@ namespace {
       set_range_and_verify(0, num_bits());
       ASSERT_TRUE(_layered_bitmap.is_full());
       ASSERT_EQ(_layered_bitmap.find_first_set_bit(num_bits(), num_bits()), num_bits());
-      ASSERT_EQ(_layered_bitmap.find_first_set_bit(55u, 55u), 55u);
+      ASSERT_EQ(_layered_bitmap.find_first_set_bit(num_bits() / 2, num_bits() / 2), num_bits() / 2);
 
       // clear with empty range
       set_range_and_verify(0, num_bits());
@@ -293,8 +312,9 @@ namespace {
             set_range_and_verify(range_end, num_bits());
           }
           find_X_X_bit_test_helper<first, set>(0, num_bits(), range_beg, range_end);
-          find_X_X_bit_test_helper<first, set>(0, 64, range_beg, range_end);
-          find_X_X_bit_test_helper<first, set>(num_bits() - 64, num_bits(), range_beg, range_end);
+          find_X_X_bit_test_helper<first, set>(0, num_bits() / 3, range_beg, range_end);
+          find_X_X_bit_test_helper<first, set>(0, (num_bits() / 3) * 2, range_beg, range_end);
+          find_X_X_bit_test_helper<first, set>(num_bits() - num_bits() / 3, num_bits(), range_beg, range_end);
           if (::testing::Test::HasFailure()) {
             return;
           }
@@ -398,7 +418,8 @@ namespace {
     }
 
     void set_union_test() {
-      const IndexType some_idx = num_bits() / 2 + 3;
+      const IndexType some_idx = num_bits() / 3;
+
       CHeapBitMap tmp(num_bits(), mtTest, true);
       tmp.set_bit(some_idx);
 
@@ -416,7 +437,8 @@ namespace {
     }
 
     void set_difference_test() {
-      const IndexType some_idx = num_bits() / 2 + 3;
+      const IndexType some_idx = num_bits() / 3;
+
       CHeapBitMap tmp(num_bits(), mtTest, true);
       tmp.set_bit(some_idx);
 
@@ -434,27 +456,28 @@ namespace {
     }
 
     void set_intersection_test() {
-      const IndexType some_idx = num_bits() / 2 + 3;
-      CHeapBitMap tmp(num_bits(), mtTest, true);
-      tmp.set_range(some_idx, num_bits());
+      const IndexType some_idx1 = num_bits() / 5;
+      const IndexType some_idx2 = num_bits() / 3;
 
-      set_range_and_verify(0, some_idx + 3);
+      if (some_idx1 == some_idx2) {
+        return;
+      }
+      CHeapBitMap tmp(num_bits(), mtTest, true);
+      tmp.set_range(some_idx1, num_bits());
+
+      set_range_and_verify(0, some_idx2);
       ASSERT_FALSE(is_full_and_verify());
 
       const bool changed = set_intersection_with_result_and_verify(tmp);
       ASSERT_TRUE(changed);
-      ASSERT_FALSE(is_full_and_verify());
-      const IndexType idx1 = find_first_set_bit_and_verify(0, num_bits());
-      const IndexType idx2 = find_first_clear_bit_and_verify(idx1, num_bits());
-      ASSERT_EQ(idx1, some_idx);
-      ASSERT_EQ(idx2, some_idx + 3);
+      ASSERT_TRUE(is_only_range_set(some_idx1, some_idx2));
 
       const bool changed2 = set_intersection_with_result_and_verify(tmp);
       ASSERT_FALSE(changed2);
     }
 
     void contains_test() {
-      const IndexType some_idx = num_bits() / 2 + 3;
+      const IndexType some_idx = num_bits() / 3;
       CHeapBitMap tmp(num_bits(), mtTest, true);
       tmp.set_range(some_idx, num_bits());
       clear_and_verify();
@@ -466,20 +489,30 @@ namespace {
     }
 
     void intersects_test() {
-      const IndexType some_idx = num_bits() / 2 + 3;
+      const IndexType some_idx1 = num_bits() / 5;
+      const IndexType some_idx2 = num_bits() / 3;
+
+      if (some_idx1 == some_idx2) {
+        return;
+      }
       CHeapBitMap tmp(num_bits(), mtTest, true);
-      tmp.set_range(some_idx, num_bits());
+      tmp.set_range(some_idx1, some_idx2);
+
       clear_and_verify();
       ASSERT_FALSE(intersects_and_verify(tmp));
-      set_bit_and_verify(some_idx);
+
+      set_bit_and_verify(some_idx1);
       ASSERT_TRUE(intersects_and_verify(tmp));
-      clear_and_verify();
-      set_range_and_verify(0, some_idx);
+
+      tmp.clear_bit(some_idx1);
       ASSERT_FALSE(intersects_and_verify(tmp));
     }
 
     void random_test() {
       constexpr int iterations = 10000;
+      if (num_bits() < 64) {
+        return;
+      }
       for (int i = 0; i < iterations; i++) {
         const unsigned what = _random.next(7);
         const IndexType idx = _random.next(num_bits());
@@ -539,7 +572,10 @@ TEST_VM(Arena2_LayeredBitmap, test_ ## testname ## _ ## num_bits ## _ ## num_sum
   DEFINE_TESTS(num_bits, random ) \
 
 
+DEFINE_ALL_TESTS(1)
+DEFINE_ALL_TESTS(15)
 DEFINE_ALL_TESTS(64)
+DEFINE_ALL_TESTS(127)
 DEFINE_ALL_TESTS(128)
 DEFINE_ALL_TESTS(512)
 DEFINE_ALL_TESTS(32768)

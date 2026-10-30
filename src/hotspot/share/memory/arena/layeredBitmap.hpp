@@ -31,6 +31,13 @@
 #include "utilities/debug.hpp"
 #include "utilities/unsigned5.hpp"
 
+// The purpose of this bitmap is to handle mid-sized bit counts well and cheaply
+// while not degrading significantly below plain BitMap for very small bit counts.
+// It is a two-layer bitmap, with a segmented master bitmap  and summary bitmaps
+// for optimized operations.
+// Each segment is 64-bit (word sized).
+// For bitmaps < 32768 bits, the summary bitmaps each fit into a single cacheline.
+// Bitmaps > ~64K bits may benefit from a three-layer model.
 class LayeredBitmap {
 public:
   typedef BitMap::bm_word_t WordType;
@@ -55,10 +62,15 @@ private:
 
   static constexpr unsigned _log2_bits_per_segment = LogBitsPerWord;
   static constexpr unsigned _num_bits_per_segment = nth_bit(_log2_bits_per_segment);
-
   static constexpr unsigned _max_num_bits = 262144u;
 
-  static unsigned num_segments(unsigned num_bits) { return num_bits >> _log2_bits_per_segment; }
+  static constexpr unsigned bits_to_internal_bits(unsigned num_bits) {
+    return (num_bits + _num_bits_per_segment - 1) & ~(_num_bits_per_segment - 1);
+  }
+
+  static constexpr unsigned num_segments(unsigned num_bits) {
+    return bits_to_internal_bits(num_bits) >> _log2_bits_per_segment;
+  }
 
   static size_t num_master_bitmap_words(unsigned num_bits) { return BitMap::calc_size_in_words(num_bits); }
   WordType* master_bitmap_storage() const               { return _storage + _offset_master_bitmap; }
@@ -76,13 +88,26 @@ private:
   const BitMapView nonempty_segments_bitmap() const { return const_cast<LayeredBitmap*>(this)->nonempty_segments_bitmap(); }
   const BitMapView master_bitmap() const            { return const_cast<LayeredBitmap*>(this)->master_bitmap(); }
 
+  IndexType num_internal_bits() const { return bits_to_internal_bits(_num_bits); }
+  IndexType num_tail_bits() const { return num_internal_bits() - num_bits(); }
+
+  // Returns a bit mask masking out the unused tail bits of the last segment
+  WordType tail_bit_mask() const {
+    assert(num_tail_bits() <= num_bits_per_segment(), "Sanity");
+    return right_n_bits<WordType>(num_bits_per_segment() - num_tail_bits());
+  }
+
+  // All verify function check for internal bit sizes.
+  // Only verify_external_index_xxx check external indices. Use those
+  // in outside-facing methods.
+
   void verify_index_excl(IndexType idx) const {
-    assert(idx < num_bits(), "out of bounds (idx %zu, num_bits %zu)",
-      idx, num_bits());
+    assert(idx < num_internal_bits(), "out of bounds (idx %zu, num_bits %zu)",
+      idx, num_internal_bits());
   }
   void verify_index_incl(IndexType idx) const {
-    assert(idx <= num_bits(), "out of bounds (idx %zu, num_bits %zu)",
-      idx, num_bits());
+    assert(idx <= num_internal_bits(), "out of bounds (idx %zu, num_bits %zu)",
+      idx, num_internal_bits());
   }
   void verify_index_range_incl(IndexType begidx, IndexType endidx) const {
     assert(begidx <= endidx, "Sanity");
@@ -118,35 +143,45 @@ private:
     verify_segment_index_excl(endsegidx);
   }
 
+  void verify_external_index_excl(IndexType idx) const {
+    assert(idx < num_bits(), "out of bounds (idx %zu, num_bits %zu)",
+      idx, num_bits());
+  }
+  void verify_external_index_incl(IndexType idx) const {
+    assert(idx <= num_bits(), "out of bounds (idx %zu, num_bits %zu)",
+      idx, num_bits());
+  }
+  void verify_external_index_range_incl(IndexType begidx, IndexType endidx) const {
+    assert(begidx <= endidx, "Sanity");
+    verify_external_index_incl(begidx);
+    verify_external_index_incl(endidx);
+  }
+
   // Given a bit index, return the index of enclosing segment
-  // Passing num_bits is allowed and returns num_segments
+  // Passing num_bits is allowed. It will return the last segment
+  // (if the last segment is partial) or num_segments().
   IndexType index_to_segment_index(IndexType idx) const {
-    verify_index_incl(idx);
     const IndexType segidx = idx >> _log2_bits_per_segment;
-    verify_segment_index_incl(segidx);
     return segidx;
   }
 
   // Given a segment index, return idx of first bit.
   // Passing num_segments is allowed and returns num_bits
   IndexType segment_index_to_index(IndexType segidx) const {
-    verify_segment_index_incl(segidx);
-    const IndexType idx = segidx << _log2_bits_per_segment;
-    verify_index_incl(idx);
+    const IndexType idx = MIN2(num_bits(), segidx << _log2_bits_per_segment);
     return idx;
   }
 
   // Given a bit idx, return bit idx of first bit in the same segment
-  // Passing num_bits is allowed and returns num_bits
+  // Passing num_bits is allowed and returns either num_bits or
+  // - if last segment is partial - the start of the last segment.
   IndexType index_align_down_segment_start(IndexType idx) const {
-    verify_index_incl(idx);
     return align_down(idx, _num_bits_per_segment);
   }
 
   // Given a bit idx, return bit idx of first bit in the next segment
-  // Passing num_bits is allowed and returns num_bits
+  // Passing num_bits is allowed and returns num_internal_bits
   IndexType index_align_up_segment_start(IndexType idx) const {
-    verify_index_incl(idx);
     return align_up(idx, _num_bits_per_segment);
   }
 
@@ -154,29 +189,26 @@ private:
 
   // Given an index range that is aligned to segment boundaries, return the segment index range
   Range index_range_aligned_to_segment_index_range(IndexType begidx, IndexType endidx) const {
-    verify_index_range_aligned_to_segment_boundaries(begidx, endidx);
     return Range { index_to_segment_index(begidx), index_to_segment_index(endidx) };
   }
 
   // Given a segment index range, return the index range covering all segments
   Range segment_index_range_to_index_range(IndexType segbegidx, IndexType segendidx) const {
-    verify_segment_index_range_incl(segbegidx, segendidx);
     return Range { segment_index_to_index(segbegidx), segment_index_to_index(segendidx) };
   }
 
   // Given a single segment index, return the index range covering this segment
   Range segment_index_to_index_range(IndexType segidx) const {
-    verify_segment_index_excl(segidx);
     return Range { segment_index_to_index(segidx), segment_index_to_index(segidx + 1) };
   }
 
   // Returns the word in the master bitmap representing this segment
   WordType segment_word(IndexType segidx) const {
-    DEBUG_ONLY(verify_segment_index_excl(segidx));
     return master_bitmap_storage()[segidx];
   }
 
   // Given a segment index, return true if segment is full in master bitmap
+  // (If the last segment is partial, it will return false and that is as intended)
   bool segment_is_full(IndexType segidx) const {
     const WordType w = segment_word(segidx);
     return w == ~(WordType)0;
@@ -191,6 +223,7 @@ private:
   // Given a bit index range [begidx, endidx) aligned to segment boundaries,
   // return number of 1 bits in range
   IndexType count_one_bits_in_aligned_range(IndexType begidx, IndexType endidx) const {
+    verify_index_range_aligned_to_segment_boundaries(begidx, endidx);
     IndexType result = 0;
     const Range range_segidx = index_range_aligned_to_segment_index_range(begidx, endidx);
     // We iterate over all 1-runs in the non-empty segments bitmap.
@@ -277,7 +310,7 @@ private:
 
   template <bool forward, bool set>
   IndexType find_X_X_bit(IndexType begidx, IndexType endidx) const {
-    verify_index_range_incl(begidx, endidx);
+    verify_external_index_range_incl(begidx, endidx);
     if (begidx == endidx) {
       return endidx;
     }
@@ -403,7 +436,7 @@ private:
     const size_t _master_bitmap_base_offset;
     const size_t _end_offset;
 
-    explicit StorageSizesHelper(int num_bits) :
+    explicit StorageSizesHelper(unsigned num_bits) :
       _summary_words(BitMap::calc_size_in_words(LayeredBitmap::num_segments(num_bits))),
       _master_words(BitMap::calc_size_in_words(num_bits)),
       _non_empty_bitmap_base_offset(_full_bitmap_base_offset + _summary_words),
@@ -418,7 +451,8 @@ public:
 
   // How much space this bitmap will need. Caller should query this before constructing
   // the bitmap
-  static size_t bytes_needed(int num_bits) {
+  static size_t bytes_needed(unsigned num_bits) {
+    assert(num_bits <= _max_num_bits, "Sanity");
     const StorageSizesHelper helper(num_bits);
     return helper._end_offset * BytesPerWord;
   }
@@ -430,10 +464,9 @@ public:
     _storage(reinterpret_cast<WordType*>(storage))
   {
     assert(num_bits <= _max_num_bits, "Sanity");
+    assert(num_bits >= 1, "Sanity");
     assert(bytes >= bytes_needed(num_bits), "Sanity");
-    assert(is_power_of_2(num_bits), "Sanity");
-    STATIC_ASSERT(is_power_of_2(_num_bits_per_segment));
-    assert(num_bits >= num_bits_per_segment(), "Sanity");
+    STATIC_ASSERT(BitsPerWord == _num_bits_per_segment);
   }
 
   IndexType size() const { return _num_bits; }
@@ -443,7 +476,7 @@ public:
   static constexpr IndexType num_bits_per_segment() { return _num_bits_per_segment; }
 
   void set_bit(IndexType idx) {
-    verify_index_excl(idx);
+    verify_external_index_excl(idx);
     const IndexType segidx = idx >> _log2_bits_per_segment;
     STATIC_ASSERT(_log2_bits_per_segment == LogBitsPerWord);
     WordType* const p = master_bitmap_storage() + segidx;
@@ -464,7 +497,7 @@ public:
   }
 
   void clear_bit(IndexType idx) {
-    verify_index_excl(idx);
+    verify_external_index_excl(idx);
     const IndexType segidx = idx >> _log2_bits_per_segment;
     STATIC_ASSERT(_log2_bits_per_segment == LogBitsPerWord);
     WordType* const p = master_bitmap_storage() + segidx;
@@ -502,7 +535,7 @@ public:
 
   // Sets bit range [begidx, endidx)
   void set_range(IndexType begidx, IndexType endidx) {
-    verify_index_range_incl(begidx, endidx);
+    verify_external_index_range_incl(begidx, endidx);
 
     const IndexType num = endidx - begidx;
     if (num == 0) {
@@ -533,7 +566,7 @@ public:
 
   // Clears bit range [begidx, endidx)
   void clear_range(IndexType begidx, IndexType endidx) {
-    verify_index_range_incl(begidx, endidx);
+    verify_external_index_range_incl(begidx, endidx);
 
     const IndexType num = endidx - begidx;
     if (num == 0) {
@@ -563,11 +596,12 @@ public:
   }
 
   bool at(IndexType idx) const {
+    verify_external_index_excl(idx);
     return master_bitmap().at(idx);
   }
 
   uintx count_one_bits(IndexType begidx, IndexType endidx) const {
-    verify_index_range_incl(begidx, endidx);
+    verify_external_index_range_incl(begidx, endidx);
     uintx result = 0;
     auto outer_bits_handler = [this, &result](IndexType idx1, IndexType idx2) {
       result += master_bitmap().count_one_bits(idx1, idx2);
@@ -582,7 +616,7 @@ public:
   }
 
   IndexType count_one_bits() const {
-    return count_one_bits_in_aligned_range(0, num_bits());
+    return count_one_bits(0, num_bits());
   }
 
   bool is_empty() const {
@@ -590,6 +624,15 @@ public:
   }
 
   bool is_full() const {
+    if (num_tail_bits() > 0) {
+      // measure all full segments via full_segments_bitmap, and
+      // check the last partial segment separately
+      const IndexType last_segidx = num_segments() - 1;
+      if (full_segments_bitmap().find_first_clear_bit(0, last_segidx) < last_segidx) {
+        return false;
+      }
+      return segment_word(last_segidx) == tail_bit_mask();
+    }
     return full_segments_bitmap().is_full();
   }
 
@@ -669,16 +712,13 @@ public:
 
   // This is mostly for tests. Fills the bitmap with a pattern.
   void propagate_bit_pattern(WordType bit_pattern) {
+    // set master bitmap
     for (IndexType idx = 0; idx < num_master_bitmap_words(); idx++) {
       master_bitmap_storage()[idx] = bit_pattern;
     }
-    constexpr WordType fullword = right_n_bits(BitsPerWord);
-    const WordType summary_pattern_full = bit_pattern == fullword ? fullword : 0;
-    const WordType summary_pattern_nonempty = bit_pattern > 0 ? fullword : 0;
-    for (IndexType idx = 0; idx < num_summary_bitmap_words(); idx++) {
-      full_segments_bitmap_storage()[idx] = summary_pattern_full;
-      nonempty_segments_bitmap_storage()[idx] = summary_pattern_nonempty;
-    }
+    const IndexType last_word = num_master_bitmap_words() - 1;
+    master_bitmap_storage()[last_word] &= tail_bit_mask();
+    recalculate_summary_bitmaps();
   }
 
 #ifdef ASSERT
@@ -687,6 +727,18 @@ public:
     assert(_offset_nonempty_summary >= full_segments_bitmap().size_in_words(), "Sanity");
     assert(_offset_master_bitmap >= full_segments_bitmap().size_in_words() +
            nonempty_segments_bitmap().size_in_words(), "Sanity");
+
+    // The tail bits, unused, should always be zero
+    if (num_tail_bits() > 0) {
+      assert(num_tail_bits() < num_bits_per_segment(), "Sanity");
+      const IndexType last_segidx = num_segments() - 1;
+      const WordType w = segment_word(last_segidx);
+      assert((w & ~tail_bit_mask()) == 0, "bits in tail? %zx", w);
+      assert(!full_segments_bitmap().at(last_segidx), "Sanity"); // partial last segment is never full
+      const bool is_nonempty = w > 0;
+      assert(is_nonempty == nonempty_segments_bitmap().at(last_segidx), "Sanity");
+    }
+
     for (IndexType segidx = 0; segidx < num_segments(); segidx++) {
       const Range range_idx = segment_index_to_index_range(segidx);
       const IndexType popcount = master_bitmap().count_one_bits(range_idx.beg, range_idx.end);
