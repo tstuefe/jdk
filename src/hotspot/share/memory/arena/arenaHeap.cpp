@@ -41,7 +41,7 @@ static constexpr size_t max_heap = 4 * G;
 static constexpr size_t thp_page_size = 2 * M;
 
 ArenaHeap::ArenaHeap() {
-  _base = (address) os::reserve_memory(max_heap, mtChunk, false);
+  _base = (address) os::reserve_memory_aligned(max_heap, thp_page_size, mtChunk, false);
   assert(_base != nullptr, "OOM");
   _size = max_heap;
 }
@@ -52,10 +52,9 @@ ArenaHeap::~ArenaHeap() {
 
 void ArenaHeap::commit_memory(const_blockptr_t from, const_blockptr_t to, bool large_pages){
   const size_t sz = to - from;
-
+  assert(to > from, "Sanity");
   assert(contains(from), "Sanity");
-  assert(contains(to), "Sanity");
-  assert(sz > 0, "Sanity");
+  assert(contains(to - 1), "Sanity");
   assert(is_aligned(from, large_pages ? thp_page_size : os::vm_page_size()), "Sanity");
   assert(is_aligned(to, large_pages ? thp_page_size : os::vm_page_size()), "Sanity");
 
