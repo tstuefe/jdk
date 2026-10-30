@@ -23,25 +23,18 @@
  *
  */
 
-
 #ifndef SHARE_MEMORY_ARENA_ARENASLAB_HPP
 #define SHARE_MEMORY_ARENA_ARENASLAB_HPP
 
 #include "memory/arena/arenaBlock.hpp"
+#include "memory/arena/arenaHeap.hpp"
 #include "memory/arena/layeredBitmap.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-class ArenaSlabBase {
-protected:
 
-  static void commit_memory(const_blockptr_t from, const_blockptr_t to);
-  static void discard_memory(const_blockptr_t from, const_blockptr_t to);
-
-};
-
-class ArenaSlab : public ArenaSlabBase {
+class ArenaSlab {
 public:
   typedef BitMap::idx_t IndexType;
 
@@ -52,6 +45,7 @@ private:
 
   // Immutable data (Note, the bitmap objects are also immutable, since their geometry
   // never changes; only the maps themselves, and those are stored separately)
+  ArenaHeap* const _heap;
   const unsigned _block_size;
   const unsigned _granule_size;
   const unsigned _num_blocks;
@@ -112,6 +106,10 @@ private:
     return granule_idx << _blocks_to_granule_shift;
   }
 
+  bool use_large_pages() const {
+    return _granule_size >= 2 * M; // Todo.
+  }
+
   // Ensure this and all lower-address blocks are committed.
   void ensure_committed(IndexType block_index) {
     DEBUG_ONLY(_block_range.check_is_valid_block_index(block_index);)
@@ -123,7 +121,7 @@ private:
         MIN2((IndexType)num_granules(), new_commit_boundary + num_granules_overcommit);
       const const_blockptr_t p1 = _granule_range.index_to_block(_commit_boundary);
       const const_blockptr_t p2 = _granule_range.index_to_block_incl(new_commit_boundary_overshoot);
-      commit_memory(p1, p2);
+      _heap->commit_memory(p1, p2, use_large_pages());
       _commit_boundary = new_commit_boundary_overshoot;
     }
   }
@@ -173,11 +171,13 @@ public:
            LayeredBitmap::bytes_needed(num_granules);
   }
 
-  ArenaSlab(const_address arena_base, size_t arena_size,
+  ArenaSlab(ArenaHeap* heap,
+            const_address arena_base, size_t arena_size,
             address metadata_base, size_t metadata_size,
             unsigned block_size, unsigned granule_size,
             unsigned num_blocks, unsigned release_boundary,
             double decay_factor) :
+    _heap(heap),
     _block_size(block_size),
     _granule_size(granule_size),
     _num_blocks(num_blocks),
@@ -188,7 +188,8 @@ public:
     _granule_range(arena_base, granule_size, _num_granules),
     _block_range(arena_base, block_size, num_blocks),
     _dirty_bitmap(metadata_base, LayeredBitmap::bytes_needed(_num_granules), _num_granules),
-    _in_use_bitmap(metadata_base + LayeredBitmap::bytes_needed(_num_granules), LayeredBitmap::bytes_needed(num_blocks), num_blocks),
+    _in_use_bitmap(metadata_base + LayeredBitmap::bytes_needed(_num_granules), LayeredBitmap::bytes_needed(num_blocks),
+                   num_blocks),
     _commit_boundary(0),
     _retain_target(0),
     _num_blocks_in_use(0),
@@ -206,7 +207,7 @@ public:
 
     // The release boundary must be aligned to be able to back it with huge pages
     assert(is_aligned(_block_range.index_to_block(_release_boundary),
-           ArenaBlockHelpers::slab_alignment), "Sanity");
+             ArenaBlockHelpers::slab_alignment), "Sanity");
     assert(_release_boundary <= num_blocks, "Sanity");
 
     assert(arena_size >= _block_size * _num_blocks, "Sanity");

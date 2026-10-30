@@ -29,16 +29,3 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-
-
-void ArenaSlabBase::commit_memory(const_blockptr_t from, const_blockptr_t to) {
-  const size_t sz = to - from;
-  assert(sz > 0, "Sanity");
-  assert(is_aligned(sz, os::vm_page_size()), "Sanity");
-  const bool b = os::commit_memory((char*)from, sz, false);
-  assert(b, "OOM?");
-}
-
-void ArenaSlabBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
-  // empty for now
-}

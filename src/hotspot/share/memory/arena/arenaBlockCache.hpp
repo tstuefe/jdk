@@ -66,7 +66,7 @@ public:
   // true if block requests came in since the last tick
   bool _is_busy;
 
-  // The slab allocator to bother on overflow and underflow
+  // The slab to route allocations and deallocations to on overflow and underflow
   ArenaSlabAllocator& _slab_allocator;
 
 #ifdef ASSERT
