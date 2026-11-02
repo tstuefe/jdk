@@ -42,10 +42,10 @@
 
 
 // This class models expected block movements in between slab, cache and caller-space
-template <size_t szclass, int cachesize>
+template <size_t blocksize, int cachesize>
 class AllocationPredictionModel {
 
-  typedef ArenaBlockCache<szclass, cachesize> CacheType;
+  typedef ArenaBlockCache<blocksize, cachesize> CacheType;
 
   using idx_t = BitMap::idx_t;
 
@@ -114,13 +114,16 @@ class AllocationPredictionModel {
 
 public:
 
-  AllocationPredictionModel(const_address block_base) :
-    _num_blocks(0),
-    _owned_by_caller(num_blocks(), mtTest, true),
-    _owned_by_cache(num_blocks(), mtTest, true),
-    _owned_by_slab(num_blocks(), mtTest, true),
-    _block_range(block_base, szclass, num_blocks()),
-    _busy(false) {
+  AllocationPredictionModel(unsigned num_blocks, const_address block_base) :
+    _num_blocks(num_blocks),
+    _owned_by_caller(num_blocks, mtTest, true),
+    _owned_by_cache(num_blocks, mtTest, true),
+    _owned_by_slab(num_blocks, mtTest, true),
+    _block_range(block_base, blocksize, num_blocks),
+    _busy(false)
+  {
+    // At the start, all blocks are owned by the slab
+    _owned_by_slab.set_range(0, num_blocks);
   }
 
   void init_all_owned_by_caller() {
@@ -230,7 +233,10 @@ public:
   void reality_test(const ArenaSlab& slab) const {
     CHeapBitMap tmp(num_blocks(), mtTest, true);
     slab.get_in_use_map(tmp);
-    ASSERT_TRUE(_owned_by_slab.is_same(tmp));
+    CHeapBitMap tmp2(num_blocks(), mtTest, true);
+    tmp2.set_range(0, num_blocks());
+    tmp2.set_difference(tmp);
+    ASSERT_TRUE(_owned_by_slab.is_same(tmp2));
   }
 
   // Retrieve a single block, randomly, that is in-use by caller;
@@ -255,15 +261,18 @@ public:
 }; // end AllocationPredictionModel
 
 namespace {
-  template <size_t szclass, int cachesize>
+  template <int cachesize>
   class Tester {
-    typedef AllocationPredictionModel<szclass, cachesize> ModelType;
-    typedef ArenaBlockCache<szclass, cachesize> CacheType;
-
     // For the slab. We don't test the slab in this test, so these values only matter
-    // insofar they don't conflict with the szclass of the cache.
+    // are a valid slab configuration
+    static constexpr size_t blocksize = 32 * K;
+    static constexpr unsigned num_blocks = 1024;
     static constexpr size_t granule_size = ArenaHeapBase::large_page_size;
-    static constexpr size_t num_blocks = 1024;
+
+    typedef AllocationPredictionModel<blocksize, cachesize> ModelType;
+    typedef ArenaBlockCache<blocksize, cachesize> CacheType;
+
+
     ArenaHeap _arena_heap;
     ArenaMetadataHeap _metadata_heap;
     ArenaSlab _slab;
@@ -279,7 +288,7 @@ namespace {
       const unsigned saturate = num_blocks + 1;
       const_blockptr_t* dontcare = NEW_C_HEAP_ARRAY(const_blockptr_t, saturate, mtTest);
       const unsigned fetched = _slab.allocate_blocks(dontcare, saturate);
-      ASSERT_LT(fetched, saturate);
+      ASSERT_EQ(fetched, num_blocks);
       FREE_C_HEAP_ARRAY(dontcare);
     }
 
@@ -326,11 +335,11 @@ namespace {
 
     Tester() :
       _arena_heap(), _metadata_heap(),
-      _slab(&_arena_heap, &_metadata_heap, szclass, granule_size, num_blocks, 0, 0.0),
+      _slab(&_arena_heap, &_metadata_heap, blocksize, granule_size, num_blocks, 0, 0.0),
       _block_cache(&_slab),
       _random(),
-      _block_range(_slab.base(), szclass, num_blocks),
-      _model(_slab.base()) {
+      _block_range(_slab.base(), blocksize, num_blocks),
+      _model(num_blocks, _slab.base()) {
     }
 
     const_blockptr_t allocate_from_cache_and_test_expect_success() {
@@ -511,28 +520,27 @@ namespace {
 
 #define CALL_TEST(XXX) test_##XXX()
 
-#define DEFINE_TESTS(szclass, cachesize, testname) \
-TEST_VM(Arena2_BlockCache, test_ ## testname ## _ ## szclass ## _ ## cachesize) { \
-  Tester<szclass, cachesize> tester; \
+#define DEFINE_TESTS(cachesize, testname) \
+TEST_VM(Arena2_BlockCache, test_ ## testname ## _ ## cachesize) { \
+  Tester<cachesize> tester; \
   tester.CALL_TEST(testname); \
 }
 
-#define DEFINE_ALL_TESTS(szclass, cachesize) \
-  DEFINE_TESTS(szclass, cachesize, allocate ) \
-  DEFINE_TESTS(szclass, cachesize, deallocate ) \
-  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_overflow_lo_to_hi ) \
-  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_overflow_hi_to_lo ) \
-  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_overflow_random ) \
-  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_nooverflow_lo_to_hi ) \
-  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_nooverflow_hi_to_lo ) \
-  DEFINE_TESTS(szclass, cachesize, bulk_deallocate_nooverflow_random ) \
-  DEFINE_TESTS(szclass, cachesize, tick_busy ) \
-  DEFINE_TESTS(szclass, cachesize, tick_nonbusy ) \
-  DEFINE_TESTS(szclass, cachesize, random )
+#define DEFINE_ALL_TESTS(cachesize) \
+  DEFINE_TESTS(cachesize, allocate ) \
+  DEFINE_TESTS(cachesize, deallocate ) \
+  DEFINE_TESTS(cachesize, bulk_deallocate_overflow_lo_to_hi ) \
+  DEFINE_TESTS(cachesize, bulk_deallocate_overflow_hi_to_lo ) \
+  DEFINE_TESTS(cachesize, bulk_deallocate_overflow_random ) \
+  DEFINE_TESTS(cachesize, bulk_deallocate_nooverflow_lo_to_hi ) \
+  DEFINE_TESTS(cachesize, bulk_deallocate_nooverflow_hi_to_lo ) \
+  DEFINE_TESTS(cachesize, bulk_deallocate_nooverflow_random ) \
+  DEFINE_TESTS(cachesize, tick_busy ) \
+  DEFINE_TESTS(cachesize, tick_nonbusy ) \
+  DEFINE_TESTS(cachesize, random )
 
-DEFINE_ALL_TESTS(256, 15)
-DEFINE_ALL_TESTS(256, 7)
-DEFINE_ALL_TESTS(256, 4)
-DEFINE_ALL_TESTS(256, 2)
-DEFINE_ALL_TESTS(1024, 7)
-DEFINE_ALL_TESTS(32768, 7)
+DEFINE_ALL_TESTS(15)
+DEFINE_ALL_TESTS(7)
+DEFINE_ALL_TESTS(4)
+DEFINE_ALL_TESTS(2)
+//DEFINE_ALL_TESTS(1)

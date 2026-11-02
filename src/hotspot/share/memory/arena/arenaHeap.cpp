@@ -86,8 +86,7 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
 
   // TODO
 #ifdef LINUX
-  const int advise = MADV_DONTNEED;
-  const int rc = madvise((void*)from, sz, advise);
+  const int rc = madvise((void*)from, sz, MADV_DONTNEED);
   assert(rc == 0, "madvise failed");
 
 #elif defined(__APPLE__)
@@ -97,12 +96,8 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
   assert(p == from, "Sanity");
 
 #else
-
+  ShouldNotReachHere();
 #endif
-
-  const int advise = MACOS_ONLY(MADV_FREE_REUSABLE) NOT_MACOS(MADV_DONTNEED);
-  const int rc = madvise((void*)from, sz, advise);
-  assert(rc == 0, "madvise failed");
 }
 
 /////////////
