@@ -118,7 +118,7 @@ private:
     // The retain target from the last cycle (see tick handling)
     IndexType _retain_target;
 
-    SlabPerTickData();
+    SlabPerTickData() : _retain_target(0) {};
   };
   SlabHotData* const _hot;
   SlabPerTickData* const _per_tick;

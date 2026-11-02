@@ -39,13 +39,13 @@ public:
 
   // These are public for gtests
   // how many entries to evict on overflow
-  static constexpr unsigned num_evict_on_overflow = cachesize / 2;
+  static constexpr int num_evict_on_overflow = cachesize / 2;
   // how many entries to prefetch on underflow
-  static constexpr unsigned num_prefetch_on_underflow = cachesize / 2;
+  static constexpr int num_prefetch_on_underflow = cachesize / 2;
   // how many entries to evict on a tick if cache is busy
-  static constexpr unsigned num_evict_on_tick_busy = 1;
+  static constexpr int num_evict_on_tick_busy = 1;
   // how many entries to evict on a tick if cache is idle
-  static constexpr unsigned num_evict_on_tick_nonbusy = cachesize;
+  static constexpr int num_evict_on_tick_nonbusy = cachesize;
 
   NONCOPYABLE(ArenaBlockCache);
 

@@ -205,7 +205,7 @@ public:
     DEBUG_ONLY(verify());
     // On each tick, cache will evict some of its highest-address blocks
     const unsigned to_evict =
-      MIN2(num_in_cache(), _busy ? CacheType::num_evict_on_tick_busy : CacheType::num_evict_on_tick_nonbusy);
+      MIN2(num_in_cache(), (unsigned)(_busy ? CacheType::num_evict_on_tick_busy : CacheType::num_evict_on_tick_nonbusy));
     for (unsigned i = 0; i < to_evict; ++i) {
       const idx_t idx = find_highest_address_block_expect_success(_owned_by_cache);
       _owned_by_cache.clear_bit(idx);
