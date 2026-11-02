@@ -33,6 +33,7 @@
 
 //#define LOG_PLEASE
 #include "testutils.hpp"
+#include "memory/arena/arenaHeap.hpp"
 
 #define VERIFICATION_INTERVAL 3
 
@@ -40,50 +41,41 @@ namespace {
   struct Tester : public CHeapObj<mtTest> {
     typedef LayeredBitmap BitmapType;
     typedef LayeredBitmap::IndexType IndexType;
+    typedef LayeredBitmap::WordType WordType;
 
-    const size_t _storage_size;
-    const address _storage;
+    ArenaMetadataHeap _metadata_heap;
     BitmapType _layered_bitmap;
-
-    BitMap::bm_word_t _test_bitmap_storage[LayeredBitmap::max_num_bits() / BitsPerWord];
+    const const_address _canary; // one canary following the bitmap, for overwrite checks
+    WordType* _test_bitmap_storage;
     BitMapView _test_bitmap;
     PredictableRandom _random;
     mutable int _sometimes;
     static constexpr unsigned num_bits_per_segment = BitsPerWord;
 
-    static size_t calc_storage_size(unsigned num_bits) {
-      return align_up(LayeredBitmap::bytes_needed(num_bits) + 1, // canary
-             os::vm_page_size());
-    }
-
-    static address allocate_storage_for_bitmap(unsigned num_bits) {
-      const size_t needed = calc_storage_size(num_bits);
-      const address storage = (address)os::reserve_memory(needed, mtTest, false);
-      assert(storage != nullptr, "oom");
-      const bool b = os::commit_memory((char*)storage, needed, false);
-      assert(b, "OOM");
-      return storage;
-    }
-
     explicit Tester(unsigned num_bits) :
-      _storage_size(calc_storage_size(num_bits)),
-      _storage(allocate_storage_for_bitmap(num_bits)),
-      _layered_bitmap(_storage, _storage_size, num_bits),
-      _test_bitmap_storage {0},
+      _metadata_heap(),
+      _layered_bitmap(&_metadata_heap, num_bits),
+      _canary([&]() {
+        const address p = _metadata_heap.allocate(1);
+        (*p) = 77;
+        return p;
+      } ()),
+      _test_bitmap_storage ( [&]() {
+        _metadata_heap.align_hwm_to<void*>();
+        WordType* p = (WordType*) _metadata_heap.allocate(
+          BitMap::calc_size_in_words(num_bits) * sizeof(WordType));
+        return p;
+      } ()),
       _test_bitmap(_test_bitmap_storage, num_bits),
       _random(),
       _sometimes(0)
     {
       assert(num_bits <= LayeredBitmap::max_num_bits(), "num_bits too big");
-      const size_t canary_pos = LayeredBitmap::bytes_needed(num_bits);
-      _storage[canary_pos] = 'A';
       _test_bitmap.clear();
     }
 
     ~Tester() {
-      const size_t canary_pos = LayeredBitmap::bytes_needed(_layered_bitmap.num_bits());
-      EXPECT_EQ(_storage[canary_pos], 'A');
-      os::release_memory((char*)_storage, _storage_size);
+      EXPECT_EQ((*_canary), 77);
     }
 
     unsigned num_bits() const {

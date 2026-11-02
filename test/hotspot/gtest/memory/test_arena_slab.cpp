@@ -46,22 +46,12 @@ namespace {
     const unsigned _release_boundary;
     const double _decay_factor;
 
-    struct Range { address p; size_t sz; };
-    ArenaHeap _heap;
-    Range _metadata_space;
+    ArenaHeap _arena_heap;
+    ArenaMetadataHeap _metadata_heap;
     ArenaSlab _slab;
     const BlockRange<unsigned> _block_range;
     CHeapBitMap _control;
     PredictableRandom _random;
-
-    static Range allocate_metadata_space(size_t block_size, size_t granule_size, unsigned num_blocks) {
-      // needs to be fully accessible
-      const size_t len = align_up(ArenaSlab::calc_metadata_space(block_size, granule_size, num_blocks), os::vm_page_size());
-      char* const p = os::reserve_memory(len, mtTest, false);
-      assert(p != nullptr, "OOM");
-      const bool b = os::commit_memory(p, len, false);
-      return Range { (address) p, len };
-    }
 
     void check_equality() const {
       EXPECT_EQ(_control.count_one_bits(), _slab.count_in_use_blocks());
@@ -150,16 +140,14 @@ namespace {
     Tester(size_t block_size, size_t granule_size, unsigned num_blocks, unsigned release_boundary, double decay_factor) :
       _block_size(block_size), _granule_size(granule_size), _num_blocks(num_blocks),
       _release_boundary(release_boundary), _decay_factor(decay_factor),
-      _heap(),
-      _metadata_space(allocate_metadata_space(block_size, granule_size, num_blocks)),
-      _slab(&_heap, _heap.base(), _heap.size(), _metadata_space.p, _metadata_space.sz,
+      _arena_heap(), _metadata_heap(),
+      _slab(&_arena_heap, &_metadata_heap,
             block_size, granule_size, num_blocks, release_boundary, decay_factor),
-      _block_range(_heap.base(), block_size, num_blocks),
+      _block_range(_arena_heap.base(), block_size, num_blocks),
       _control(num_blocks, mtTest, true) {
     }
 
     ~Tester() {
-      os::release_memory((char*)_metadata_space.p, _metadata_space.sz);
     }
 
     void test_allocate_and_deallocate() {

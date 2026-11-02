@@ -28,7 +28,6 @@
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
 #include "memory/arena/arenaSlab.hpp"
-#include "utilities/bitMap.inline.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
@@ -57,7 +56,7 @@ class AllocationPredictionModel {
   BlockRange<unsigned> _block_range;
   bool _busy;
 
-  int num_blocks() const { return _num_blocks; }
+  unsigned num_blocks() const { return _num_blocks; }
 
 #ifdef ASSERT
   void verify() const {
@@ -207,7 +206,7 @@ public:
     // On each tick, cache will evict some of its highest-address blocks
     const unsigned to_evict =
       MIN2(num_in_cache(), _busy ? CacheType::num_evict_on_tick_busy : CacheType::num_evict_on_tick_nonbusy);
-    for (int i = 0; i < to_evict; ++i) {
+    for (unsigned i = 0; i < to_evict; ++i) {
       const idx_t idx = find_highest_address_block_expect_success(_owned_by_cache);
       _owned_by_cache.clear_bit(idx);
       _owned_by_slab.set_bit(idx);
@@ -261,20 +260,23 @@ namespace {
     typedef AllocationPredictionModel<szclass, cachesize> ModelType;
     typedef ArenaBlockCache<szclass, cachesize> CacheType;
 
-    ArenaHeap _heap;
+    // For the slab. We don't test the slab in this test, so these values only matter
+    // insofar they don't conflict with the szclass of the cache.
+    static constexpr size_t granule_size = ArenaHeapBase::large_page_size;
+    static constexpr size_t num_blocks = 1024;
+    ArenaHeap _arena_heap;
+    ArenaMetadataHeap _metadata_heap;
     ArenaSlab _slab;
     CacheType _block_cache;
     PredictableRandom _random;
     BlockRange<unsigned> _block_range;
     ModelType _model;
 
-    unsigned num_blocks() const { return _slab.num_blocks(); }
-
     // Setup world as if cache were empty and all slabs were in-use by callers
     void set_all_allocated() {
       _block_cache.flush();
       _model.init_all_owned_by_caller();
-      const unsigned saturate = num_blocks() + 1;
+      const unsigned saturate = num_blocks + 1;
       const_blockptr_t* dontcare = NEW_C_HEAP_ARRAY(const_blockptr_t, saturate, mtTest);
       const unsigned fetched = _slab.allocate_blocks(dontcare, saturate);
       ASSERT_LT(fetched, saturate);
@@ -323,10 +325,11 @@ namespace {
   public:
 
     Tester() :
-      _slab(),
-      _block_cache(_slab),
+      _arena_heap(), _metadata_heap(),
+      _slab(&_arena_heap, &_metadata_heap, szclass, granule_size, num_blocks, 0, 0.0),
+      _block_cache(&_slab),
       _random(),
-      _block_range(_slab.base(), szclass, num_blocks()),
+      _block_range(_slab.base(), szclass, num_blocks),
       _model(_slab.base()) {
     }
 
@@ -379,10 +382,8 @@ namespace {
     ///////////////
 
     void test_allocate() {
-      set_all_free();
-
       // Allocate till we used up the slab
-      for (unsigned i = 0; i < SlabAllocatorType::num_blocks(); i++) {
+      for (unsigned i = 0; i < num_blocks; i++) {
         allocate_from_cache_and_test_expect_success();
         if (::testing::Test::HasFailure()) {
           return;
@@ -395,7 +396,7 @@ namespace {
     void test_deallocate() {
       set_all_allocated();
       // Deallocate till we returned all blocks to the cache, sequentially, low to high
-      for (int i = 0; i < num_blocks(); i++) {
+      for (unsigned i = 0; i < num_blocks; i++) {
         deallocate_to_cache_and_test(_block_range.index_to_block(i));
         if (::testing::Test::HasFailure()) {
           return;
@@ -481,14 +482,13 @@ namespace {
     }
 
     void test_random() {
-      set_all_free();
       for (int cycle = 0; cycle < 10000; cycle++) {
         const int op_select = _random.next(16);
-        if (op_select < 12 && _model.num_owned_by_caller() < num_blocks()) {
+        if (op_select < 12 && _model.num_owned_by_caller() < num_blocks) {
           allocate_from_cache_and_test_expect_success();
         } else if (op_select < 14 && _model.num_owned_by_caller() > 0) {
           deallocate_to_cache_and_test();
-        } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks() / 2) {
+        } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks / 2) {
           constexpr int max = CacheType::max_blocks_for_bulk_add;
           const_blockptr_t arr[max];
           const int limit = _random.tosscoin() ? MIN2(max, 3) : max;
