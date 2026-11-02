@@ -27,7 +27,7 @@
 #include "runtime/os.hpp"
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
-#include "memory/arena/arenaSlabAllocator.hpp"
+#include "memory/arena/arenaSlab.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -42,95 +42,29 @@
 #include "testutils.hpp"
 
 
-// A dummy slab allocator
-template <size_t szclass>
-class FakeSlabAllocator : public ArenaSlabAllocator {
-public:
-  static constexpr unsigned num_blocks = 256;
-
-private:
-  // We never write to the blocks handed around in this test, so
-  // no need to allocate them for real.
-  static constexpr uintptr_t _fake_start = LP64_ONLY(32 * G) NOT_LP64(G);
-  CHeapBitMap _owned_blocks;
-  BlockRange<unsigned> _block_range;
-
-public:
-
-  FakeSlabAllocator() :
-    _owned_blocks(num_blocks, mtTest, false),
-    _block_range((const_blockptr_t)_fake_start, szclass, num_blocks)
-  {
-    set_owns_all();
-  }
-
-  void deallocate_blocks(size_t szclass0, const_blockptr_t blocks[], unsigned len) override {
-    assert(szclass0 == szclass, "wrong block class");
-    for (unsigned i = 0; i < len; i++) {
-      const const_blockptr_t b = blocks[i];
-      assert(b != nullptr, "block is null");
-      const unsigned block_index = _block_range.block_to_index(b);
-      ASSERT_FALSE(_owned_blocks.at(block_index));
-      _owned_blocks.set_bit(block_index);
-    }
-  }
-
-  unsigned allocate_blocks(size_t szclass0, const_blockptr_t out[], unsigned outlen) override {
-    unsigned allocated = 0;
-    BitMap::idx_t slot = 0;
-    while (allocated < outlen && slot < _owned_blocks.size()) {
-      slot = _owned_blocks.find_first_set_bit(slot);
-      if (slot < _owned_blocks.size()) {
-        out[allocated] = _block_range.index_to_block(slot);
-        allocated ++;
-        _owned_blocks.clear_bit(slot);
-        slot++;
-      }
-    }
-    return allocated;
-  }
-
-  void get_occupancy_map(BitMap& out) const override {
-    out.set_from(_owned_blocks);
-  }
-
-  const_blockptr_t base() const { return _block_range.base(); }
-
-  bool is_in_range(const_blockptr_t b) const override {
-    return _block_range.contains(b);
-  }
-
-  // Sets the whole slab as free, all blocks owned by this slab
-  void set_owns_all() { _owned_blocks.set_range(0, _owned_blocks.size()); }
-
-  // Sets the whole slab as allocated, no free blocks left
-  void set_owns_none() { _owned_blocks.clear_range(0, _owned_blocks.size()); }
-
-}; // end: FakeSlabAllocator
-
 // This class models expected block movements in between slab, cache and caller-space
 template <size_t szclass, int cachesize>
 class AllocationPredictionModel {
 
-  typedef FakeSlabAllocator<szclass> SlabAllocatorType;
   typedef ArenaBlockCache<szclass, cachesize> CacheType;
 
   using idx_t = BitMap::idx_t;
 
-  static constexpr int num_blocks = SlabAllocatorType::num_blocks;
-
+  const unsigned _num_blocks;
   CHeapBitMap _owned_by_caller;
   CHeapBitMap _owned_by_cache;
   CHeapBitMap _owned_by_slab;
   BlockRange<unsigned> _block_range;
   bool _busy;
 
+  int num_blocks() const { return _num_blocks; }
+
 #ifdef ASSERT
   void verify() const {
     assert(!_owned_by_slab.intersects(_owned_by_caller), "Sanity");
     assert(!_owned_by_slab.intersects(_owned_by_cache), "Sanity");
     assert(!_owned_by_caller.intersects(_owned_by_cache), "Sanity");
-    assert(num_blocks == num_in_slab() + num_in_cache() + num_owned_by_caller(), "Sanity");
+    assert(_num_blocks == num_in_slab() + num_in_cache() + num_owned_by_caller(), "Sanity");
   }
 #endif
 
@@ -167,7 +101,7 @@ class AllocationPredictionModel {
       // address, which will move to the slab
       const int to_keep = cachesize - CacheType::num_evict_on_overflow;
       const int to_evict = num_in_cache() - to_keep;
-      idx_t idx = num_blocks;
+      idx_t idx = num_blocks();
       for (int i = 0; i < to_evict; ++i) {
         const idx_t idx2 = _owned_by_cache.find_last_set_bit(0, idx);
         assert(idx2 != idx, "Sanity");
@@ -182,30 +116,31 @@ class AllocationPredictionModel {
 public:
 
   AllocationPredictionModel(const_address block_base) :
-    _owned_by_caller(num_blocks, mtTest, true),
-    _owned_by_cache(num_blocks, mtTest, true),
-    _owned_by_slab(num_blocks,  mtTest, true),
-    _block_range(block_base, szclass, num_blocks),
-    _busy(false)
-  {}
+    _num_blocks(0),
+    _owned_by_caller(num_blocks(), mtTest, true),
+    _owned_by_cache(num_blocks(), mtTest, true),
+    _owned_by_slab(num_blocks(), mtTest, true),
+    _block_range(block_base, szclass, num_blocks()),
+    _busy(false) {
+  }
 
   void init_all_owned_by_caller() {
-    _owned_by_caller.set_range(0, num_blocks);
-    _owned_by_cache.clear_range(0, num_blocks);
-    _owned_by_slab.clear_range(0, num_blocks);
+    _owned_by_caller.set_range(0, num_blocks());
+    _owned_by_cache.clear_range(0, num_blocks());
+    _owned_by_slab.clear_range(0, num_blocks());
     _busy = false;
   }
 
   void init_all_owned_by_slab() {
-    _owned_by_caller.clear_range(0, num_blocks);
-    _owned_by_cache.clear_range(0, num_blocks);
-    _owned_by_slab.set_range(0, num_blocks);
+    _owned_by_caller.clear_range(0, num_blocks());
+    _owned_by_cache.clear_range(0, num_blocks());
+    _owned_by_slab.set_range(0, num_blocks());
     _busy = false;
   }
 
-  int num_in_slab() const { return (int)_owned_by_slab.count_one_bits(); }
-  int num_in_cache() const { return (int)_owned_by_cache.count_one_bits(); }
-  int num_owned_by_caller() const { return (int)_owned_by_caller.count_one_bits(); }
+  unsigned num_in_slab() const { return _owned_by_slab.count_one_bits(); }
+  unsigned num_in_cache() const { return _owned_by_cache.count_one_bits(); }
+  unsigned num_owned_by_caller() const { return _owned_by_caller.count_one_bits(); }
 
   // Model allocation: Update bitmaps and return pointer of the block the allocation would
   // return.
@@ -229,8 +164,8 @@ public:
     // cache is empty; fetch from slab (and prefetch and pre-fill cache, too)
     assert(_owned_by_cache.is_empty(), "Sanity");
     assert(num_in_slab() > 0, "Sanity");
-    const int num_to_fetch_from_slab = MIN2(num_in_slab(), 1 + CacheType::num_prefetch_on_underflow);
-    for (int i = 0; i < num_to_fetch_from_slab; ++i) {
+    const unsigned num_to_fetch_from_slab = MIN2(num_in_slab(), 1u + CacheType::num_prefetch_on_underflow);
+    for (unsigned i = 0; i < num_to_fetch_from_slab; ++i) {
       const idx_t idx = find_lowest_address_block_expect_success(_owned_by_slab);
       _owned_by_slab.clear_bit(idx);
       _owned_by_cache.set_bit(idx);
@@ -249,7 +184,7 @@ public:
     DEBUG_ONLY(verify());
     const idx_t idx = _block_range.block_to_index(block);
     assert(_owned_by_caller.at(idx), "Sanity");
-    CHeapBitMap tmp(num_blocks, mtTest, true);
+    CHeapBitMap tmp(num_blocks(), mtTest, true);
     tmp.set_bit(idx);
     model_deallocation(tmp);
   }
@@ -257,7 +192,7 @@ public:
   // model deallocation of a bunch of blocks
   void model_bulk_deallocation(const const_blockptr_t block[], int num) {
     DEBUG_ONLY(verify());
-    CHeapBitMap tmp(num_blocks, mtTest, true);
+    CHeapBitMap tmp(num_blocks(), mtTest, true);
     for (int i = 0; i < num; ++i) {
       const idx_t idx = _block_range.block_to_index(block[i]);
       assert(_owned_by_caller.at(idx), "Sanity");
@@ -270,7 +205,7 @@ public:
   void model_tick() {
     DEBUG_ONLY(verify());
     // On each tick, cache will evict some of its highest-address blocks
-    const int to_evict =
+    const unsigned to_evict =
       MIN2(num_in_cache(), _busy ? CacheType::num_evict_on_tick_busy : CacheType::num_evict_on_tick_nonbusy);
     for (int i = 0; i < to_evict; ++i) {
       const idx_t idx = find_highest_address_block_expect_success(_owned_by_cache);
@@ -282,7 +217,7 @@ public:
 
   void reality_test(const CacheType& cache) const {
     // Build up a bitmap that reflects the cache content
-    CHeapBitMap tmp(num_blocks, mtTest, true);
+    CHeapBitMap tmp(num_blocks(), mtTest, true);
     const BlockRange<unsigned>& blockrange2 = _block_range;
     auto set_bit_for_block_in_cache = [&tmp,&blockrange2](const_blockptr_t block) {
       const idx_t idx = blockrange2.block_to_index(block);
@@ -293,9 +228,9 @@ public:
     ASSERT_TRUE(_owned_by_cache.is_same(tmp));
   }
 
-  void reality_test(const SlabAllocatorType& slab_allocator) const {
-    CHeapBitMap tmp(num_blocks, mtTest, true);
-    slab_allocator.get_occupancy_map(tmp);
+  void reality_test(const ArenaSlab& slab) const {
+    CHeapBitMap tmp(num_blocks(), mtTest, true);
+    slab.get_in_use_map(tmp);
     ASSERT_TRUE(_owned_by_slab.is_same(tmp));
   }
 
@@ -303,7 +238,7 @@ public:
   // nullptr if none are in use
   const_blockptr_t get_random_caller_owned_block(PredictableRandom& rand) const {
     const idx_t idx = ArenaTestHelpers::get_random_set_bit(rand, _owned_by_caller);
-    return idx == num_blocks ? nullptr : _block_range.index_to_block(idx);
+    return idx == num_blocks() ? nullptr : _block_range.index_to_block(idx);
   }
 
   // Retrieve an array of unique random blocks that are in use by caller;
@@ -324,29 +259,26 @@ namespace {
   template <size_t szclass, int cachesize>
   class Tester {
     typedef AllocationPredictionModel<szclass, cachesize> ModelType;
-    typedef FakeSlabAllocator<szclass> SlabAllocatorType;
     typedef ArenaBlockCache<szclass, cachesize> CacheType;
 
-    SlabAllocatorType _slab_allocator;
+    ArenaHeap _heap;
+    ArenaSlab _slab;
     CacheType _block_cache;
     PredictableRandom _random;
     BlockRange<unsigned> _block_range;
     ModelType _model;
 
-    static constexpr int num_blocks = SlabAllocatorType::num_blocks;
+    unsigned num_blocks() const { return _slab.num_blocks(); }
 
     // Setup world as if cache were empty and all slabs were in-use by callers
     void set_all_allocated() {
       _block_cache.flush();
       _model.init_all_owned_by_caller();
-      _slab_allocator.set_owns_none();
-    }
-
-    // Setup world as if cache were empty and all slabs were free (in slab)
-    void set_all_free() {
-      _block_cache.flush();
-      _model.init_all_owned_by_slab();
-      _slab_allocator.set_owns_all();
+      const unsigned saturate = num_blocks() + 1;
+      const_blockptr_t* dontcare = NEW_C_HEAP_ARRAY(const_blockptr_t, saturate, mtTest);
+      const unsigned fetched = _slab.allocate_blocks(dontcare, saturate);
+      ASSERT_LT(fetched, saturate);
+      FREE_C_HEAP_ARRAY(dontcare);
     }
 
     // Helper function for test_tick_busy:
@@ -371,7 +303,7 @@ namespace {
 
     void reality_test() const {
       _model.reality_test(_block_cache);
-      _model.reality_test(_slab_allocator);
+      _model.reality_test(_slab);
     }
 
     const_blockptr_t allocate_from_cache() {
@@ -391,11 +323,12 @@ namespace {
   public:
 
     Tester() :
-      _block_cache(_slab_allocator),
+      _slab(),
+      _block_cache(_slab),
       _random(),
-      _block_range(_slab_allocator.base(), szclass, num_blocks),
-      _model(_slab_allocator.base())
-    {}
+      _block_range(_slab.base(), szclass, num_blocks()),
+      _model(_slab.base()) {
+    }
 
     const_blockptr_t allocate_from_cache_and_test_expect_success() {
       const const_blockptr_t b = allocate_from_cache();
@@ -449,7 +382,7 @@ namespace {
       set_all_free();
 
       // Allocate till we used up the slab
-      for (unsigned i = 0; i < SlabAllocatorType::num_blocks; i++) {
+      for (unsigned i = 0; i < SlabAllocatorType::num_blocks(); i++) {
         allocate_from_cache_and_test_expect_success();
         if (::testing::Test::HasFailure()) {
           return;
@@ -462,7 +395,7 @@ namespace {
     void test_deallocate() {
       set_all_allocated();
       // Deallocate till we returned all blocks to the cache, sequentially, low to high
-      for (int i = 0; i < num_blocks; i++) {
+      for (int i = 0; i < num_blocks(); i++) {
         deallocate_to_cache_and_test(_block_range.index_to_block(i));
         if (::testing::Test::HasFailure()) {
           return;
@@ -551,11 +484,11 @@ namespace {
       set_all_free();
       for (int cycle = 0; cycle < 10000; cycle++) {
         const int op_select = _random.next(16);
-        if (op_select < 12 && _model.num_owned_by_caller() < num_blocks) {
+        if (op_select < 12 && _model.num_owned_by_caller() < num_blocks()) {
           allocate_from_cache_and_test_expect_success();
         } else if (op_select < 14 && _model.num_owned_by_caller() > 0) {
           deallocate_to_cache_and_test();
-        } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks / 2) {
+        } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks() / 2) {
           constexpr int max = CacheType::max_blocks_for_bulk_add;
           const_blockptr_t arr[max];
           const int limit = _random.tosscoin() ? MIN2(max, 3) : max;

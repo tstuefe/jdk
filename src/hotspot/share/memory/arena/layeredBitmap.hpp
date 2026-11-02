@@ -31,6 +31,8 @@
 #include "utilities/debug.hpp"
 #include "utilities/unsigned5.hpp"
 
+class ArenaMetadataHeap;
+
 // The purpose of this bitmap is to handle mid-sized bit counts well and cheaply
 // while not degrading significantly below plain BitMap for very small bit counts.
 // It is a two-layer bitmap, with a segmented master bitmap  and summary bitmaps
@@ -55,10 +57,13 @@ private:
   //
   // | full_segment_summary_bitmap | nonempty_segment_summary_bitmap | master_bitmap ..... ..... |
 
-  const unsigned _num_bits;
-  const uint16_t _offset_nonempty_summary; // in number of words
-  const uint16_t _offset_master_bitmap;    // in number of words
-  WordType* const _storage;
+  struct Data {
+    unsigned _num_bits;
+    uint16_t _offset_nonempty_summary; // in number of words
+    uint16_t _offset_master_bitmap;    // in number of words
+    WordType* _storage;
+  };
+  const Data _data;
 
   static constexpr unsigned _log2_bits_per_segment = LogBitsPerWord;
   static constexpr unsigned _num_bits_per_segment = nth_bit(_log2_bits_per_segment);
@@ -72,23 +77,20 @@ private:
     return bits_to_internal_bits(num_bits) >> _log2_bits_per_segment;
   }
 
-  static size_t num_master_bitmap_words(unsigned num_bits) { return BitMap::calc_size_in_words(num_bits); }
-  WordType* master_bitmap_storage() const               { return _storage + _offset_master_bitmap; }
-  size_t num_master_bitmap_words() const                { return num_master_bitmap_words(num_bits()); }
+  static size_t num_master_bitmap_words(unsigned num_bits)  { return BitMap::calc_size_in_words(num_bits); }
+  WordType* master_bitmap_storage() const                   { return _data._storage + _data._offset_master_bitmap; }
+  size_t num_master_bitmap_words() const                    { return num_master_bitmap_words(num_bits()); }
 
   static size_t num_summary_bitmap_words(unsigned num_bits) { return BitMap::calc_size_in_words(num_segments(num_bits)); }
   size_t num_summary_bitmap_words() const               { return num_summary_bitmap_words(num_bits()); }
-  WordType* full_segments_bitmap_storage() const        { return _storage; }
-  WordType* nonempty_segments_bitmap_storage() const    { return _storage + _offset_nonempty_summary; }
+  WordType* full_segments_bitmap_storage() const        { return _data._storage; }
+  WordType* nonempty_segments_bitmap_storage() const    { return _data._storage + _data._offset_nonempty_summary; }
 
-  BitMapView full_segments_bitmap()                 { return BitMapView(full_segments_bitmap_storage(), num_segments()); }
-  BitMapView nonempty_segments_bitmap()             { return BitMapView(nonempty_segments_bitmap_storage(), num_segments()); }
-  BitMapView master_bitmap()                        { return BitMapView(master_bitmap_storage(), _num_bits); }
-  const BitMapView full_segments_bitmap() const     { return const_cast<LayeredBitmap*>(this)->full_segments_bitmap(); }
-  const BitMapView nonempty_segments_bitmap() const { return const_cast<LayeredBitmap*>(this)->nonempty_segments_bitmap(); }
-  const BitMapView master_bitmap() const            { return const_cast<LayeredBitmap*>(this)->master_bitmap(); }
+  BitMapView full_segments_bitmap() const               { return BitMapView(full_segments_bitmap_storage(), num_segments()); }
+  BitMapView nonempty_segments_bitmap() const           { return BitMapView(nonempty_segments_bitmap_storage(), num_segments()); }
+  BitMapView master_bitmap() const                      { return BitMapView(master_bitmap_storage(), num_bits()); }
 
-  IndexType num_internal_bits() const { return bits_to_internal_bits(_num_bits); }
+  IndexType num_internal_bits() const { return bits_to_internal_bits(num_bits()); }
   IndexType num_tail_bits() const { return num_internal_bits() - num_bits(); }
 
   // Returns a bit mask masking out the unused tail bits of the last segment
@@ -449,30 +451,12 @@ private:
 
 public:
 
-  // How much space this bitmap will need. Caller should query this before constructing
-  // the bitmap
-  static size_t bytes_needed(unsigned num_bits) {
-    assert(num_bits <= _max_num_bits, "Sanity");
-    const StorageSizesHelper helper(num_bits);
-    return helper._end_offset * BytesPerWord;
-  }
+  LayeredBitmap(ArenaMetadataHeap* heap, unsigned num_bits);
 
-  LayeredBitmap(address storage, size_t bytes, unsigned num_bits) :
-    _num_bits(num_bits),
-    _offset_nonempty_summary(StorageSizesHelper(num_bits)._non_empty_bitmap_base_offset),
-    _offset_master_bitmap(StorageSizesHelper(num_bits)._master_bitmap_base_offset),
-    _storage(reinterpret_cast<WordType*>(storage))
-  {
-    assert(num_bits <= _max_num_bits, "Sanity");
-    assert(num_bits >= 1, "Sanity");
-    assert(bytes >= bytes_needed(num_bits), "Sanity");
-    STATIC_ASSERT(BitsPerWord == _num_bits_per_segment);
-  }
-
-  IndexType size() const { return _num_bits; }
-  IndexType num_bits() const { return _num_bits; }
+  IndexType size() const { return num_bits(); }
+  IndexType num_bits() const { return _data._num_bits; }
   static constexpr IndexType max_num_bits() { return _max_num_bits; }
-  unsigned num_segments() const { return num_segments(_num_bits); }
+  unsigned num_segments() const { return num_segments(num_bits()); }
   static constexpr IndexType num_bits_per_segment() { return _num_bits_per_segment; }
 
   void set_bit(IndexType idx) {
@@ -724,8 +708,8 @@ public:
 #ifdef ASSERT
   void verify() const {
     // check that storages for the individual bitmaps don't intersect
-    assert(_offset_nonempty_summary >= full_segments_bitmap().size_in_words(), "Sanity");
-    assert(_offset_master_bitmap >= full_segments_bitmap().size_in_words() +
+    assert(_data._offset_nonempty_summary >= full_segments_bitmap().size_in_words(), "Sanity");
+    assert(_data._offset_master_bitmap >= full_segments_bitmap().size_in_words() +
            nonempty_segments_bitmap().size_in_words(), "Sanity");
 
     // The tail bits, unused, should always be zero
@@ -788,8 +772,8 @@ public:
     }
   }
 
-  const WordType* base() const { return _storage; }
-  const WordType* end() const { return _storage + (_offset_master_bitmap + num_master_bitmap_words(_num_bits)); }
+  const WordType* base() const { return _data._storage; }
+  const WordType* end() const { return _data._storage + (_data._offset_master_bitmap + num_master_bitmap_words(num_bits())); }
 
 };
 

@@ -30,28 +30,31 @@
 #include "utilities/globalDefinitions.hpp"
 
 
-// Returns size, in bytes, a slab would occupy in the arena heap
-size_t ArenaSlab::calc_arena_space(size_t block_size, unsigned num_blocks) {
-  assert(is_power_of_2(block_size), "Sanity");
-  assert(is_power_of_2(num_blocks), "Sanity");
-  return block_size * num_blocks;
+ArenaSlab::SlabHotData::SlabHotData() :
+  _num_blocks_in_use(0),
+  _num_blocks_in_use_max(0),
+  _lock()
+{
 }
 
-// Returns size, in bytes, needed for the slab metadata
-size_t ArenaSlab::calc_metadata_space(size_t block_size, size_t granule_size, unsigned num_blocks) {
-  const unsigned num_granules = calc_num_granules(block_size, granule_size, num_blocks);
-  assert(is_power_of_2(num_blocks), "Sanity");
-  return LayeredBitmap::bytes_needed(num_blocks) +
-         LayeredBitmap::bytes_needed(num_granules);
+// Helper for padded data allocation
+template <class T>
+static T* allocate_padded_from_metadata_heap(ArenaMetadataHeap* metadata_heap) {
+  metadata_heap->align_hwm_to_padded_size(); // separate cache line
+  const address p = metadata_heap->allocate(sizeof(T));
+  metadata_heap->align_hwm_to_padded_size(); // separate cache line
+  T* const p2 = new(p) T();
+  return p2;
 }
 
-ArenaSlab::ArenaSlab(ArenaHeap* heap,
-          const_address arena_base, size_t arena_size,
-          address metadata_base, size_t metadata_size,
-          unsigned block_size, unsigned granule_size,
-          unsigned num_blocks, unsigned release_boundary,
-          double decay_factor) :
-  _heap(heap),
+
+ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
+                     ArenaMetadataHeap* metadata_heap,
+                     unsigned block_size, unsigned granule_size,
+                     unsigned num_blocks, unsigned release_boundary,
+                     double decay_factor) :
+  _arena_heap(arena_heap),
+  _metadata_heap(metadata_heap),
   _block_size(block_size),
   _granule_size(granule_size),
   _num_blocks(num_blocks),
@@ -59,35 +62,35 @@ ArenaSlab::ArenaSlab(ArenaHeap* heap,
   _num_granules(calc_num_granules(block_size, granule_size, num_blocks)),
   _decay_factor(calc_decay_factor_percent(decay_factor)),
   _release_boundary(release_boundary),
-  _granule_range(arena_base, granule_size, _num_granules),
-  _block_range(arena_base, block_size, num_blocks),
-  _dirty_bitmap(metadata_base, LayeredBitmap::bytes_needed(_num_granules), _num_granules),
-  _in_use_bitmap(metadata_base + LayeredBitmap::bytes_needed(_num_granules), LayeredBitmap::bytes_needed(num_blocks),
-                 num_blocks),
-  _commit_boundary(0),
-  _retain_target(0),
-  _num_blocks_in_use(0),
-  _num_blocks_in_use_max(0)
+  _base(arena_heap->reserve_slab_memory(block_size, granule_size, num_blocks)),
+  _block_range(_base, block_size, num_blocks),
+  _granule_range(_base, granule_size, _num_granules),
+  _dirty_bitmap(metadata_heap, _num_granules),
+  _in_use_bitmap(metadata_heap, num_blocks),
+  _hot(allocate_padded_from_metadata_heap<SlabHotData>(metadata_heap)),
+  _per_tick(allocate_padded_from_metadata_heap<SlabPerTickData>(metadata_heap))
 {
-  assert(is_aligned(_num_blocks,blocks_per_granule()), "Sanity");
-  assert(is_power_of_2(_block_size), "Sanity");
-  assert(is_power_of_2(_granule_size), "Sanity");
-  assert(is_power_of_2(num_blocks), "Sanity");
+  assert(ArenaBlockHelpers::is_valid_standard_size_class(block_size) ||
+         block_size == ArenaBlockHelpers::huge_block_granularity, "Sanity");
   assert(_num_blocks > 0, "Sanity");
+  assert(is_aligned(_num_blocks,blocks_per_granule()), "Sanity");
+  assert(is_power_of_2(_granule_size), "Sanity");
   assert(_granule_size >= _block_size, "Sanity");
   assert(_granule_size >= os::vm_page_size(), "Sanity");
+  assert(is_aligned(_block_range.base(), _granule_size), "Sanity");
 
-  assert(is_aligned(_block_range.base(), ArenaBlockHelpers::slab_alignment), "Sanity");
-
-  // The release boundary must be aligned to be able to back it with huge pages
-  assert(is_aligned(_block_range.index_to_block(_release_boundary),
-           ArenaBlockHelpers::slab_alignment), "Sanity");
-  assert(_release_boundary <= num_blocks, "Sanity");
-
-  assert(arena_size >= _block_size * _num_blocks, "Sanity");
-  assert(metadata_size >=
-         LayeredBitmap::bytes_needed(_num_blocks) +
-         LayeredBitmap::bytes_needed(num_granules()), "Sanity");
+  // Set up release boundary: Anything below we will never release, so it should be
+  // pre-committed and, if possible, backed with large pages
+  const size_t resident_size = _release_boundary * granule_size;
+  if (resident_size > 0) {
+    _arena_heap->commit_memory(base(), base() + resident_size);
+    // We never release this memory, so lets back it with large pages if that makes sense.
+    assert(resident_size < ArenaHeapBase::large_page_size ||
+           is_aligned(resident_size, ArenaHeapBase::large_page_size),
+           "Sub-optimal slab sizing - align release_boundary to large page size.");
+    const bool resident_uses_large_pages = resident_size >= ArenaHeapBase::large_page_size;
+    _arena_heap->advise_large_page_use(base(), base() + resident_size, resident_uses_large_pages);
+  }
 }
 
 // Allocate a number of blocks and return their addresses in the user-provided array;
@@ -111,7 +114,8 @@ unsigned ArenaSlab::allocate_blocks(const_blockptr_t out[], unsigned outlen) {
 
     const const_blockptr_t block = _block_range.index_to_block(idx);
     out[n] = block;
-    idx++; n++;
+    idx++;
+    n++;
   }
   // Make sure the returned memory is committed
   if (n > 0) {
@@ -211,8 +215,8 @@ void ArenaSlab::verify() const {
   assert(count_dirty_blocks() >= count_in_use_blocks(), "Sanity");
   assert(is_aligned(count_dirty_blocks(), blocks_per_granule()), "Sanity");
   _in_use_bitmap.verify();
-  assert(_in_use_bitmap.count_one_bits() == _num_blocks_in_use, "Sanity");
-  assert(_num_blocks_in_use_max >= _num_blocks_in_use, "Sanity");
+  assert(_in_use_bitmap.count_one_bits() == _hot->_num_blocks_in_use, "Sanity");
+  assert(_hot->_num_blocks_in_use_max >= _hot->_num_blocks_in_use, "Sanity");
   _dirty_bitmap.verify();
   // every in-use block must be dirty
   CHeapBitMap tmp(num_blocks(), mtTest, false);

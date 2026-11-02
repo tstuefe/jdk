@@ -55,7 +55,7 @@ struct ArenaBlockHelpers : public AllStatic {
            szclass == K * 128 || szclass == K * 256 || szclass == K * 512 || szclass == M;
   }
 
-  static constexpr bool is_valid_huge_size_class(size_t szclass) {
+  static constexpr bool is_valid_huge_size(size_t szclass) {
     return szclass > max_standard_block_size &&
            szclass <= max_huge_block_size &&
            is_aligned(szclass, huge_block_granularity);

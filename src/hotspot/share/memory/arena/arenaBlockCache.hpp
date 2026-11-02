@@ -27,7 +27,7 @@
 #define SHARE_MEMORY_ARENA_ARENABLOCKCACHE_HPP
 
 #include "memory/arena/arenaBlock.hpp"
-#include "memory/arena/arenaSlabAllocator.hpp"
+#include "memory/arena/arenaSlab.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -39,13 +39,13 @@ public:
 
   // These are public for gtests
   // how many entries to evict on overflow
-  static constexpr int num_evict_on_overflow = cachesize / 2;
+  static constexpr unsigned num_evict_on_overflow = cachesize / 2;
   // how many entries to prefetch on underflow
-  static constexpr int num_prefetch_on_underflow = cachesize / 2;
+  static constexpr unsigned num_prefetch_on_underflow = cachesize / 2;
   // how many entries to evict on a tick if cache is busy
-  static constexpr int num_evict_on_tick_busy = 1;
+  static constexpr unsigned num_evict_on_tick_busy = 1;
   // how many entries to evict on a tick if cache is idle
-  static constexpr int num_evict_on_tick_nonbusy = cachesize;
+  static constexpr unsigned num_evict_on_tick_nonbusy = cachesize;
 
   NONCOPYABLE(ArenaBlockCache);
 
@@ -67,12 +67,12 @@ public:
   bool _is_busy;
 
   // The slab to route allocations and deallocations to on overflow and underflow
-  ArenaSlabAllocator& _slab_allocator;
+  ArenaSlab* _slab;
 
 #ifdef ASSERT
   void verify_block(const_blockptr_t block) const {
     assert(block != nullptr, "null");
-    assert(_slab_allocator.is_in_range(block), "Block outside of arena heap (" PTR_FORMAT ")", p2i(block));
+    assert(_slab->contains(block), "Block outside of arena heap (" PTR_FORMAT ")", p2i(block));
     // A block pointer from the arena heap is always aligned to at least the
     // smallest block size, which is 256, so the lowest byte should always be zero
     assert(is_aligned(block, ArenaBlockHelpers::min_block_size), "not properly aligned");
@@ -168,7 +168,8 @@ public:
 
 public:
 
-  ArenaBlockCache(ArenaSlabAllocator& slab_allocator) : _slab_allocator(slab_allocator) {
+  ArenaBlockCache(ArenaSlab* slab) : _slab(slab) {
+    assert(_slab->block_size() == szclass, "Sanity");
     zero_out_slots(0, cachesize);
     set_count(0);
     _is_busy = false;
@@ -189,7 +190,7 @@ public:
       for (int i = 0; i < num_evict_on_overflow; i++) {
         eviction_set[i + 1] = _blocks[i];
       }
-      _slab_allocator.deallocate_blocks(szclass, eviction_set, num_evict_on_overflow + 1);
+      _slab->deallocate_blocks(eviction_set, num_evict_on_overflow + 1);
       constexpr int c2 = cachesize - num_evict_on_overflow;
       compress_cache(num_evict_on_overflow, c2);
       set_count(c2);
@@ -207,7 +208,7 @@ public:
       // the slab allocator
       constexpr int to_fetch = num_prefetch_on_underflow + 1;
       const_blockptr_t tmp[to_fetch];
-      const int num_fetched = _slab_allocator.allocate_blocks(szclass, tmp, to_fetch);
+      const int num_fetched = _slab->allocate_blocks(tmp, to_fetch);
       if (num_fetched == 0) {
         return nullptr; // slab exhausted?
       }
@@ -270,7 +271,7 @@ public:
       }
       num_in_cache -= num_evict_on_overflow;
       // Then we evict the whole set.
-      _slab_allocator.deallocate_blocks(szclass, evict_set, num_in_eviction_set);
+      _slab->deallocate_blocks(evict_set, num_in_eviction_set);
       // post-cleanups
       compress_cache(num_evict_on_overflow, num_in_cache);
     } else {
@@ -288,7 +289,7 @@ public:
     const int max_to_evict = _is_busy ? num_evict_on_tick_busy : num_evict_on_tick_nonbusy;
     const int num_to_evict = MIN2(c, max_to_evict);
     if (num_to_evict > 0) {
-      _slab_allocator.deallocate_blocks(szclass, _blocks, num_to_evict);
+      _slab->deallocate_blocks(_blocks, num_to_evict);
       const int c2 = c - num_to_evict;
       if (c2 > 0) {
         compress_cache(num_to_evict, c2);
@@ -317,7 +318,7 @@ public:
     DEBUG_ONLY(verify_cache();)
     const int c = count();
     if (c > 0) {
-      _slab_allocator.deallocate_blocks(szclass, _blocks, c);
+      _slab->deallocate_blocks(_blocks, c);
     }
     set_count(0);
     zero_out_slots(0, cachesize);

@@ -29,10 +29,11 @@
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaHeap.hpp"
 #include "memory/arena/layeredBitmap.hpp"
+#include "runtime/mutex.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/deferredStatic.hpp"
 #include "utilities/globalDefinitions.hpp"
-
 
 class ArenaSlab {
 public:
@@ -43,9 +44,32 @@ private:
   // How much we overcommit when moving the commit boundary
   static constexpr IndexType num_granules_overcommit = 1;
 
-  // Immutable data (Note, the bitmap objects are also immutable, since their geometry
-  // never changes; only the maps themselves, and those are stored separately)
-  ArenaHeap* const _heap;
+  // We split data associated with the slab into different groups. These data
+  // are kept separately from each other in its own cache lines:
+  // 1) read-only data:
+  //   Data that is read-only post init.
+  //   These are housed together with read-only data from other slabs
+  //   (see SlabGroup)
+  // 2) hot data:
+  //   Data that change on every allocation/deallocation.
+  //   This includes the Mutex itself as well as the allocation counters.
+  //   Effectively, these cachelines are handed over from core to core
+  //   when a slab is accessed by different cores in succession.
+  // 3) in-use bitmap:
+  //   Data changes per allocation.
+  // 4) is-dirty bitmap:
+  //   mostly read-only.
+  // 5) tick-only:
+  //   Updated on a per-tick base.
+  //
+
+
+  // 1. Read-only data
+
+  // The arena heap is used for the slab memory
+  ArenaHeap* const _arena_heap;
+  // The metadata heap is used for the bitmaps
+  ArenaMetadataHeap* const _metadata_heap;
   const unsigned _block_size;
   const unsigned _granule_size;
   const unsigned _num_blocks;
@@ -54,33 +78,50 @@ private:
   // decay factor in percent, see decaying.
   // Number is in percentage, e.g. 75 = 0.75
   const uint8_t _decay_factor;
-  // Blocks below this index are never released, and (if large pages are enabled)
-  // backed by large pages
+  // Release Boundary (in number-of-granules). Granules below this are committed up-front
+  // and never released
   const unsigned _release_boundary;
-  const BlockRange<IndexType> _granule_range;
+
+  const_blockptr_t _base;
   const BlockRange<IndexType> _block_range;
+  const BlockRange<IndexType> _granule_range;
+
   // 1 bit per granule; 1=granule is dirty
   LayeredBitmap _dirty_bitmap;
+
   // 1 bit per block; 1=block is in-use
   LayeredBitmap _in_use_bitmap;
 
-  // Mutable data (we should probably store them together with the
-  // bitmaps since those get changed together anyway)
-
   // The commit boundary - index of the first uncommitted granule.
-  // Only ever moves upward. We release memory via madvise, which is
-  // the actual heavy-duty release mechanism. The commit boundary is
-  // only needed to be conservative about pushing the process commit
-  // charge since the OS may interfere (eg on Linux with strict overcommit)
+  // Only modified a couple of times, and only moves upward. We never
+  // uncommit.
+  // Note that this is not strictly const, but we modify it rarely
+  // enough to place it together with the other read-only data
   IndexType _commit_boundary;
 
-  // The retain target from the last cycle (see tick handling)
-  IndexType _retain_target;
+  // 2) hot data
+  struct alignas(DEFAULT_PADDING_SIZE) SlabHotData {
+    // Current number of blocks in-use
+    unsigned _num_blocks_in_use;
+    // Highest number of blocks in-use since the last tick
+    unsigned _num_blocks_in_use_max;
+    // Add more if needed, e.g. per allocation/deallocation statistics
 
-  // Current number of blocks in-use
-  unsigned _num_blocks_in_use;
-  // Highest number of blocks in-use since the last tick
-  unsigned _num_blocks_in_use_max;
+    // The lock for this slab.
+    PlatformMutex _lock;
+
+    SlabHotData();
+  };
+
+  // 5) per-tick data
+  struct alignas(DEFAULT_PADDING_SIZE) SlabPerTickData {
+    // The retain target from the last cycle (see tick handling)
+    IndexType _retain_target;
+
+    SlabPerTickData();
+  };
+  SlabHotData* const _hot;
+  SlabPerTickData* const _per_tick;
 
   // Given a block index, returns its granule index
   IndexType block_index_to_granule_index(IndexType block_index) const {
@@ -107,7 +148,10 @@ private:
   }
 
   bool use_large_pages() const {
-    return _granule_size >= 2 * M; // Todo.
+    return
+    LINUX_ONLY(_granule_size >= ArenaHeap::large_page_size)
+    NOT_LINUX(false)
+    ;
   }
 
   // Ensure this and all lower-address blocks are committed.
@@ -121,7 +165,10 @@ private:
         MIN2((IndexType)num_granules(), new_commit_boundary + num_granules_overcommit);
       const const_blockptr_t p1 = _granule_range.index_to_block(_commit_boundary);
       const const_blockptr_t p2 = _granule_range.index_to_block_incl(new_commit_boundary_overshoot);
-      _heap->commit_memory(p1, p2, use_large_pages());
+      _arena_heap->commit_memory(p1, p2);
+#ifdef LINUX
+      _arena_heap->advise_thp_use(p1, p2, use_large_pages());
+#endif
       _commit_boundary = new_commit_boundary_overshoot;
     }
   }
@@ -133,14 +180,14 @@ private:
   }
 
   void increase_block_counter(unsigned num) {
-    _num_blocks_in_use += num;
-    assert(_num_blocks_in_use <= num_blocks(), "Sanity");
-    _num_blocks_in_use_max = MAX2(_num_blocks_in_use, _num_blocks_in_use_max);
+    _hot->_num_blocks_in_use += num;
+    assert(_hot->_num_blocks_in_use <= num_blocks(), "Sanity");
+    _hot->_num_blocks_in_use_max = MAX2(_hot->_num_blocks_in_use, _hot->_num_blocks_in_use_max);
   }
 
   void decrease_block_counter(unsigned num) {
-    assert(_num_blocks_in_use >= num, "Sanity");
-    _num_blocks_in_use -= num;
+    assert(_hot->_num_blocks_in_use >= num, "Sanity");
+    _hot->_num_blocks_in_use -= num;
   }
 
   static unsigned calc_block_to_granule_shift(size_t block_size, size_t granule_size) {
@@ -156,15 +203,8 @@ private:
 
 public:
 
-  // Returns size, in bytes, a slab would occupy in the arena heap
-  static size_t calc_arena_space(size_t block_size, unsigned num_blocks);
-
-  // Returns size, in bytes, needed for the slab metadata
-  static size_t calc_metadata_space(size_t block_size, size_t granule_size, unsigned num_blocks);
-
-  ArenaSlab(ArenaHeap* heap,
-            const_address arena_base, size_t arena_size,
-            address metadata_base, size_t metadata_size,
+  ArenaSlab(ArenaHeap* arena_heap,
+            ArenaMetadataHeap* metadata_heap,
             unsigned block_size, unsigned granule_size,
             unsigned num_blocks, unsigned release_boundary,
             double decay_factor);
@@ -182,14 +222,13 @@ public:
   // The returned blocks are guaranteed to be ordered by address, low to high.
   unsigned allocate_blocks(const_blockptr_t out[], unsigned outlen);
 
-  // Allocate a contiguous range spanning multiple blocks. Only used for
-  // huge blocks. Called rarely.
-  const_blockptr_t allocate_huge_block(size_t size);
-
   // Given a list of blocks, return them to the associated slab
   void deallocate_blocks(const_blockptr_t blocks[], unsigned num);
 
-  // huge blocks. Called rarely.
+  // Allocate a huge block (a contiguous range spanning multiple blocks).
+  const_blockptr_t allocate_huge_block(size_t size);
+
+  // Deallocate a huge block. Called rarely.
   void deallocate_huge_block(const_blockptr_t block, size_t size);
 
   bool contains(const_blockptr_t block) const {
@@ -199,6 +238,9 @@ public:
 #ifdef ASSERT
   void verify() const;
 #endif
+
+  // Mostly for tests:
+  void get_in_use_map(BitMap& out) const { _in_use_bitmap.convert_to_flat_bitmap(out); }
 
   unsigned count_in_use_blocks() const  { return checked_cast<unsigned>(_in_use_bitmap.count_one_bits()); }
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }

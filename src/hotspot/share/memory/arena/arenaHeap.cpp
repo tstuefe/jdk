@@ -31,51 +31,143 @@
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
-#include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
 // Basically a fake implementation, real implementation comes later.
 // But it already does the important stuff (reserve, commit, release, madvise for yes no THP)
 
 static constexpr size_t max_heap = 4 * G;
-static constexpr size_t thp_page_size = 2 * M;
 
-ArenaHeap::ArenaHeap() {
-  _base = (address) os::reserve_memory_aligned(max_heap, thp_page_size, mtChunk, false);
-  assert(_base != nullptr, "OOM");
-  _size = max_heap;
-}
+ArenaHeapBase::ArenaHeapBase() :
+  _base([]() {
+    const address p = (address) os::reserve_memory_aligned(max_heap, ArenaHeap::large_page_size, mtChunk, false);
+    assert(p != nullptr, "OOM");
+    return p;
+  } ()),
+  _end(_base + max_heap)
+{}
 
-ArenaHeap::~ArenaHeap() {
+ArenaHeapBase::~ArenaHeapBase() {
   os::release_memory((char*)_base, max_heap);
 }
 
-void ArenaHeap::commit_memory(const_blockptr_t from, const_blockptr_t to, bool large_pages){
+void ArenaHeapBase::commit_memory(const_blockptr_t from, const_blockptr_t to){
   const size_t sz = to - from;
   assert(to > from, "Sanity");
-  assert(contains(from), "Sanity");
-  assert(contains(to - 1), "Sanity");
-  assert(is_aligned(from, large_pages ? thp_page_size : os::vm_page_size()), "Sanity");
-  assert(is_aligned(to, large_pages ? thp_page_size : os::vm_page_size()), "Sanity");
-
+  assert(reserved_contains(from), "Sanity");
+  assert(reserved_contains(to - 1), "Sanity");
+  assert(is_aligned(from, os::vm_page_size()), "Sanity");
+  assert(is_aligned(to, os::vm_page_size()), "Sanity");
   const bool b = os::commit_memory((char*)from, sz, false);
   assert(b, "OOM?");
+}
+
+// Given a memory range, enforce or inhibit huge pages (THPs).
+void ArenaHeapBase::advise_large_page_use(const_blockptr_t from, const_blockptr_t to, bool use_large_pages) {
 #ifdef LINUX
-  const int advise = large_pages ? MADV_HUGEPAGE : MADV_NOHUGEPAGE;
-  const int rc = madvise((void*)from, sz, advise);
+  const int advise = use_large_pages ? MADV_HUGEPAGE : MADV_NOHUGEPAGE;
+  const size_t alignment = use_large_pages ? ArenaHeap::large_page_size : os::vm_page_size();
+  assert(is_aligned(from, alignment), "Sanity");
+  assert(is_aligned(to, alignment), "Sanity");
+  const int rc = madvise((void*)from, to - from, advise);
   assert(rc == 0, "madvise failed");
+#else
+  (void)from; (void)to; (void)use_large_pages;
 #endif
 }
 
-void ArenaHeap::discard_memory(const_blockptr_t from, const_blockptr_t to, bool large_pages) {
+void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
   const size_t sz = to - from;
-
-  assert(contains(from), "Sanity");
-  assert(contains(to), "Sanity");
-  assert(sz > 0, "Sanity");
-  assert(is_aligned(from, large_pages ? thp_page_size : os::vm_page_size()), "Sanity");
-  assert(is_aligned(to, large_pages ? thp_page_size : os::vm_page_size()), "Sanity");
+  assert(to > from, "Sanity");
+  assert(reserved_contains(from), "Sanity");
+  assert(reserved_contains(to - 1), "Sanity");
+  assert(is_aligned(from, os::vm_page_size()), "Sanity");
+  assert(is_aligned(to, os::vm_page_size()), "Sanity");
 
   const int rc = madvise((void*)from, sz, MADV_DONTNEED);
   assert(rc == 0, "madvise MADV_DONTNEED failed");
+}
+
+/////////////
+
+ArenaHeap::ArenaHeap() : ArenaHeapBase(), _hwm(base()) {}
+
+// Reserves memory for a slab. Slab start will be aligned to granule size.
+const_blockptr_t ArenaHeap::reserve_slab_memory(unsigned block_size, unsigned granule_size, unsigned num_blocks) {
+
+  assert(ArenaBlockHelpers::is_valid_standard_size_class(block_size) ||
+         block_size == ArenaBlockHelpers::huge_block_granularity, "Sanity");
+  assert(block_size <= granule_size, "Sanity");
+  assert(granule_size >= os::vm_page_size(), "Sanity");
+  assert(is_power_of_2(granule_size), "Sanity");
+
+  const size_t alignment = MAX2(os::vm_page_size(), (size_t)granule_size);
+  align_up(_hwm, alignment);
+
+  const size_t needed = block_size * num_blocks;
+
+  const const_blockptr_t p = _hwm;
+  _hwm += needed;
+  assert(_hwm <= end(), "Sanity");
+
+  return p;
+
+}
+
+
+//////////////
+
+ArenaMetadataHeap::ArenaMetadataHeap() : ArenaHeapBase(),
+  _hwm(base())
+{
+  // Make it a multiple of THP size - we want to have to option to back this with
+  // large pages on finalize() if it makes sense.
+  assert(is_aligned(reserved_size(), large_page_size), "Sanity");
+  commit_memory(base(), end());
+}
+
+// Align high-water-mark up to match alignment. Next allocation will be aligned such.
+void ArenaMetadataHeap::align_hwm_up(size_t alignment) {
+  _hwm = align_up(_hwm, alignment);
+  assert(_hwm <= end(), "Sanity");
+}
+
+void ArenaMetadataHeap::align_hwm_to_large_page_size() {
+  align_hwm_up(ArenaHeapBase::large_page_size);
+}
+
+void ArenaMetadataHeap::align_hwm_to_page_size() {
+  align_hwm_up(os::vm_page_size());
+}
+
+void ArenaMetadataHeap::align_hwm_to_padded_size() {
+  align_hwm_up(DEFAULT_PADDING_SIZE);
+}
+
+// Reserves memory at the hwm.
+address ArenaMetadataHeap::allocate(size_t size) {
+  const address p = _hwm;
+  _hwm += size;
+  assert(_hwm <= end(), "Sanity");
+  return p;
+}
+
+// Done after all allocations from the metadata heap are finished.
+void ArenaMetadataHeap::finalize() {
+  // Is it worth to back this with large pages?
+#ifdef LINUX
+  address thp_advise_boundary = align_up(_hwm, large_page_size);
+  if ((thp_advise_boundary - _hwm) > (size_t)((double)large_page_size * .25)) {
+    thp_advise_boundary -= large_page_size;
+  }
+  if (thp_advise_boundary > base()) {
+    advise_thp_use(base(), thp_advise_boundary, true);
+  }
+  _hwm = MAX2(thp_advise_boundary, _hwm);
+#endif // Linux
+  _hwm = align_up(_hwm, os::vm_page_size());
+  assert(_hwm <= end(), "Sanity");
+  if (_hwm < end()) {
+    os::release_memory((char*)_hwm, end() - _hwm);
+  }
 }
