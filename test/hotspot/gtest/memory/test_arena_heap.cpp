@@ -93,3 +93,29 @@ TEST_VM(Arena2_Heap, arena_metaheap_basics) {
   ASSERT_LT(p4 + sz4, p5);
   ASSERT_TRUE(is_aligned(p5, ArenaHeapBase::large_page_size));
 }
+
+TEST_VM(Arena2_Heap, disclaim) {
+  ArenaMetadataHeap heap;
+
+  const size_t sz = os::vm_page_size();
+  const address p = heap.allocate(sz * 2);
+  memset(p, 'A', sz * 2);
+
+  ASSERT_EQ(p[0], 'A');
+  ASSERT_EQ(p[sz - 1], 'A');
+  ASSERT_EQ(p[sz], 'A');
+  ASSERT_EQ(p[sz + sz - 1], 'A');
+
+  heap.discard_memory(p + sz, p + sz * 2);
+
+  ASSERT_EQ(p[0], 'A');
+  ASSERT_EQ(p[sz - 1], 'A');
+
+  // After discard, content should be zero'd out
+  ASSERT_EQ(p[sz], 0);
+  ASSERT_EQ(p[sz + sz - 1], 0);
+
+  // Write to it again to see it works after disclaim
+  p[sz] = p[sz + sz - 1] = 'B';
+
+}

@@ -85,7 +85,22 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
   assert(is_aligned(to, os::vm_page_size()), "Sanity");
 
   // TODO
-  const int advise = MACOS_ONLY(MADV_FREE) NOT_MACOS(MADV_DONTNEED);
+#ifdef LINUX
+  const int advise = MADV_DONTNEED;
+  const int rc = madvise((void*)from, sz, advise);
+  assert(rc == 0, "madvise failed");
+
+#elif defined(__APPLE__)
+  // Use madvise(MADV_FREE) for lazy return
+  // Use mmap to replace the pages for immediate return
+  void* const p = mmap((void*)from, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+  assert(p == from, "Sanity");
+
+#else
+
+#endif
+
+  const int advise = MACOS_ONLY(MADV_FREE_REUSABLE) NOT_MACOS(MADV_DONTNEED);
   const int rc = madvise((void*)from, sz, advise);
   assert(rc == 0, "madvise failed");
 }
