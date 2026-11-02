@@ -70,8 +70,8 @@ private:
   ArenaHeap* const _arena_heap;
   // The metadata heap is used for the bitmaps
   ArenaMetadataHeap* const _metadata_heap;
-  const unsigned _block_size;
-  const unsigned _granule_size;
+  const size_t _block_size;
+  const size_t _granule_size;
   const unsigned _num_blocks;
   const unsigned _blocks_to_granule_shift;
   const unsigned _num_granules;
@@ -92,9 +92,7 @@ private:
   // 1 bit per block; 1=block is in-use
   LayeredBitmap _in_use_bitmap;
 
-  // The commit boundary - index of the first uncommitted granule.
-  // Only modified a couple of times, and only moves upward. We never
-  // uncommit.
+  // Commit Boundary (in number-of-granules).
   // Note that this is not strictly const, but we modify it rarely
   // enough to place it together with the other read-only data
   IndexType _commit_boundary;
@@ -155,57 +153,16 @@ private:
   }
 
   // Ensure this and all lower-address blocks are committed.
-  void ensure_committed(IndexType block_index) {
-    DEBUG_ONLY(_block_range.check_is_valid_block_index(block_index);)
-    const IndexType granule_index = block_index_to_granule_index(block_index);
-    const IndexType new_commit_boundary = MAX2(granule_index + 1, _commit_boundary);
-    if (new_commit_boundary > _commit_boundary) {
-      // We commit a bit more to avoid having to do this too often
-      const IndexType new_commit_boundary_overshoot =
-        MIN2((IndexType)num_granules(), new_commit_boundary + num_granules_overcommit);
-      const const_blockptr_t p1 = _granule_range.index_to_block(_commit_boundary);
-      const const_blockptr_t p2 = _granule_range.index_to_block_incl(new_commit_boundary_overshoot);
-      _arena_heap->commit_memory(p1, p2);
-#ifdef LINUX
-      _arena_heap->advise_thp_use(p1, p2, use_large_pages());
-#endif
-      _commit_boundary = new_commit_boundary_overshoot;
-    }
-  }
+  void ensure_committed(IndexType block_index);
 
-  static uint8_t calc_decay_factor_percent(double factor) {
-    assert(factor >= 0.0 && factor <= 1.0, "factor must be between 0.0 and 1.0");
-    const unsigned i = (unsigned)((factor * 100.0) + 0.5);
-    return checked_cast<uint8_t>(i);
-  }
-
-  void increase_block_counter(unsigned num) {
-    _hot->_num_blocks_in_use += num;
-    assert(_hot->_num_blocks_in_use <= num_blocks(), "Sanity");
-    _hot->_num_blocks_in_use_max = MAX2(_hot->_num_blocks_in_use, _hot->_num_blocks_in_use_max);
-  }
-
-  void decrease_block_counter(unsigned num) {
-    assert(_hot->_num_blocks_in_use >= num, "Sanity");
-    _hot->_num_blocks_in_use -= num;
-  }
-
-  static unsigned calc_block_to_granule_shift(size_t block_size, size_t granule_size) {
-    const unsigned l2_block_size = exact_log2(block_size);
-    const unsigned l2_granule_size = exact_log2(granule_size);
-    assert(l2_block_size <= l2_granule_size, "Sanity");
-    return l2_granule_size - l2_block_size;
-  }
-
-  static unsigned calc_num_granules(size_t block_size, size_t granule_size, unsigned num_blocks) {
-    return num_blocks >> calc_block_to_granule_shift(block_size, granule_size);
-  }
+  void increase_block_counter(unsigned num);
+  void decrease_block_counter(unsigned num);
 
 public:
 
   ArenaSlab(ArenaHeap* arena_heap,
             ArenaMetadataHeap* metadata_heap,
-            unsigned block_size, unsigned granule_size,
+            size_t block_size, size_t granule_size,
             unsigned num_blocks, unsigned release_boundary,
             double decay_factor);
 
@@ -245,6 +202,8 @@ public:
   unsigned count_in_use_blocks() const  { return checked_cast<unsigned>(_in_use_bitmap.count_one_bits()); }
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
   unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
+
+  PlatformMutex& lock() const { return _hot->_lock; }
 
 };
 

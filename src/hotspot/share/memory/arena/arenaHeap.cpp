@@ -84,8 +84,10 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
   assert(is_aligned(from, os::vm_page_size()), "Sanity");
   assert(is_aligned(to, os::vm_page_size()), "Sanity");
 
-  const int rc = madvise((void*)from, sz, MADV_DONTNEED);
-  assert(rc == 0, "madvise MADV_DONTNEED failed");
+  // TODO
+  const int advise = MACOS_ONLY(MADV_FREE) NOT_MACOS(MADV_DONTNEED);
+  const int rc = madvise((void*)from, sz, advise);
+  assert(rc == 0, "madvise failed");
 }
 
 /////////////
@@ -93,16 +95,19 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
 ArenaHeap::ArenaHeap() : ArenaHeapBase(), _hwm(base()) {}
 
 // Reserves memory for a slab. Slab start will be aligned to granule size.
-const_blockptr_t ArenaHeap::reserve_slab_memory(unsigned block_size, unsigned granule_size, unsigned num_blocks) {
+const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granule_size, unsigned num_blocks) {
 
   assert(ArenaBlockHelpers::is_valid_standard_size_class(block_size) ||
-         block_size == ArenaBlockHelpers::huge_block_granularity, "Sanity");
+         block_size == ArenaBlockHelpers::huge_block_granularity,
+         "Invalid block size (%zu)", block_size);
   assert(block_size <= granule_size, "Sanity");
   assert(granule_size >= os::vm_page_size(), "Sanity");
   assert(is_power_of_2(granule_size), "Sanity");
 
-  const size_t alignment = MAX2(os::vm_page_size(), (size_t)granule_size);
-  align_up(_hwm, alignment);
+  // Slabs are always aligned to large page size, independent from granule size.
+  // That makes dealing with commit- and release- boundaries a lot easier.
+  constexpr size_t alignment = large_page_size;
+  _hwm = align_up(_hwm, alignment);
 
   const size_t needed = block_size * num_blocks;
 
@@ -157,17 +162,17 @@ void ArenaMetadataHeap::finalize() {
   // Is it worth to back this with large pages?
 #ifdef LINUX
   address thp_advise_boundary = align_up(_hwm, large_page_size);
-  if ((thp_advise_boundary - _hwm) > (size_t)((double)large_page_size * .25)) {
+  if ((size_t)(thp_advise_boundary - _hwm) > (size_t)((double)large_page_size * .25)) {
     thp_advise_boundary -= large_page_size;
   }
   if (thp_advise_boundary > base()) {
-    advise_thp_use(base(), thp_advise_boundary, true);
+    advise_large_page_use(base(), thp_advise_boundary, true);
   }
   _hwm = MAX2(thp_advise_boundary, _hwm);
 #endif // Linux
   _hwm = align_up(_hwm, os::vm_page_size());
   assert(_hwm <= end(), "Sanity");
   if (_hwm < end()) {
-    os::release_memory((char*)_hwm, end() - _hwm);
+    os::uncommit_memory((char*)_hwm, end() - _hwm);
   }
 }

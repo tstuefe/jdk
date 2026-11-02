@@ -50,7 +50,7 @@ static T* allocate_padded_from_metadata_heap(ArenaMetadataHeap* metadata_heap) {
 
 ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
                      ArenaMetadataHeap* metadata_heap,
-                     unsigned block_size, unsigned granule_size,
+                     size_t block_size, size_t granule_size,
                      unsigned num_blocks, unsigned release_boundary,
                      double decay_factor) :
   _arena_heap(arena_heap),
@@ -58,20 +58,35 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
   _block_size(block_size),
   _granule_size(granule_size),
   _num_blocks(num_blocks),
-  _blocks_to_granule_shift(calc_block_to_granule_shift(block_size, granule_size)),
-  _num_granules(calc_num_granules(block_size, granule_size, num_blocks)),
-  _decay_factor(calc_decay_factor_percent(decay_factor)),
+  _blocks_to_granule_shift(
+    [block_size, granule_size]() {
+      const unsigned log2_block_size = exact_log2(block_size);
+      const unsigned log2_granule_size = exact_log2(granule_size);
+      assert(log2_block_size <= log2_granule_size, "Sanity");
+      return log2_granule_size - log2_block_size;
+    } ()),
+  _num_granules(
+    [&]() {
+      return _num_blocks >> _blocks_to_granule_shift;
+    } ()),
+  _decay_factor(
+    [decay_factor]() -> uint8_t {
+      assert(decay_factor >= 0.0 && decay_factor <= 1.0, "factor must be between 0.0 and 1.0");
+      const unsigned i = (unsigned)((decay_factor * 100.0) + 0.5);
+      return checked_cast<uint8_t>(i);
+    } () ),
   _release_boundary(release_boundary),
   _base(arena_heap->reserve_slab_memory(block_size, granule_size, num_blocks)),
   _block_range(_base, block_size, num_blocks),
   _granule_range(_base, granule_size, _num_granules),
   _dirty_bitmap(metadata_heap, _num_granules),
   _in_use_bitmap(metadata_heap, num_blocks),
+  _commit_boundary(0),
   _hot(allocate_padded_from_metadata_heap<SlabHotData>(metadata_heap)),
   _per_tick(allocate_padded_from_metadata_heap<SlabPerTickData>(metadata_heap))
 {
   assert(ArenaBlockHelpers::is_valid_standard_size_class(block_size) ||
-         block_size == ArenaBlockHelpers::huge_block_granularity, "Sanity");
+         block_size == ArenaBlockHelpers::huge_block_granularity, "invalid block size (%zu)", block_size);
   assert(_num_blocks > 0, "Sanity");
   assert(is_aligned(_num_blocks,blocks_per_granule()), "Sanity");
   assert(is_power_of_2(_granule_size), "Sanity");
@@ -79,17 +94,36 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
   assert(_granule_size >= os::vm_page_size(), "Sanity");
   assert(is_aligned(_block_range.base(), _granule_size), "Sanity");
 
-  // Set up release boundary: Anything below we will never release, so it should be
-  // pre-committed and, if possible, backed with large pages
-  const size_t resident_size = _release_boundary * granule_size;
-  if (resident_size > 0) {
-    _arena_heap->commit_memory(base(), base() + resident_size);
-    // We never release this memory, so lets back it with large pages if that makes sense.
-    assert(resident_size < ArenaHeapBase::large_page_size ||
-           is_aligned(resident_size, ArenaHeapBase::large_page_size),
-           "Sub-optimal slab sizing - align release_boundary to large page size.");
-    const bool resident_uses_large_pages = resident_size >= ArenaHeapBase::large_page_size;
-    _arena_heap->advise_large_page_use(base(), base() + resident_size, resident_uses_large_pages);
+  // Set up release resident portion below release boundary:
+  // this portion will never be released and will be, if possible, backed by
+  // large pages (even if we don't use them for the burst portion of the slab).
+  if (_release_boundary > 0) {
+    const const_blockptr_t release_boundary_pointer =
+      _granule_range.index_to_block_incl(_release_boundary);
+    assert(release_boundary_pointer <= end(), "Sanity");
+    const bool resident_uses_large_pages = is_aligned(release_boundary_pointer, ArenaHeapBase::large_page_size);
+    _arena_heap->commit_memory(base(), release_boundary_pointer);
+    _arena_heap->advise_large_page_use(base(), release_boundary_pointer, resident_uses_large_pages);
+    _commit_boundary = _release_boundary;
+  }
+}
+
+// Ensure this and all lower-address blocks are committed.
+void ArenaSlab::ensure_committed(IndexType block_index) {
+  DEBUG_ONLY(_block_range.check_is_valid_block_index(block_index);)
+  const IndexType granule_index = block_index_to_granule_index(block_index);
+  const IndexType new_commit_boundary = MAX2(granule_index + 1, _commit_boundary);
+  if (new_commit_boundary > _commit_boundary) {
+    // We commit a bit more to avoid having to do this too often
+    const IndexType new_commit_boundary_overshoot =
+      MIN2((IndexType)num_granules(), new_commit_boundary + num_granules_overcommit);
+    const const_blockptr_t p1 = _granule_range.index_to_block(_commit_boundary);
+    const const_blockptr_t p2 = _granule_range.index_to_block_incl(new_commit_boundary_overshoot);
+    _arena_heap->commit_memory(p1, p2);
+#ifdef LINUX
+    _arena_heap->advise_large_page_use(p1, p2, use_large_pages());
+#endif
+    _commit_boundary = new_commit_boundary_overshoot;
   }
 }
 
@@ -209,6 +243,17 @@ void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
   decrease_block_counter(idx2 - idx);
 }
 
+
+void ArenaSlab::increase_block_counter(unsigned num) {
+  _hot->_num_blocks_in_use += num;
+  assert(_hot->_num_blocks_in_use <= num_blocks(), "Sanity");
+  _hot->_num_blocks_in_use_max = MAX2(_hot->_num_blocks_in_use, _hot->_num_blocks_in_use_max);
+}
+
+void ArenaSlab::decrease_block_counter(unsigned num) {
+  assert(_hot->_num_blocks_in_use >= num, "Sanity");
+  _hot->_num_blocks_in_use -= num;
+}
 
 #ifdef ASSERT
 void ArenaSlab::verify() const {

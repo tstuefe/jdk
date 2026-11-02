@@ -40,6 +40,8 @@ class ArenaHeapBase {
   const address _end;
 public:
 
+  NONCOPYABLE(ArenaHeapBase);
+
   // For now. Todo, needs refinement.
   static constexpr size_t large_page_size = 2 * M;
 
@@ -77,7 +79,9 @@ public:
 
   // Reserves memory for a slab. Slab start will be aligned to granule size.
   // Slab will *not* be committed.
-  const_blockptr_t reserve_slab_memory(unsigned block_size, unsigned granule_size, unsigned num_blocks);
+  const_blockptr_t reserve_slab_memory(size_t block_size, size_t granule_size, unsigned num_blocks);
+
+  const_blockptr_t hwm() const { return _hwm; }
 
 };
 
@@ -111,6 +115,8 @@ public:
 
   template <typename T>
   void align_hwm_to() { align_hwm_up(alignof(T)); }
+
+  const_address hwm() const { return _hwm; }
 };
 
 
