@@ -167,6 +167,7 @@ public:
             double decay_factor);
 
   const_blockptr_t base() const { return _block_range.base(); }
+  size_t size_in_bytes() const { return _block_range.size_in_bytes(); }
   const_blockptr_t end() const { return _block_range.end(); }
   size_t block_size() const { return _block_size; }
   size_t granule_size() const { return _granule_size; }

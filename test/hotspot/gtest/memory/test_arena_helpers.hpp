@@ -73,15 +73,15 @@ struct ArenaTestHelpers : public AllStatic {
     return num;
   }
 
-  // Find first run of contiguous set|clear bits
+  // Find first run of num contiguous set|clear bits
   template <bool set>
-  static BitMap::idx_t find_first_X_run(const BitMap& bm, BitMap::idx_t num_bits) {
+  static BitMap::idx_t find_first_X_run(const BitMap& bm, BitMap::idx_t num) {
     BitMap::idx_t idx = 0;
-    while (idx < num_bits) {
+    while (idx < bm.size()) {
       idx = set ? bm.find_first_set_bit(idx) : bm.find_first_clear_bit(idx);
-      if (idx < num_bits) {
+      if (idx < bm.size()) {
         const BitMap::idx_t idx2 = set ? bm.find_first_clear_bit(idx) : bm.find_first_set_bit(idx);
-        if (idx2 - idx >= num_bits) {
+        if (idx2 - idx >= num) {
           break;
         }
         idx = idx2;

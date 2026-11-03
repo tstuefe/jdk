@@ -284,9 +284,20 @@ namespace {
       const const_blockptr_t p5 = allocate_huge_block_and_verify(4 * M);
       EXPECT_EQ(p5, _slab.base());
 
-      // Fragmentation: enough free total, no contiguous run
+      // Exhaust the slab
       const const_blockptr_t p6 = allocate_huge_block_and_verify((_num_blocks * _block_size) - 20 * M);
       EXPECT_EQ(p6, _slab.base() + 20 * M);
+      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks);
+
+      // A hole near the end of the slab, nothing else free
+      const const_blockptr_t hole = align_down(_slab.end() - (9 * M), _block_size);
+      deallocate_huge_block_and_verify(hole, 2 * M);
+
+      EXPECT_EQ(allocate_huge_block_and_verify(6 * M), nullptr); // Should fail
+      EXPECT_EQ(allocate_huge_block_and_verify(2 * M), hole); // Should succeed
+      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks); // Full again
+
+      // Fragmentation: enough free total, no contiguous run
       EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks);
       for (const_blockptr_t p7 = _slab.base(); p7 < _slab.end(); p7 += 4 * M) {
         deallocate_huge_block_and_verify(p7, 2 * M);
