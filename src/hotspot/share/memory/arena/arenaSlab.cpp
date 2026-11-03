@@ -263,16 +263,26 @@ void ArenaSlab::verify() const {
   assert(_in_use_bitmap.count_one_bits() == _hot->_num_blocks_in_use, "Sanity");
   assert(_hot->_num_blocks_in_use_max >= _hot->_num_blocks_in_use, "Sanity");
   _dirty_bitmap.verify();
+
   // every in-use block must be dirty
   CHeapBitMap tmp(num_blocks(), mtTest, false);
   CHeapBitMap tmp2(num_blocks(), mtTest, false);
   _dirty_bitmap.convert_to_flat_bitmap_scaled(tmp, blocks_per_granule());
   _in_use_bitmap.convert_to_flat_bitmap(tmp2);
   assert(tmp.contains(tmp2), "Sanity");
+
+  // Commit|Release Boundaries
+  assert(_granule_range.is_valid_block_index_incl(_commit_boundary), "Sanity");
+  assert(_granule_range.is_valid_block_index_incl(_release_boundary), "Sanity");
+
+  // Below the release boundary, all blocks must be committed
+  assert(_release_boundary <= _commit_boundary, "Commit boundary too high?");
+
   // the commit boundary must be equal or higher than the end of the highest dirty block
   const IndexType granule_idx = _dirty_bitmap.find_last_set_bit(0, num_granules());
   if (granule_idx < num_granules()) {
     assert(granule_idx < _commit_boundary, "Commit boundary too low?");
   }
+
 }
 #endif

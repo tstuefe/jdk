@@ -126,9 +126,61 @@ namespace {
       DEBUG_ONLY(_slab.verify();)
     }
 
-    void deallocate_and_verify(BitMap::idx_t block_index) {
-      BitMap::idx_t idx = block_index;
-      deallocate_and_verify(&idx, 1);
+    // void deallocate_and_verify(BitMap::idx_t block_index) {
+    //   BitMap::idx_t idx = block_index;
+    //   deallocate_and_verify(&idx, 1);
+    // }
+
+    // Allocates a huge block, with verification. Returns block index.
+    const_blockptr_t allocate_huge_block_and_verify(size_t size) {
+      LOG_HERE("allocate_huge_block_and_verify %zu", size);
+      assert(is_aligned(size, ArenaBlockHelpers::huge_block_granularity), "Sanity");
+      const unsigned num = size / ArenaBlockHelpers::huge_block_granularity;
+
+      // fake-allocate in control bitmap
+      const BitMap::idx_t idx = ArenaTestHelpers::find_first_clear_run(_control, num);
+
+      // allocate in real bitmap
+      const const_blockptr_t p = _slab.allocate_huge_block(size);
+
+      if (idx == _num_blocks) {
+        EXPECT_EQ(p, nullptr);
+      } else {
+        EXPECT_EQ(_block_range.index_to_block(idx), p);
+        _control.set_range(idx, idx + num);
+        // write into all the blocks to check they are writable
+        os::pretouch_memory(const_cast<blockptr_t>(p),
+                            const_cast<blockptr_t>(p) + size,
+                            os::vm_page_size());
+
+      }
+
+      check_equality();
+      DEBUG_ONLY(_slab.verify();)
+      return p;
+    }
+
+    void deallocate_huge_block_and_verify(const_blockptr_t p, size_t size) {
+      LOG_HERE("deallocate_huge_block_and_verify %zu", size);
+
+      assert(is_aligned(size, ArenaBlockHelpers::huge_block_granularity), "Sanity");
+
+      const unsigned num = size / ArenaBlockHelpers::huge_block_granularity;
+      const BitMap::idx_t idx = _block_range.block_to_index(p);
+
+      // Range must be marked as in-use
+      ASSERT_TRUE(_control.at(idx));
+      const BitMap::idx_t idx2 = _control.find_first_clear_bit(idx);
+      ASSERT_GE(idx2, idx + num);
+
+      // Fake-clear in control
+      _control.clear_range(idx, idx + num);
+
+      // Deallocate for real
+      _slab.deallocate_huge_block(p, size);
+
+      check_equality();
+      DEBUG_ONLY(_slab.verify();)
     }
 
     // void deallocate_block_range_and_verify(BitMap::idx_t from, BitMap::idx_t to) {
@@ -182,6 +234,9 @@ namespace {
         num_to_deallocate = ArenaTestHelpers::get_random_set_bits(_random, _control, arr, num_to_deallocate);
         deallocate_and_verify(arr, num_to_deallocate);
         num_allocated -= num_to_deallocate;
+        if (::testing::Test::HasFailure()) {
+          return;
+        }
       }
     }
 
@@ -208,6 +263,40 @@ namespace {
     void test_allocate_first_fit_order_no_exhaustion() { test_allocate_first_fit_order_0(false); }
     void test_allocate_first_fit_order_with_exhaustion() { test_allocate_first_fit_order_0(true); }
 
+    void test_huge_block_allocation_deallocation() {
+      if (_block_size != ArenaBlockHelpers::huge_block_granularity) {
+        return;
+      }
+      assert(_num_blocks >= 64, "need at least this many blocks");
+
+      const const_blockptr_t p1 = allocate_huge_block_and_verify(4 * M); // blocks 0-1
+      EXPECT_EQ(p1, _slab.base());
+      const const_blockptr_t p2 = allocate_huge_block_and_verify(2 * M); // block 2
+      EXPECT_EQ(p2, p1 + 4 * M);
+      const const_blockptr_t p3 = allocate_huge_block_and_verify(8 * M); // blocks 3-6
+      EXPECT_EQ(p3, p2 + 2 * M);
+
+      deallocate_huge_block_and_verify(p1, 4 * M);                        // hole of 2 at [0,2)
+      // Allocate, does not fit hole
+      const const_blockptr_t p4 = allocate_huge_block_and_verify(6 * M);
+      EXPECT_EQ(p4, p3 + 8 * M);
+      // Allocate, fits exactly
+      const const_blockptr_t p5 = allocate_huge_block_and_verify(4 * M);
+      EXPECT_EQ(p5, _slab.base());
+
+      // Fragmentation: enough free total, no contiguous run
+      const const_blockptr_t p6 = allocate_huge_block_and_verify((_num_blocks * _block_size) - 20 * M);
+      EXPECT_EQ(p6, _slab.base() + 20 * M);
+      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks);
+      for (const_blockptr_t p7 = _slab.base(); p7 < _slab.end(); p7 += 4 * M) {
+        deallocate_huge_block_and_verify(p7, 2 * M);
+      }
+      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks / 2);
+
+      EXPECT_EQ(_slab.allocate_huge_block(4 * M), nullptr);
+      EXPECT_NE(_slab.allocate_huge_block(2 * M), nullptr);
+    }
+
   };
 }
 
@@ -222,6 +311,8 @@ TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size #
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_and_deallocate ) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_no_exhaustion ) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_with_exhaustion ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_huge_block_allocation_deallocation ) \
+
 
 
 //               block_size
@@ -240,3 +331,5 @@ DEFINE_ALL_TESTS(32768,   2097152,  2048,     0, 0)
 
 DEFINE_ALL_TESTS(1048576, 1048576,  32,       0, 0)   // 32MB
 DEFINE_ALL_TESTS(1048576, 2097152,  32,       0, 0)   // 32MB
+
+DEFINE_ALL_TESTS(2097152, 2097152,  64,       0, 0)   // 128MB

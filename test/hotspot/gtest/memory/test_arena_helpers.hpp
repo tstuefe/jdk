@@ -73,6 +73,27 @@ struct ArenaTestHelpers : public AllStatic {
     return num;
   }
 
+  // Find first run of contiguous set|clear bits
+  template <bool set>
+  static BitMap::idx_t find_first_X_run(const BitMap& bm, BitMap::idx_t num_bits) {
+    BitMap::idx_t idx = 0;
+    while (idx < num_bits) {
+      idx = set ? bm.find_first_set_bit(idx) : bm.find_first_clear_bit(idx);
+      if (idx < num_bits) {
+        const BitMap::idx_t idx2 = set ? bm.find_first_clear_bit(idx) : bm.find_first_set_bit(idx);
+        if (idx2 - idx >= num_bits) {
+          break;
+        }
+        idx = idx2;
+      }
+    }
+    return idx;
+  }
+
+  static BitMap::idx_t find_first_set_run(const BitMap& bm, BitMap::idx_t num_bits) { return find_first_X_run<true>(bm, num_bits); }
+  static BitMap::idx_t find_first_clear_run(const BitMap& bm, BitMap::idx_t num_bits) { return find_first_X_run<false>(bm, num_bits); }
+
+
 };
 
 #endif // TEST_HOTSPOT_GTEST_MEMORY_TEST_ARENA_HELPERS_HPP
