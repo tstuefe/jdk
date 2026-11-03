@@ -55,27 +55,9 @@ class ArenaBlockCache {
   ArenaSlab* const _slab;
 
 #ifdef ASSERT
-  void verify_block(const_blockptr_t block) const {
-    _slab->verify_block(block);
-  }
-
-  void verify_blocks(const const_blockptr_t* blocks, int num_blocks) const {
-    for (int i = 0; i < num_blocks; i++) {
-      verify_block(blocks[i]);
-      // We also verify uniqueness
-      for (int j = i + 1; j < num_blocks; j++) {
-        assert(blocks[i] != blocks[j], "duplicate block");
-      }
-    }
-  }
-
-  template <bool lo_to_hi>
-  static void verify_block_order(const const_blockptr_t* blocks, int num_blocks) {
-    for (int i = 1; i < num_blocks; i++) {
-      assert( (lo_to_hi && blocks[i] >= blocks[i - 1]) ||
-              (!lo_to_hi && blocks[i] <= blocks[i - 1]), "Bad Order");
-    }
-  }
+  void verify_block(const_blockptr_t block) const;
+  void verify_blocks(const const_blockptr_t* blocks, int num_blocks) const;
+  static void verify_block_order(const const_blockptr_t* blocks, int num_blocks, bool lo_to_hi);
 #endif
 
   void set_count(int n) {
@@ -152,19 +134,7 @@ class ArenaBlockCache {
 
 public:
 
-  ArenaBlockCache(ArenaSlab* slab, int cachesize) :
-    _cachesize(cachesize), _slab(slab)
-  {
-    assert(cachesize > 0 && cachesize <= max_cachesize, "bad cache size (%d)", cachesize);
-    assert(_slab != nullptr, "Sanity");
-    assert(num_evict_on_overflow() <= cachesize, "Sanity");
-    assert(num_prefetch_on_underflow() <= cachesize, "Sanity");
-    assert(num_evict_on_tick_busy() <= cachesize, "Sanity");
-    assert(num_evict_on_tick_nonbusy() <= cachesize, "Sanity");
-    zero_out_slots(0, cachesize);
-    set_count(0);
-    _is_busy = false;
-  }
+  ArenaBlockCache(ArenaSlab* slab, int cachesize);
 
   int cachesize() const { return _cachesize; }
   int count() const { return _count; }
@@ -206,7 +176,7 @@ public:
       }
       assert(num_fetched > 0 && num_fetched <= to_fetch, "sanity");
       DEBUG_ONLY(verify_blocks(tmp, num_fetched);)
-      DEBUG_ONLY(verify_block_order<true>(tmp, num_fetched);)
+      DEBUG_ONLY(verify_block_order(tmp, num_fetched, true);)
       // The slab allocator gives us the blocks in low-to-high address order. The first one goes to
       // the caller, the rest into the cache (we need to reverse order).
       const_blockptr_t result = tmp[0];
@@ -275,47 +245,13 @@ public:
 
   // A tick frees part of the cache or all of the cache, depending on whether the
   // cache is busy or not.
-  void tick() {
-    DEBUG_ONLY(verify_cache();)
-    const int c = count();
-    const int max_to_evict = _is_busy ? num_evict_on_tick_busy() : num_evict_on_tick_nonbusy();
-    const int num_to_evict = MIN2(c, max_to_evict);
-    if (num_to_evict > 0) {
-      _slab->deallocate_blocks(_blocks, num_to_evict);
-      const int c2 = c - num_to_evict;
-      if (c2 > 0) {
-        compress_cache(num_to_evict, c2);
-      } else {
-        DEBUG_ONLY(zero_out_slots(0, cachesize());)
-      }
-      set_count(c2);
-    }
-    _is_busy = false; // reset flag
-  }
+  void tick();
 
 #ifdef ASSERT
-  void verify_cache() const {
-    const int c = count();
-    assert(c >= 0 && c <= cachesize(), "Sanity");
-    verify_blocks(_blocks, c);
-    verify_block_order<false>(_blocks, c);
-    // Check that (at least in debug builds) the unused slots are zero'd out
-    for (int i = c; i < cachesize(); i++) {
-      assert(_blocks[i] == nullptr, "Sanity");
-    }
-  }
+  void verify_cache() const ;
 #endif // ASSERT
 
-  void flush() {
-    DEBUG_ONLY(verify_cache();)
-    const int c = count();
-    if (c > 0) {
-      _slab->deallocate_blocks(_blocks, c);
-    }
-    set_count(0);
-    zero_out_slots(0, cachesize());
-    _is_busy = false;
-  }
+  void flush();
 
   // Helper function for tests. Iterates through all blocks in the cache, highest-address first
   template <typename Function>
@@ -342,6 +278,12 @@ public:
   // how many entries to evict on a tick if cache is idle
   static int num_evict_on_tick_nonbusy(int cachesize)     { return cachesize; }
   int num_evict_on_tick_nonbusy() const                   { return num_evict_on_tick_nonbusy(cachesize()); }
+
+};
+
+// A cache group holds one cache per block size.
+class ArenaBlockCacheGroup {
+
 
 };
 
