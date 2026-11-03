@@ -33,49 +33,30 @@
 #include "utilities/globalDefinitions.hpp"
 
 
-template <size_t szclass, int cachesize>
 class ArenaBlockCache {
-public:
-
-  // These are public for gtests
-  // how many entries to evict on overflow
-  static constexpr int num_evict_on_overflow = cachesize / 2;
-  // how many entries to prefetch on underflow
-  static constexpr int num_prefetch_on_underflow = cachesize / 2;
-  // how many entries to evict on a tick if cache is busy
-  static constexpr int num_evict_on_tick_busy = 1;
-  // how many entries to evict on a tick if cache is idle
-  static constexpr int num_evict_on_tick_nonbusy = cachesize;
 
   NONCOPYABLE(ArenaBlockCache);
 
- private:
-  STATIC_ASSERT(cachesize >= 2);
-  STATIC_ASSERT(cachesize < 256);
-  STATIC_ASSERT(num_evict_on_overflow <= cachesize);
-  STATIC_ASSERT(num_prefetch_on_underflow <= cachesize);
-  STATIC_ASSERT(num_evict_on_tick_busy <= cachesize);
-  STATIC_ASSERT(num_evict_on_tick_nonbusy <= cachesize);
-  STATIC_ASSERT(ArenaBlockHelpers::is_valid_standard_size_class(szclass));
+  // We allocate all caches with fixed offsets in a big table; keeping their sizes
+  // uniform makes matters simpler.
+  // Cache has one control word holding several values (cache size, count etc) and up to 7 cache entries.
+  // That makes the cache fit into a cache line.
+  // (Todo: make slab an uint8_t index (eg log2 blocksize) then it fits into the control word too)
+  static constexpr int max_cachesize = 7;
 
+  const uint8_t _cachesize;   // actual cache size
+  uint8_t _count;             // Number of blocks in cache
+  bool _is_busy;              // true if allocation requests came in since the last tick
   // Blocks are ordered on insert, high-to-low
   // (const pointers since we never change block content from here)
-  const_blockptr_t _blocks[cachesize];
-  // Number of items in cache
-  uint8_t _count;
-  // true if block requests came in since the last tick
-  bool _is_busy;
+  const_blockptr_t _blocks[max_cachesize];
 
-  // The slab to route allocations and deallocations to on overflow and underflow
-  ArenaSlab* _slab;
+  // Next cacheline, which is okay for now.
+  ArenaSlab* const _slab;
 
 #ifdef ASSERT
   void verify_block(const_blockptr_t block) const {
-    assert(block != nullptr, "null");
-    assert(_slab->contains(block), "Block outside of arena heap (" PTR_FORMAT ")", p2i(block));
-    // A block pointer from the arena heap is always aligned to at least the
-    // smallest block size, which is 256, so the lowest byte should always be zero
-    assert(is_aligned(block, ArenaBlockHelpers::min_block_size), "not properly aligned");
+    _slab->verify_block(block);
   }
 
   void verify_blocks(const const_blockptr_t* blocks, int num_blocks) const {
@@ -98,7 +79,7 @@ public:
 #endif
 
   void set_count(int n) {
-    assert(n >= 0 && n <= cachesize, "n too large");
+    assert(n >= 0 && n <= cachesize(), "n too large");
     _count = n;
   }
 
@@ -116,7 +97,7 @@ public:
       assert(_blocks[i] != block, "block already in cache??");
     }
 #endif
-    if (c == cachesize) {
+    if (c == cachesize()) {
       int pos = c - 1;
       while (pos >= 0 && _blocks[pos] < block) {
         pos--;
@@ -130,7 +111,7 @@ public:
       }
       return block;
     } else {
-      assert(c < cachesize, "Sanity");
+      assert(c < cachesize(), "Sanity");
       int pos = c;
       while (pos > 0 && _blocks[pos - 1] < block) {
         pos--;
@@ -152,12 +133,15 @@ public:
   // to cache position 0.
   // Does *not* correct the count. May be invalid after the call.
   void compress_cache(int pos, int num) {
-    assert(pos < cachesize && pos > 0, "Sanity");
-    assert(pos + num <= cachesize, "Sanity");
+    if (pos == 0) {
+      return;
+    }
+    assert(pos < cachesize() && pos > 0, "Sanity");
+    assert(pos + num <= cachesize(), "Sanity");
     for (int i = 0; i < num; i++) {
       _blocks[i] = _blocks[pos + i];
     }
-    DEBUG_ONLY(zero_out_slots(num, cachesize - num);)
+    DEBUG_ONLY(zero_out_slots(num, cachesize() - num);)
   }
 
   void zero_out_slots(int pos, int count) {
@@ -168,13 +152,21 @@ public:
 
 public:
 
-  ArenaBlockCache(ArenaSlab* slab) : _slab(slab) {
-    assert(_slab->block_size() == szclass, "Sanity");
+  ArenaBlockCache(ArenaSlab* slab, int cachesize) :
+    _cachesize(cachesize), _slab(slab)
+  {
+    assert(cachesize > 0 && cachesize <= max_cachesize, "bad cache size (%d)", cachesize);
+    assert(_slab != nullptr, "Sanity");
+    assert(num_evict_on_overflow() <= cachesize, "Sanity");
+    assert(num_prefetch_on_underflow() <= cachesize, "Sanity");
+    assert(num_evict_on_tick_busy() <= cachesize, "Sanity");
+    assert(num_evict_on_tick_nonbusy() <= cachesize, "Sanity");
     zero_out_slots(0, cachesize);
     set_count(0);
     _is_busy = false;
   }
 
+  int cachesize() const { return _cachesize; }
   int count() const { return _count; }
 
   void deallocate_block(const_blockptr_t block) {
@@ -184,15 +176,15 @@ public:
     if (block != nullptr) {
       // Overflow: We need to evict. We evict a few blocks from the cache as well
       // to reduce calls into the slab allocator.
-      assert(c == cachesize, "Cache should be full");
-      const_blockptr_t eviction_set [num_evict_on_overflow + 1];
+      assert(c == cachesize(), "Cache should be full");
+      const_blockptr_t eviction_set [max_cachesize + 1];
       eviction_set[0] = block;
-      for (int i = 0; i < num_evict_on_overflow; i++) {
+      for (int i = 0; i < num_evict_on_overflow(); i++) {
         eviction_set[i + 1] = _blocks[i];
       }
-      _slab->deallocate_blocks(eviction_set, num_evict_on_overflow + 1);
-      constexpr int c2 = cachesize - num_evict_on_overflow;
-      compress_cache(num_evict_on_overflow, c2);
+      _slab->deallocate_blocks(eviction_set, num_evict_on_overflow() + 1);
+      const int c2 = cachesize() - num_evict_on_overflow();
+      compress_cache(num_evict_on_overflow(), c2);
       set_count(c2);
     } else {
       set_count(c + 1);
@@ -206,8 +198,8 @@ public:
     if (c == 0) {
       // Underflow: Refill cache from slab allocator. We prefetch a few blocks to reduce calls into
       // the slab allocator
-      constexpr int to_fetch = num_prefetch_on_underflow + 1;
-      const_blockptr_t tmp[to_fetch];
+      const int to_fetch = num_prefetch_on_underflow() + 1;
+      const_blockptr_t tmp[max_cachesize + 1];
       const int num_fetched = _slab->allocate_blocks(tmp, to_fetch);
       if (num_fetched == 0) {
         return nullptr; // slab exhausted?
@@ -244,7 +236,7 @@ public:
     assert(num_blocks <= max_blocks_for_bulk_add, "sanity");
     DEBUG_ONLY(verify_blocks(blocks, num_blocks);)
 
-    constexpr int eviction_set_max_size = max_blocks_for_bulk_add + num_evict_on_overflow;
+    constexpr int eviction_set_max_size = max_blocks_for_bulk_add + max_cachesize;
     const_blockptr_t evict_set [eviction_set_max_size];
     int num_in_eviction_set = 0;
     int num_in_cache = count();
@@ -263,19 +255,19 @@ public:
     if (num_in_eviction_set > 0) {
       // Overflow. We need to evict these  blocks. To reduce calls to the slab allocator,
       // we also evict a few blocks from the cache.
-      assert(num_in_cache == cachesize, "sanity");
-      assert(num_evict_on_overflow + num_in_eviction_set <= eviction_set_max_size, "sanity");
-      for (int i = 0; i < num_evict_on_overflow; i++) {
+      assert(num_in_cache == cachesize(), "sanity");
+      assert(num_evict_on_overflow() + num_in_eviction_set <= eviction_set_max_size, "sanity");
+      for (int i = 0; i < num_evict_on_overflow(); i++) {
         evict_set[num_in_eviction_set] = _blocks[i];
         num_in_eviction_set++;
       }
-      num_in_cache -= num_evict_on_overflow;
+      num_in_cache -= num_evict_on_overflow();
       // Then we evict the whole set.
       _slab->deallocate_blocks(evict_set, num_in_eviction_set);
       // post-cleanups
-      compress_cache(num_evict_on_overflow, num_in_cache);
+      compress_cache(num_evict_on_overflow(), num_in_cache);
     } else {
-      assert(num_in_cache <= cachesize, "sanity");
+      assert(num_in_cache <= cachesize(), "sanity");
     }
     // repair count
     set_count(num_in_cache);
@@ -286,7 +278,7 @@ public:
   void tick() {
     DEBUG_ONLY(verify_cache();)
     const int c = count();
-    const int max_to_evict = _is_busy ? num_evict_on_tick_busy : num_evict_on_tick_nonbusy;
+    const int max_to_evict = _is_busy ? num_evict_on_tick_busy() : num_evict_on_tick_nonbusy();
     const int num_to_evict = MIN2(c, max_to_evict);
     if (num_to_evict > 0) {
       _slab->deallocate_blocks(_blocks, num_to_evict);
@@ -294,7 +286,7 @@ public:
       if (c2 > 0) {
         compress_cache(num_to_evict, c2);
       } else {
-        DEBUG_ONLY(zero_out_slots(0, cachesize);)
+        DEBUG_ONLY(zero_out_slots(0, cachesize());)
       }
       set_count(c2);
     }
@@ -304,11 +296,11 @@ public:
 #ifdef ASSERT
   void verify_cache() const {
     const int c = count();
-    assert(c >= 0 && c <= cachesize, "Sanity");
+    assert(c >= 0 && c <= cachesize(), "Sanity");
     verify_blocks(_blocks, c);
     verify_block_order<false>(_blocks, c);
     // Check that (at least in debug builds) the unused slots are zero'd out
-    for (int i = c; i < cachesize; i++) {
+    for (int i = c; i < cachesize(); i++) {
       assert(_blocks[i] == nullptr, "Sanity");
     }
   }
@@ -321,7 +313,7 @@ public:
       _slab->deallocate_blocks(_blocks, c);
     }
     set_count(0);
-    zero_out_slots(0, cachesize);
+    zero_out_slots(0, cachesize());
     _is_busy = false;
   }
 
@@ -332,6 +324,24 @@ public:
       fun(_blocks[i]);
     }
   }
+
+  // Tuning parameter
+
+  // how many entries to evict on overflow
+  static int num_evict_on_overflow(int cachesize)         { return cachesize / 2; }
+  int num_evict_on_overflow() const                       { return num_evict_on_overflow(cachesize()); }
+
+  // how many entries to prefetch on underflow
+  static int num_prefetch_on_underflow(int cachesize)     { return cachesize / 2; }
+  int num_prefetch_on_underflow() const                   { return num_prefetch_on_underflow(cachesize()); }
+
+  // how many entries to evict on a tick if cache is busy
+  static int num_evict_on_tick_busy(int cachesize)        { (void)cachesize; return 1; }
+  int num_evict_on_tick_busy() const                      { return num_evict_on_tick_busy(cachesize()); }
+
+  // how many entries to evict on a tick if cache is idle
+  static int num_evict_on_tick_nonbusy(int cachesize)     { return cachesize; }
+  int num_evict_on_tick_nonbusy() const                   { return num_evict_on_tick_nonbusy(cachesize()); }
 
 };
 

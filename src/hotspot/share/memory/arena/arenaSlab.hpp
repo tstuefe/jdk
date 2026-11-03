@@ -195,6 +195,7 @@ public:
 
 #ifdef ASSERT
   void verify() const;
+  void verify_block(const_blockptr_t block) const;
 #endif
 
   // Mostly for tests:

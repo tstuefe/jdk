@@ -41,224 +41,226 @@
 #include "testutils.hpp"
 
 
-// This class models expected block movements in between slab, cache and caller-space
-template <size_t blocksize, int cachesize>
-class AllocationPredictionModel {
+namespace {
+  // This class models expected block movements in between slab, cache and caller-space
+  template <size_t blocksize, int cachesize>
+  class AllocationPredictionModel {
 
-  typedef ArenaBlockCache<blocksize, cachesize> CacheType;
+    using idx_t = BitMap::idx_t;
 
-  using idx_t = BitMap::idx_t;
+    const unsigned _num_blocks;
+    CHeapBitMap _owned_by_caller;
+    CHeapBitMap _owned_by_cache;
+    CHeapBitMap _owned_by_slab;
+    BlockRange<unsigned> _block_range;
+    bool _busy;
 
-  const unsigned _num_blocks;
-  CHeapBitMap _owned_by_caller;
-  CHeapBitMap _owned_by_cache;
-  CHeapBitMap _owned_by_slab;
-  BlockRange<unsigned> _block_range;
-  bool _busy;
-
-  unsigned num_blocks() const { return _num_blocks; }
+    unsigned num_blocks() const { return _num_blocks; }
 
 #ifdef ASSERT
-  void verify() const {
-    assert(!_owned_by_slab.intersects(_owned_by_caller), "Sanity");
-    assert(!_owned_by_slab.intersects(_owned_by_cache), "Sanity");
-    assert(!_owned_by_caller.intersects(_owned_by_cache), "Sanity");
-    assert(_num_blocks == num_in_slab() + num_in_cache() + num_owned_by_caller(), "Sanity");
-  }
+    void verify() const {
+      assert(!_owned_by_slab.intersects(_owned_by_caller), "Sanity");
+      assert(!_owned_by_slab.intersects(_owned_by_cache), "Sanity");
+      assert(!_owned_by_caller.intersects(_owned_by_cache), "Sanity");
+      assert(_num_blocks == num_in_slab() + num_in_cache() + num_owned_by_caller(), "Sanity");
+    }
 #endif
 
-  static idx_t find_lowest_address_block(const BitMap& bm) {
-    return bm.find_first_set_bit(0, bm.size());
-  }
+    static idx_t find_lowest_address_block(const BitMap& bm) {
+      return bm.find_first_set_bit(0, bm.size());
+    }
 
-  static idx_t find_lowest_address_block_expect_success(const BitMap& bm) {
-    const idx_t idx = find_lowest_address_block(bm);
-    assert(idx != bm.size(), "Sanity");
-    return idx;
-  }
+    static idx_t find_lowest_address_block_expect_success(const BitMap& bm) {
+      const idx_t idx = find_lowest_address_block(bm);
+      assert(idx != bm.size(), "Sanity");
+      return idx;
+    }
 
-  static idx_t find_highest_address_block(const BitMap& bm) {
-    return bm.find_last_set_bit(0, bm.size());
-  }
+    static idx_t find_highest_address_block(const BitMap& bm) {
+      return bm.find_last_set_bit(0, bm.size());
+    }
 
-  static idx_t find_highest_address_block_expect_success(const BitMap& bm) {
-    const idx_t idx = find_highest_address_block(bm);
-    assert(idx != bm.size(), "Sanity");
-    return idx;
-  }
+    static idx_t find_highest_address_block_expect_success(const BitMap& bm) {
+      const idx_t idx = find_highest_address_block(bm);
+      assert(idx != bm.size(), "Sanity");
+      return idx;
+    }
 
-  // model deallocation of a bunch of blocks, given by a bitmap
-  void model_deallocation(const BitMap& deallocated_blocks) {
-    DEBUG_ONLY(verify());
-    assert(!_owned_by_cache.intersects(deallocated_blocks), "Sanity");
-    assert(!_owned_by_slab.intersects(deallocated_blocks), "Sanity");
+    // model deallocation of a bunch of blocks, given by a bitmap
+    void model_deallocation(const BitMap& deallocated_blocks) {
+      DEBUG_ONLY(verify());
+      assert(!_owned_by_cache.intersects(deallocated_blocks), "Sanity");
+      assert(!_owned_by_slab.intersects(deallocated_blocks), "Sanity");
 
-    _owned_by_cache.set_union(deallocated_blocks);
-    if (num_in_cache() > cachesize) {
-      // Will overflow cache. Cache will evict. Use the union of cache
-      // blocks and deallocated blocks to choose those N with the highest
-      // address, which will move to the slab
-      const int to_keep = cachesize - CacheType::num_evict_on_overflow;
-      const int to_evict = num_in_cache() - to_keep;
-      idx_t idx = num_blocks();
-      for (int i = 0; i < to_evict; ++i) {
-        const idx_t idx2 = _owned_by_cache.find_last_set_bit(0, idx);
-        assert(idx2 != idx, "Sanity");
-        _owned_by_slab.set_bit(idx2);
-        _owned_by_cache.clear_bit(idx2);
-        idx = idx2;
+      _owned_by_cache.set_union(deallocated_blocks);
+      if (num_in_cache() > cachesize) {
+        // Will overflow cache. Cache will evict. Use the union of cache
+        // blocks and deallocated blocks to choose those N with the highest
+        // address, which will move to the slab
+        const int to_keep = cachesize - ArenaBlockCache::num_evict_on_overflow(cachesize);
+        const int to_evict = num_in_cache() - to_keep;
+        idx_t idx = num_blocks();
+        for (int i = 0; i < to_evict; ++i) {
+          const idx_t idx2 = _owned_by_cache.find_last_set_bit(0, idx);
+          assert(idx2 != idx, "Sanity");
+          _owned_by_slab.set_bit(idx2);
+          _owned_by_cache.clear_bit(idx2);
+          idx = idx2;
+        }
       }
-    }
-    _owned_by_caller.set_difference(deallocated_blocks);
-  }
-
-public:
-
-  AllocationPredictionModel(unsigned num_blocks, const_address block_base) :
-    _num_blocks(num_blocks),
-    _owned_by_caller(num_blocks, mtTest, true),
-    _owned_by_cache(num_blocks, mtTest, true),
-    _owned_by_slab(num_blocks, mtTest, true),
-    _block_range(block_base, blocksize, num_blocks),
-    _busy(false)
-  {
-    // At the start, all blocks are owned by the slab
-    _owned_by_slab.set_range(0, num_blocks);
-  }
-
-  void init_all_owned_by_caller() {
-    _owned_by_caller.set_range(0, num_blocks());
-    _owned_by_cache.clear_range(0, num_blocks());
-    _owned_by_slab.clear_range(0, num_blocks());
-    _busy = false;
-  }
-
-  void init_all_owned_by_slab() {
-    _owned_by_caller.clear_range(0, num_blocks());
-    _owned_by_cache.clear_range(0, num_blocks());
-    _owned_by_slab.set_range(0, num_blocks());
-    _busy = false;
-  }
-
-  unsigned num_in_slab() const { return _owned_by_slab.count_one_bits(); }
-  unsigned num_in_cache() const { return _owned_by_cache.count_one_bits(); }
-  unsigned num_owned_by_caller() const { return _owned_by_caller.count_one_bits(); }
-
-  // Model allocation: Update bitmaps and return pointer of the block the allocation would
-  // return.
-  const_blockptr_t model_allocation() {
-    DEBUG_ONLY(verify());
-    _busy = true;
-
-    if (_owned_by_caller.is_full()) {
-      // all slabs are allocated, nothing free
-      return nullptr;
+      _owned_by_caller.set_difference(deallocated_blocks);
     }
 
-    if (num_in_cache() > 0) {
-      // return the lowest-address block from the cache
-      const BitMap::idx_t idx = find_lowest_address_block_expect_success(_owned_by_cache);
+  public:
+
+    AllocationPredictionModel(unsigned num_blocks, const_address block_base) :
+      _num_blocks(num_blocks),
+      _owned_by_caller(num_blocks, mtTest, true),
+      _owned_by_cache(num_blocks, mtTest, true),
+      _owned_by_slab(num_blocks, mtTest, true),
+      _block_range(block_base, blocksize, num_blocks),
+      _busy(false)
+    {
+      // At the start, all blocks are owned by the slab
+      _owned_by_slab.set_range(0, num_blocks);
+    }
+
+    void init_all_owned_by_caller() {
+      _owned_by_caller.set_range(0, num_blocks());
+      _owned_by_cache.clear_range(0, num_blocks());
+      _owned_by_slab.clear_range(0, num_blocks());
+      _busy = false;
+    }
+
+    void init_all_owned_by_slab() {
+      _owned_by_caller.clear_range(0, num_blocks());
+      _owned_by_cache.clear_range(0, num_blocks());
+      _owned_by_slab.set_range(0, num_blocks());
+      _busy = false;
+    }
+
+    unsigned num_in_slab() const { return _owned_by_slab.count_one_bits(); }
+    unsigned num_in_cache() const { return _owned_by_cache.count_one_bits(); }
+    unsigned num_owned_by_caller() const { return _owned_by_caller.count_one_bits(); }
+
+    // Model allocation: Update bitmaps and return pointer of the block the allocation would
+    // return.
+    const_blockptr_t model_allocation() {
+      DEBUG_ONLY(verify());
+      _busy = true;
+
+      if (_owned_by_caller.is_full()) {
+        // all slabs are allocated, nothing free
+        return nullptr;
+      }
+
+      if (num_in_cache() > 0) {
+        // return the lowest-address block from the cache
+        const BitMap::idx_t idx = find_lowest_address_block_expect_success(_owned_by_cache);
+        _owned_by_cache.clear_bit(idx);
+        _owned_by_caller.set_bit(idx);
+        return _block_range.index_to_block(checked_cast<int>(idx));
+      }
+
+      // cache is empty; fetch from slab (and prefetch and pre-fill cache, too)
+      assert(_owned_by_cache.is_empty(), "Sanity");
+      assert(num_in_slab() > 0, "Sanity");
+      const unsigned num_to_fetch_from_slab = MIN2(num_in_slab(),
+        1u + ArenaBlockCache::num_prefetch_on_underflow(cachesize));
+      for (unsigned i = 0; i < num_to_fetch_from_slab; ++i) {
+        const idx_t idx = find_lowest_address_block_expect_success(_owned_by_slab);
+        _owned_by_slab.clear_bit(idx);
+        _owned_by_cache.set_bit(idx);
+      }
+
+      // we return the lowest-address one of the newly fetched blocks
+      const idx_t idx = find_lowest_address_block_expect_success(_owned_by_cache);
       _owned_by_cache.clear_bit(idx);
       _owned_by_caller.set_bit(idx);
+
       return _block_range.index_to_block(checked_cast<int>(idx));
     }
 
-    // cache is empty; fetch from slab (and prefetch and pre-fill cache, too)
-    assert(_owned_by_cache.is_empty(), "Sanity");
-    assert(num_in_slab() > 0, "Sanity");
-    const unsigned num_to_fetch_from_slab = MIN2(num_in_slab(), 1u + CacheType::num_prefetch_on_underflow);
-    for (unsigned i = 0; i < num_to_fetch_from_slab; ++i) {
-      const idx_t idx = find_lowest_address_block_expect_success(_owned_by_slab);
-      _owned_by_slab.clear_bit(idx);
-      _owned_by_cache.set_bit(idx);
-    }
-
-    // we return the lowest-address one of the newly fetched blocks
-    const idx_t idx = find_lowest_address_block_expect_success(_owned_by_cache);
-    _owned_by_cache.clear_bit(idx);
-    _owned_by_caller.set_bit(idx);
-
-    return _block_range.index_to_block(checked_cast<int>(idx));
-  }
-
-  // model deallocation of a single block
-  void model_deallocation(const_blockptr_t block) {
-    DEBUG_ONLY(verify());
-    const idx_t idx = _block_range.block_to_index(block);
-    assert(_owned_by_caller.at(idx), "Sanity");
-    CHeapBitMap tmp(num_blocks(), mtTest, true);
-    tmp.set_bit(idx);
-    model_deallocation(tmp);
-  }
-
-  // model deallocation of a bunch of blocks
-  void model_bulk_deallocation(const const_blockptr_t block[], int num) {
-    DEBUG_ONLY(verify());
-    CHeapBitMap tmp(num_blocks(), mtTest, true);
-    for (int i = 0; i < num; ++i) {
-      const idx_t idx = _block_range.block_to_index(block[i]);
+    // model deallocation of a single block
+    void model_deallocation(const_blockptr_t block) {
+      DEBUG_ONLY(verify());
+      const idx_t idx = _block_range.block_to_index(block);
       assert(_owned_by_caller.at(idx), "Sanity");
+      CHeapBitMap tmp(num_blocks(), mtTest, true);
       tmp.set_bit(idx);
+      model_deallocation(tmp);
     }
-    model_deallocation(tmp);
-  }
 
-  // Model a tick.
-  void model_tick() {
-    DEBUG_ONLY(verify());
-    // On each tick, cache will evict some of its highest-address blocks
-    const unsigned to_evict =
-      MIN2(num_in_cache(), (unsigned)(_busy ? CacheType::num_evict_on_tick_busy : CacheType::num_evict_on_tick_nonbusy));
-    for (unsigned i = 0; i < to_evict; ++i) {
-      const idx_t idx = find_highest_address_block_expect_success(_owned_by_cache);
-      _owned_by_cache.clear_bit(idx);
-      _owned_by_slab.set_bit(idx);
+    // model deallocation of a bunch of blocks
+    void model_bulk_deallocation(const const_blockptr_t block[], int num) {
+      DEBUG_ONLY(verify());
+      CHeapBitMap tmp(num_blocks(), mtTest, true);
+      for (int i = 0; i < num; ++i) {
+        const idx_t idx = _block_range.block_to_index(block[i]);
+        assert(_owned_by_caller.at(idx), "Sanity");
+        tmp.set_bit(idx);
+      }
+      model_deallocation(tmp);
     }
-    _busy = false;
-  }
 
-  void reality_test(const CacheType& cache) const {
-    // Build up a bitmap that reflects the cache content
-    CHeapBitMap tmp(num_blocks(), mtTest, true);
-    const BlockRange<unsigned>& blockrange2 = _block_range;
-    auto set_bit_for_block_in_cache = [&tmp,&blockrange2](const_blockptr_t block) {
-      const idx_t idx = blockrange2.block_to_index(block);
-      tmp.set_bit(idx);
-    };
-    cache.iterate(set_bit_for_block_in_cache);
-    // compare it against our version
-    ASSERT_TRUE(_owned_by_cache.is_same(tmp));
-  }
-
-  void reality_test(const ArenaSlab& slab) const {
-    CHeapBitMap tmp(num_blocks(), mtTest, true);
-    slab.get_in_use_map(tmp);
-    CHeapBitMap tmp2(num_blocks(), mtTest, true);
-    tmp2.set_range(0, num_blocks());
-    tmp2.set_difference(tmp);
-    ASSERT_TRUE(_owned_by_slab.is_same(tmp2));
-  }
-
-  // Retrieve a single block, randomly, that is in-use by caller;
-  // nullptr if none are in use
-  const_blockptr_t get_random_caller_owned_block(PredictableRandom& rand) const {
-    const idx_t idx = ArenaTestHelpers::get_random_set_bit(rand, _owned_by_caller);
-    return idx == num_blocks() ? nullptr : _block_range.index_to_block(idx);
-  }
-
-  // Retrieve an array of unique random blocks that are in use by caller;
-  // returns number of blocks found.
-  int get_random_caller_owned_blocks(PredictableRandom& rand, const_blockptr_t out[], int outlen) const {
-    BitMap::idx_t* arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, outlen, mtTest);
-    const int num = ArenaTestHelpers::get_random_set_bits(rand, _owned_by_caller, arr, outlen);
-    for (int i = 0; i < num; ++i) {
-      out[i] = _block_range.index_to_block(arr[i]);
+    // Model a tick.
+    void model_tick() {
+      DEBUG_ONLY(verify());
+      // On each tick, cache will evict some of its highest-address blocks
+      const unsigned to_evict =
+          MIN2(num_in_cache(), (unsigned)(_busy ? ArenaBlockCache::num_evict_on_tick_busy(cachesize) :
+                                                        ArenaBlockCache::num_evict_on_tick_nonbusy(cachesize)));
+      for (unsigned i = 0; i < to_evict; ++i) {
+        const idx_t idx = find_highest_address_block_expect_success(_owned_by_cache);
+        _owned_by_cache.clear_bit(idx);
+        _owned_by_slab.set_bit(idx);
+      }
+      _busy = false;
     }
-    FREE_C_HEAP_ARRAY(arr);
-    return num;
-  }
 
-}; // end AllocationPredictionModel
+    void reality_test(const ArenaBlockCache& cache) const {
+      // Build up a bitmap that reflects the cache content
+      CHeapBitMap tmp(num_blocks(), mtTest, true);
+      const BlockRange<unsigned>& blockrange2 = _block_range;
+      auto set_bit_for_block_in_cache = [&tmp,&blockrange2](const_blockptr_t block) {
+        const idx_t idx = blockrange2.block_to_index(block);
+        tmp.set_bit(idx);
+      };
+      cache.iterate(set_bit_for_block_in_cache);
+      // compare it against our version
+      ASSERT_TRUE(_owned_by_cache.is_same(tmp));
+    }
+
+    void reality_test(const ArenaSlab& slab) const {
+      CHeapBitMap tmp(num_blocks(), mtTest, true);
+      slab.get_in_use_map(tmp);
+      CHeapBitMap tmp2(num_blocks(), mtTest, true);
+      tmp2.set_range(0, num_blocks());
+      tmp2.set_difference(tmp);
+      ASSERT_TRUE(_owned_by_slab.is_same(tmp2));
+    }
+
+    // Retrieve a single block, randomly, that is in-use by caller;
+    // nullptr if none are in use
+    const_blockptr_t get_random_caller_owned_block(PredictableRandom& rand) const {
+      const idx_t idx = ArenaTestHelpers::get_random_set_bit(rand, _owned_by_caller);
+      return idx == num_blocks() ? nullptr : _block_range.index_to_block(idx);
+    }
+
+    // Retrieve an array of unique random blocks that are in use by caller;
+    // returns number of blocks found.
+    int get_random_caller_owned_blocks(PredictableRandom& rand, const_blockptr_t out[], int outlen) const {
+      BitMap::idx_t* arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, outlen, mtTest);
+      const int num = ArenaTestHelpers::get_random_set_bits(rand, _owned_by_caller, arr, outlen);
+      for (int i = 0; i < num; ++i) {
+        out[i] = _block_range.index_to_block(arr[i]);
+      }
+      FREE_C_HEAP_ARRAY(arr);
+      return num;
+    }
+
+  }; // end AllocationPredictionModel
+}
 
 namespace {
   template <int cachesize>
@@ -270,13 +272,11 @@ namespace {
     static constexpr size_t granule_size = ArenaHeapBase::large_page_size;
 
     typedef AllocationPredictionModel<blocksize, cachesize> ModelType;
-    typedef ArenaBlockCache<blocksize, cachesize> CacheType;
-
 
     ArenaHeap _arena_heap;
     ArenaMetadataHeap _metadata_heap;
     ArenaSlab _slab;
-    CacheType _block_cache;
+    ArenaBlockCache _block_cache;
     PredictableRandom _random;
     BlockRange<unsigned> _block_range;
     ModelType _model;
@@ -336,7 +336,7 @@ namespace {
     Tester() :
       _arena_heap(), _metadata_heap(),
       _slab(&_arena_heap, &_metadata_heap, blocksize, granule_size, num_blocks, 0, 0.0),
-      _block_cache(&_slab),
+      _block_cache(&_slab, cachesize),
       _random(),
       _block_range(_slab.base(), blocksize, num_blocks),
       _model(num_blocks, _slab.base()) {
@@ -419,7 +419,7 @@ namespace {
       set_all_allocated();
       // Test bulk deallocate without overflow
       constexpr int N = test_overflow ?
-                          CacheType::max_blocks_for_bulk_add : cachesize;
+                          ArenaBlockCache::max_blocks_for_bulk_add : cachesize;
       STATIC_ASSERT(!test_overflow || N > cachesize);
       const_blockptr_t arr[N];
       switch(mode) {
@@ -498,10 +498,10 @@ namespace {
         } else if (op_select < 14 && _model.num_owned_by_caller() > 0) {
           deallocate_to_cache_and_test();
         } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks / 2) {
-          constexpr int max = CacheType::max_blocks_for_bulk_add;
+          constexpr int max = ArenaBlockCache::max_blocks_for_bulk_add;
           const_blockptr_t arr[max];
           const int limit = _random.tosscoin() ? MIN2(max, 3) : max;
-          const int num = MAX2(1, (int)_random.next(limit));
+          const int num = 1 + (int)_random.next(limit);
           const int n = _model.get_random_caller_owned_blocks(_random, arr, num);
           assert(n > 0, "Sanity");
           bulk_deallocate_to_cache_and_test(arr, n);
@@ -539,8 +539,7 @@ TEST_VM(Arena2_BlockCache, test_ ## testname ## _ ## cachesize) { \
   DEFINE_TESTS(cachesize, tick_nonbusy ) \
   DEFINE_TESTS(cachesize, random )
 
-DEFINE_ALL_TESTS(15)
 DEFINE_ALL_TESTS(7)
-DEFINE_ALL_TESTS(4)
+DEFINE_ALL_TESTS(5)
 DEFINE_ALL_TESTS(2)
-//DEFINE_ALL_TESTS(1)
+DEFINE_ALL_TESTS(1)

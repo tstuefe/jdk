@@ -256,6 +256,11 @@ void ArenaSlab::decrease_block_counter(unsigned num) {
 }
 
 #ifdef ASSERT
+void ArenaSlab::verify_block(const_blockptr_t block) const {
+  assert(contains(block), "Sanity");
+  assert(is_aligned(block, block_size()), "Sanity");
+}
+
 void ArenaSlab::verify() const {
   assert(count_dirty_blocks() >= count_in_use_blocks(), "Sanity");
   assert(is_aligned(count_dirty_blocks(), blocks_per_granule()), "Sanity");
