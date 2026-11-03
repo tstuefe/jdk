@@ -84,11 +84,11 @@ namespace {
       const unsigned num_allocated = _slab.allocate_blocks(arr, num);
       EXPECT_EQ(num_allocated, num_fake_allocated);
       EXPECT_EQ(num_allocated, MIN2(num_free_before_allocation, num));
+      EXPECT_EQ(num_allocated, prediction.count_one_bits());
 
       const_blockptr_t last = nullptr;
       for (unsigned i = 0; i < num_allocated; ++i) {
         EXPECT_TRUE(_block_range.is_valid_block(arr[i]));
-        EXPECT_EQ(num_allocated, prediction.count_one_bits());
         EXPECT_TRUE(prediction.at(_block_range.block_to_index(arr[i])));
         EXPECT_FALSE(_control.at(_block_range.block_to_index(arr[i])));
         if (last != nullptr) {
@@ -224,7 +224,7 @@ namespace {
       _arena_heap(), _metadata_heap(),
       _slab(&_arena_heap, &_metadata_heap,
             block_size, granule_size, num_blocks, release_boundary, decay_factor),
-      _block_range(_arena_heap.base(), block_size, num_blocks),
+      _block_range(_slab.base(), block_size, num_blocks),
       _control(num_blocks, mtTest, true) {
     }
 
@@ -275,7 +275,7 @@ namespace {
 
     void test_huge_block_allocation_deallocation() {
       if (_block_size != ArenaBlockHelpers::huge_block_granularity) {
-        return;
+        GTEST_SKIP() << "only for huge blocks";
       }
       assert(_num_blocks >= 64, "need at least this many blocks");
 
@@ -338,7 +338,6 @@ namespace {
         }
       }
     }
-
   };
 }
 
