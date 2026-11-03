@@ -66,15 +66,15 @@ namespace {
     unsigned allocate_blocks_and_verify(unsigned num) {
 
       // fake-allocate in control bitmap
-      CHeapBitMap tmp(_num_blocks, mtTest, false);
-      tmp.set_from(_control);
+      CHeapBitMap prediction(_num_blocks, mtTest, true);
       BitMap::idx_t idx = 0;
       unsigned num_fake_allocated = 0;
       while (idx < _num_blocks && num_fake_allocated < num) {
-        idx = tmp.find_first_clear_bit(idx, _num_blocks);
+        idx = _control.find_first_clear_bit(idx, _num_blocks);
         if (idx < _num_blocks) {
           num_fake_allocated ++;
-          tmp.set_bit(idx);
+          prediction.set_bit(idx);
+          idx ++;
         }
       }
 
@@ -85,13 +85,19 @@ namespace {
       EXPECT_EQ(num_allocated, num_fake_allocated);
       EXPECT_EQ(num_allocated, MIN2(num_free_before_allocation, num));
 
+      const_blockptr_t last = nullptr;
       for (unsigned i = 0; i < num_allocated; ++i) {
         EXPECT_TRUE(_block_range.is_valid_block(arr[i]));
-        EXPECT_TRUE(tmp.at(_block_range.block_to_index(arr[i])));
+        EXPECT_EQ(num_allocated, prediction.count_one_bits());
+        EXPECT_TRUE(prediction.at(_block_range.block_to_index(arr[i])));
         EXPECT_FALSE(_control.at(_block_range.block_to_index(arr[i])));
+        if (last != nullptr) {
+          EXPECT_GT(arr[i], last);
+        }
+        last = arr[i];
       }
 
-      _control.set_union(tmp);
+      _control.set_union(prediction);
 
       // write into all the blocks to check they are writable
       for (unsigned i = 0; i < num_allocated; ++i) {
@@ -147,8 +153,8 @@ namespace {
       // allocate in real bitmap
       const const_blockptr_t p = _slab.allocate_huge_block(size);
 
-      if (idx == _num_blocks) {
-        EXPECT_EQ(p, nullptr);
+      if (p == nullptr) {
+        EXPECT_EQ(idx, _num_blocks);
       } else {
         EXPECT_EQ(_block_range.index_to_block(idx), p);
         _control.set_range(idx, idx + num);
