@@ -58,6 +58,8 @@ namespace {
       EXPECT_LE(_control.count_one_bits(), _slab.count_dirty_blocks());
     }
 
+    // Allocates num blocks, with verification; returns number of allocated
+    // blocks
     unsigned allocate_blocks_and_verify(unsigned num) {
 
       // fake-allocate in control bitmap
@@ -75,10 +77,12 @@ namespace {
 
       // now the real thing
       const_blockptr_t* const arr = NEW_C_HEAP_ARRAY(const_blockptr_t, num, mtTest);
-      const unsigned n = _slab.allocate_blocks(arr, num);
-      EXPECT_EQ(n, num_fake_allocated);
+      const unsigned num_free_before_allocation = _num_blocks - _slab.count_in_use_blocks();
+      const unsigned num_allocated = _slab.allocate_blocks(arr, num);
+      EXPECT_EQ(num_allocated, num_fake_allocated);
+      EXPECT_EQ(num_allocated, MIN2(num_free_before_allocation, num));
 
-      for (unsigned i = 0; i < n; ++i) {
+      for (unsigned i = 0; i < num_allocated; ++i) {
         EXPECT_TRUE(_block_range.is_valid_block(arr[i]));
         EXPECT_TRUE(tmp.at(_block_range.block_to_index(arr[i])));
       }
@@ -86,7 +90,7 @@ namespace {
       _control.set_union(tmp);
 
       // write into all the blocks to check they are writable
-      for (unsigned i = 0; i < n; ++i) {
+      for (unsigned i = 0; i < num_allocated; ++i) {
         const blockptr_t b = const_cast<blockptr_t>(arr[i]);
         os::pretouch_memory(b, b + _block_size, os::vm_page_size());
         b[0] = 17;
@@ -96,7 +100,7 @@ namespace {
 
       check_equality();
       DEBUG_ONLY(_slab.verify();)
-      return n;
+      return num_allocated;
     }
 
     void deallocate_and_verify(BitMap::idx_t block_indexes[], unsigned num) {
@@ -121,6 +125,21 @@ namespace {
       check_equality();
       DEBUG_ONLY(_slab.verify();)
     }
+
+    void deallocate_and_verify(BitMap::idx_t block_index) {
+      BitMap::idx_t idx = block_index;
+      deallocate_and_verify(&idx, 1);
+    }
+
+    // void deallocate_block_range_and_verify(BitMap::idx_t from, BitMap::idx_t to) {
+    //   const unsigned num = to - from;
+    //   assert(num > 0, "Sanity");
+    //   BitMap::idx_t* const arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, num, mtTest);
+    //   for (BitMap::idx_t idx = from; idx < to; idx ++) {
+    //     arr[idx - from] = idx;
+    //   }
+    //   deallocate_and_verify(arr, num);
+    // }
 
     void allocate_fully() {
       // allocate to the brim and a bit beyond
@@ -166,20 +185,44 @@ namespace {
       }
     }
 
+    void test_allocate_first_fit_order_0(bool exhaust_slab) {
+      allocate_fully();
+
+      // Punch holes
+      constexpr unsigned max_num_holes = 119u;
+      const unsigned num_holes = MIN2(_num_blocks / 4, max_num_holes);
+      BitMap::idx_t holes [max_num_holes];
+      ArenaTestHelpers::get_random_set_bits(_random, _control, holes, num_holes);
+      deallocate_and_verify(holes, num_holes);
+      assert(_slab.count_in_use_blocks() == _num_blocks - num_holes, "Sanity");
+
+      const unsigned to_fetch = exhaust_slab ? num_holes * 2 : num_holes / 2;
+      const unsigned got = allocate_blocks_and_verify(to_fetch);
+      if (exhaust_slab) {
+        EXPECT_EQ(got, num_holes);
+      } else {
+        EXPECT_EQ(got, to_fetch);
+      }
+    }
+
+    void test_allocate_first_fit_order_no_exhaustion() { test_allocate_first_fit_order_0(false); }
+    void test_allocate_first_fit_order_with_exhaustion() { test_allocate_first_fit_order_0(true); }
+
   };
 }
 
 
-#define CALL_TEST(XXX) test_##XXX()
-
 #define DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, testname) \
 TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size ## _ ## num_blocks ## _ ## release_boundary ## _ ## decay_factor) { \
   Tester tester(block_size, granule_size, num_blocks, release_boundary, decay_factor); \
-  tester.CALL_TEST(testname); \
+  tester.testname (); \
 }
 
 #define DEFINE_ALL_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor) \
-  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, allocate_and_deallocate )
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_and_deallocate ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_no_exhaustion ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_with_exhaustion ) \
+
 
 //               block_size
 //                        granule_size
