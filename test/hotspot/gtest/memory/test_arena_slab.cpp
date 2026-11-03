@@ -103,7 +103,7 @@ namespace {
       return num_allocated;
     }
 
-    void deallocate_and_verify(BitMap::idx_t block_indexes[], unsigned num) {
+    void deallocate_blocks_and_verify(BitMap::idx_t block_indexes[], unsigned num) {
       // check that the released blocks are in use
       CHeapBitMap tmp(_num_blocks, mtTest, true);
       for (unsigned i = 0; i < num; ++i) {
@@ -126,9 +126,9 @@ namespace {
       DEBUG_ONLY(_slab.verify();)
     }
 
-    // void deallocate_and_verify(BitMap::idx_t block_index) {
+    // void deallocate_blocks_and_verify(BitMap::idx_t block_index) {
     //   BitMap::idx_t idx = block_index;
-    //   deallocate_and_verify(&idx, 1);
+    //   deallocate_blocks_and_verify(&idx, 1);
     // }
 
     // Allocates a huge block, with verification. Returns block index.
@@ -190,7 +190,7 @@ namespace {
     //   for (BitMap::idx_t idx = from; idx < to; idx ++) {
     //     arr[idx - from] = idx;
     //   }
-    //   deallocate_and_verify(arr, num);
+    //   deallocate_blocks_and_verify(arr, num);
     // }
 
     void allocate_fully() {
@@ -232,7 +232,7 @@ namespace {
       while (num_allocated > 0) {
         int num_to_deallocate = MIN2(num_allocated, 1 + (int)_random.next(15));
         num_to_deallocate = ArenaTestHelpers::get_random_set_bits(_random, _control, arr, num_to_deallocate);
-        deallocate_and_verify(arr, num_to_deallocate);
+        deallocate_blocks_and_verify(arr, num_to_deallocate);
         num_allocated -= num_to_deallocate;
         if (::testing::Test::HasFailure()) {
           return;
@@ -248,7 +248,7 @@ namespace {
       const unsigned num_holes = MIN2(_num_blocks / 4, max_num_holes);
       BitMap::idx_t holes [max_num_holes];
       ArenaTestHelpers::get_random_set_bits(_random, _control, holes, num_holes);
-      deallocate_and_verify(holes, num_holes);
+      deallocate_blocks_and_verify(holes, num_holes);
       assert(_slab.count_in_use_blocks() == _num_blocks - num_holes, "Sanity");
 
       const unsigned to_fetch = exhaust_slab ? num_holes * 2 : num_holes / 2;
@@ -297,6 +297,27 @@ namespace {
       EXPECT_NE(_slab.allocate_huge_block(2 * M), nullptr);
     }
 
+    void test_random() {
+      for (int cycle = 0; cycle < 10000; cycle++) {
+        const int op_select = _random.next(16);
+        if (op_select < 8) {
+          allocate_blocks_and_verify(1 + _random.next(8));
+        } else if (op_select < 15) {
+          BitMap::idx_t blocks[8];
+          unsigned num = 1 + _random.next(8);
+          num = ArenaTestHelpers::get_random_set_bits(_random, _control, blocks, num);
+          deallocate_blocks_and_verify(blocks, num);
+        } else {
+          // Todo
+          // tick_and_test();
+        }
+        if (::testing::Test::HasFailure()) {
+          tty->print_cr("cycle %d op %d", cycle, op_select);
+          return;
+        }
+      }
+    }
+
   };
 }
 
@@ -312,24 +333,29 @@ TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size #
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_no_exhaustion ) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_with_exhaustion ) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_huge_block_allocation_deallocation ) \
-
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_random ) \
 
 
 //               block_size
 //                        granule_size
 //                                  num_blocks
-//                                            release_boundary, decay_factor
+//                                            release_boundary (in number of granules)
+//                                                     decay_factor
 // Note: Granules >= 2MB use large pages (todo)
 
-DEFINE_ALL_TESTS(256,     16384,    16384,    0, 0)   // 4MB
-DEFINE_ALL_TESTS(256,     65536,    8192,     0, 0)   // 2MB
-DEFINE_ALL_TESTS(256,     2097152,  16384,    0, 0)
+DEFINE_ALL_TESTS(256,     16384,    16384,    0,       0)   // 4MB
+DEFINE_ALL_TESTS(256,     16384,    16384,    4,       0)   // 4MB, 64K resident
+DEFINE_ALL_TESTS(256,     65536,    8192,     0,       0)   // 2MB
+DEFINE_ALL_TESTS(256,     65536,    8192,     32,      0)   // 2MB, all resident
+DEFINE_ALL_TESTS(256,     2097152,  16384,    0,       0)
 
-DEFINE_ALL_TESTS(32768,   32768,    2048,     0, 0)   // 64MB
-DEFINE_ALL_TESTS(32768,   65536,    2048,     0, 0)
-DEFINE_ALL_TESTS(32768,   2097152,  2048,     0, 0)
+DEFINE_ALL_TESTS(32768,   32768,    2048,     0,       0)   // 64MB
+DEFINE_ALL_TESTS(32768,   65536,    2048,     0,       0)
+DEFINE_ALL_TESTS(32768,   2097152,  2048,     0,       0)
 
-DEFINE_ALL_TESTS(1048576, 1048576,  32,       0, 0)   // 32MB
-DEFINE_ALL_TESTS(1048576, 2097152,  32,       0, 0)   // 32MB
+DEFINE_ALL_TESTS(1048576, 1048576,  32,       0,       0)   // 32MB
+DEFINE_ALL_TESTS(1048576, 2097152,  32,       0,       0)   // 32MB
 
-DEFINE_ALL_TESTS(2097152, 2097152,  64,       0, 0)   // 128MB
+DEFINE_ALL_TESTS(2097152, 2097152,  64,       0,       0)   // 128MB
+DEFINE_ALL_TESTS(2097152, 2097152,  64,       4,       0)   // 128MB, 8 MB resident
+
