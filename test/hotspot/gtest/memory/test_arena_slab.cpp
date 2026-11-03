@@ -54,6 +54,9 @@ namespace {
     PredictableRandom _random;
 
     void check_equality() const {
+      CHeapBitMap tmp(_num_blocks, mtTest, false);
+      _slab.get_in_use_map(tmp);
+      EXPECT_TRUE(_control.is_same(tmp));
       EXPECT_EQ(_control.count_one_bits(), _slab.count_in_use_blocks());
       EXPECT_LE(_control.count_one_bits(), _slab.count_dirty_blocks());
     }
@@ -85,6 +88,7 @@ namespace {
       for (unsigned i = 0; i < num_allocated; ++i) {
         EXPECT_TRUE(_block_range.is_valid_block(arr[i]));
         EXPECT_TRUE(tmp.at(_block_range.block_to_index(arr[i])));
+        EXPECT_FALSE(_control.at(_block_range.block_to_index(arr[i])));
       }
 
       _control.set_union(tmp);
