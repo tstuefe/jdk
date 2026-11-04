@@ -40,11 +40,7 @@
 namespace {
   class Tester {
 
-    const size_t _block_size;
-    const size_t _granule_size;
-    const unsigned _num_blocks;
-    const unsigned _release_boundary;
-    const double _decay_factor;
+    const ArenaSlab::Parameters* const _params;
 
     ArenaHeap _arena_heap;
     ArenaMetadataHeap _metadata_heap;
@@ -53,8 +49,14 @@ namespace {
     CHeapBitMap _control;
     PredictableRandom _random;
 
+    size_t block_size() const { return _params->block_size; }
+    size_t granule_size() const { return _params->granule_size; }
+    unsigned num_blocks() const { return _params->num_blocks; }
+    unsigned release_boundary() const { return _params->release_boundary; }
+    double decay_factor() const { return _params->decay_factor; }
+
     void check_equality() const {
-      CHeapBitMap tmp(_num_blocks, mtTest, false);
+      CHeapBitMap tmp(num_blocks(), mtTest, false);
       _slab.get_in_use_map(tmp);
       EXPECT_TRUE(_control.is_same(tmp));
       EXPECT_EQ(_control.count_one_bits(), _slab.count_in_use_blocks());
@@ -66,12 +68,12 @@ namespace {
     unsigned allocate_blocks_and_verify(unsigned num) {
 
       // fake-allocate in control bitmap
-      CHeapBitMap prediction(_num_blocks, mtTest, true);
+      CHeapBitMap prediction(num_blocks(), mtTest, true);
       BitMap::idx_t idx = 0;
       unsigned num_fake_allocated = 0;
-      while (idx < _num_blocks && num_fake_allocated < num) {
-        idx = _control.find_first_clear_bit(idx, _num_blocks);
-        if (idx < _num_blocks) {
+      while (idx < num_blocks() && num_fake_allocated < num) {
+        idx = _control.find_first_clear_bit(idx, num_blocks());
+        if (idx < num_blocks()) {
           num_fake_allocated ++;
           prediction.set_bit(idx);
           idx ++;
@@ -80,7 +82,7 @@ namespace {
 
       // now the real thing
       const_blockptr_t* const arr = NEW_C_HEAP_ARRAY(const_blockptr_t, num, mtTest);
-      const unsigned num_free_before_allocation = _num_blocks - _slab.count_in_use_blocks();
+      const unsigned num_free_before_allocation = num_blocks() - _slab.count_in_use_blocks();
       const unsigned num_allocated = _slab.allocate_blocks(arr, num);
       EXPECT_EQ(num_allocated, num_fake_allocated);
       EXPECT_EQ(num_allocated, MIN2(num_free_before_allocation, num));
@@ -102,9 +104,9 @@ namespace {
       // write into all the blocks to check they are writable
       for (unsigned i = 0; i < num_allocated; ++i) {
         const blockptr_t b = const_cast<blockptr_t>(arr[i]);
-        os::pretouch_memory(b, b + _block_size, os::vm_page_size());
+        os::pretouch_memory(b, b + block_size(), os::vm_page_size());
         b[0] = 17;
-        b[_block_size - 1] = 18;
+        b[block_size() - 1] = 18;
       }
       FREE_C_HEAP_ARRAY(arr);
 
@@ -115,7 +117,7 @@ namespace {
 
     void deallocate_blocks_and_verify(BitMap::idx_t block_indexes[], unsigned num) {
       // check that the released blocks are in use
-      CHeapBitMap tmp(_num_blocks, mtTest, true);
+      CHeapBitMap tmp(num_blocks(), mtTest, true);
       for (unsigned i = 0; i < num; ++i) {
         tmp.set_bit(block_indexes[i]);
       }
@@ -154,7 +156,7 @@ namespace {
       const const_blockptr_t p = _slab.allocate_huge_block(size);
 
       if (p == nullptr) {
-        EXPECT_EQ(idx, _num_blocks);
+        EXPECT_EQ(idx, num_blocks());
       } else {
         EXPECT_EQ(_block_range.index_to_block(idx), p);
         _control.set_range(idx, idx + num);
@@ -206,26 +208,24 @@ namespace {
     void allocate_fully() {
       // allocate to the brim and a bit beyond
       unsigned num_allocated = 0;
-      while (num_allocated < _num_blocks) {
+      while (num_allocated < num_blocks()) {
         const unsigned num_to_allocate = MAX2(_random.next(16), 1u);
         const unsigned n = allocate_blocks_and_verify(num_to_allocate);
         ASSERT_LE(n, num_to_allocate);
         ASSERT_GE(n, 1u);
         num_allocated += n;
       }
-      ASSERT_EQ(_slab.count_in_use_blocks(), _num_blocks);
+      ASSERT_EQ(_slab.count_in_use_blocks(), num_blocks());
     }
 
   public:
-
-    Tester(size_t block_size, size_t granule_size, unsigned num_blocks, unsigned release_boundary, double decay_factor) :
-      _block_size(block_size), _granule_size(granule_size), _num_blocks(num_blocks),
-      _release_boundary(release_boundary), _decay_factor(decay_factor),
+    
+    explicit Tester(const ArenaSlab::Parameters* params) :
+      _params(params),
       _arena_heap(), _metadata_heap(),
-      _slab(&_arena_heap, &_metadata_heap,
-            block_size, granule_size, num_blocks, release_boundary, decay_factor),
-      _block_range(_slab.base(), block_size, num_blocks),
-      _control(num_blocks, mtTest, true) {
+      _slab(&_arena_heap, &_metadata_heap, _params),
+      _block_range(_slab.base(), params->block_size, params->num_blocks),
+      _control(params->num_blocks, mtTest, true) {
     }
 
     ~Tester() {
@@ -237,7 +237,7 @@ namespace {
       ASSERT_EQ(allocate_blocks_and_verify(2), 0u);
       // Now deallocate.
       // Mode=0: forward, Mode=1 reverse, Mode=2 random
-      int num_allocated = _num_blocks;
+      int num_allocated = num_blocks();
       BitMap::idx_t arr[16];
       while (num_allocated > 0) {
         int num_to_deallocate = MIN2(num_allocated, 1 + (int)_random.next(15));
@@ -255,11 +255,11 @@ namespace {
 
       // Punch holes
       constexpr unsigned max_num_holes = 119u;
-      const unsigned num_holes = MIN2(_num_blocks / 4, max_num_holes);
+      const unsigned num_holes = MIN2(num_blocks() / 4, max_num_holes);
       BitMap::idx_t holes [max_num_holes];
       ArenaTestHelpers::get_random_set_bits(_random, _control, holes, num_holes);
       deallocate_blocks_and_verify(holes, num_holes);
-      assert(_slab.count_in_use_blocks() == _num_blocks - num_holes, "Sanity");
+      assert(_slab.count_in_use_blocks() == num_blocks() - num_holes, "Sanity");
 
       const unsigned to_fetch = exhaust_slab ? num_holes * 2 : num_holes / 2;
       const unsigned got = allocate_blocks_and_verify(to_fetch);
@@ -274,10 +274,10 @@ namespace {
     void test_allocate_first_fit_order_with_exhaustion() { test_allocate_first_fit_order_0(true); }
 
     void test_huge_block_allocation_deallocation() {
-      if (_block_size != ArenaBlockHelpers::huge_block_granularity) {
+      if (block_size() != ArenaBlockHelpers::huge_block_granularity) {
         GTEST_SKIP() << "only for huge blocks";
       }
-      assert(_num_blocks >= 64, "need at least this many blocks");
+      assert(num_blocks() >= 64, "need at least this many blocks");
 
       const const_blockptr_t p1 = allocate_huge_block_and_verify(4 * M); // blocks 0-1
       EXPECT_EQ(p1, _slab.base());
@@ -295,24 +295,24 @@ namespace {
       EXPECT_EQ(p5, _slab.base());
 
       // Exhaust the slab
-      const const_blockptr_t p6 = allocate_huge_block_and_verify((_num_blocks * _block_size) - 20 * M);
+      const const_blockptr_t p6 = allocate_huge_block_and_verify((num_blocks() * block_size()) - 20 * M);
       EXPECT_EQ(p6, _slab.base() + 20 * M);
-      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks);
+      EXPECT_EQ(_slab.count_in_use_blocks(), num_blocks());
 
       // A hole near the end of the slab, nothing else free
-      const const_blockptr_t hole = align_down(_slab.end() - (9 * M), _block_size);
+      const const_blockptr_t hole = align_down(_slab.end() - (9 * M), block_size());
       deallocate_huge_block_and_verify(hole, 2 * M);
 
       EXPECT_EQ(allocate_huge_block_and_verify(6 * M), nullptr); // Should fail
       EXPECT_EQ(allocate_huge_block_and_verify(2 * M), hole); // Should succeed
-      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks); // Full again
+      EXPECT_EQ(_slab.count_in_use_blocks(), num_blocks()); // Full again
 
       // Fragmentation: enough free total, no contiguous run
-      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks);
+      EXPECT_EQ(_slab.count_in_use_blocks(), num_blocks());
       for (const_blockptr_t p7 = _slab.base(); p7 < _slab.end(); p7 += 4 * M) {
         deallocate_huge_block_and_verify(p7, 2 * M);
       }
-      EXPECT_EQ(_slab.count_in_use_blocks(), _num_blocks / 2);
+      EXPECT_EQ(_slab.count_in_use_blocks(), num_blocks() / 2);
 
       EXPECT_EQ(_slab.allocate_huge_block(4 * M), nullptr);
       EXPECT_NE(_slab.allocate_huge_block(2 * M), nullptr);
@@ -344,7 +344,8 @@ namespace {
 
 #define DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, testname) \
 TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size ## _ ## num_blocks ## _ ## release_boundary ## _ ## decay_factor) { \
-  Tester tester(block_size, granule_size, num_blocks, release_boundary, decay_factor); \
+  const ArenaSlab::Parameters params = { block_size, granule_size, num_blocks, release_boundary, decay_factor }; \
+  Tester tester(&params); \
   tester.testname (); \
 }
 

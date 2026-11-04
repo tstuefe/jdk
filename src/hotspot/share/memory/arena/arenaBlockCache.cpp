@@ -124,7 +124,7 @@ static ArenaBlockCache* allocate_cache(ArenaMetadataHeap* metadata_heap,
 
   // caches are cache-line-aligned
   metadata_heap->align_hwm_to_padded_size();
-  ArenaBlockCache* const storage = metadata_heap->allocate(sizeof(ArenaBlockCache));
+  ArenaBlockCache* const storage = (ArenaBlockCache*) metadata_heap->allocate(sizeof(ArenaBlockCache));
   metadata_heap->align_hwm_to_padded_size();
 
   ArenaSlab* const slab = slab_group->slab_for_size_class(szclass);
@@ -147,7 +147,7 @@ ArenaCacheGroup::ArenaCacheGroup(ArenaMetadataHeap* metadataHeap, ArenaSlabGroup
       // we automatically use the 32K cache and return a 32K chunks. This avoids having to do range checks on every
       // allocation.
       metadataHeap->align_hwm_to_padded_size();
-      ArenaBlockCache** const lookup_table = (ArenaBlockCache**)metadataHeap->allocate(sizeof(_cache_lut));
+      ArenaBlockCache** const lookup_table = (ArenaBlockCache**)metadataHeap->allocate(sizeof(ArenaBlockCache*) * num_slots);
 
       // cache sizes: [256, 64K) = 7, [64K-256K) = 3, [256K - 1M) = 1
 
@@ -163,7 +163,7 @@ ArenaCacheGroup::ArenaCacheGroup(ArenaMetadataHeap* metadataHeap, ArenaSlabGroup
       // We route allocation requests < 256 to the 256 cache, < 1K to the 1K, < 32K to the 32K
       int slot = 0;
       while (slot <= ArenaBlockHelpers::szclass_256) {
-        lookup_table[slot++] = cache_256K;
+        lookup_table[slot++] = cache_256;
       }
       while (slot <= ArenaBlockHelpers::szclass_1K) {
         lookup_table[slot++] = cache_1K;

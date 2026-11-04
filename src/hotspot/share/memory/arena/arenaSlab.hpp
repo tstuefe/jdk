@@ -177,7 +177,7 @@ public:
 
   ArenaSlab(ArenaHeap* arena_heap,
             ArenaMetadataHeap* metadata_heap,
-            Parameters params);
+            const Parameters* params);
 
   // This constructor creates an inactive slab that cannot be used for anything.
   // We use it to fill in slots in the slab group for block sizes that are unused
@@ -225,8 +225,6 @@ public:
   unsigned count_in_use_blocks() const  { return checked_cast<unsigned>(_in_use_bitmap.count_one_bits()); }
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
   unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
-
-  PlatformMutex& lock() const { return _hot->_lock; }
 
 };
 

@@ -25,6 +25,8 @@
 
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaSlab.hpp"
+
+#include "arenaMutex.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -49,16 +51,16 @@ static T* allocate_padded_from_metadata_heap(ArenaMetadataHeap* metadata_heap) {
 
 ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
                      ArenaMetadataHeap* metadata_heap,
-                     Parameters params) :
+                     const Parameters* params) :
   _arena_heap(arena_heap),
   _metadata_heap(metadata_heap),
-  _block_size(params.block_size),
-  _granule_size(params.granule_size),
-  _num_blocks(params.num_blocks),
+  _block_size(params->block_size),
+  _granule_size(params->granule_size),
+  _num_blocks(params->num_blocks),
   _blocks_to_granule_shift(
     [params]() {
-      const unsigned log2_block_size = exact_log2(params.block_size);
-      const unsigned log2_granule_size = exact_log2(params.granule_size);
+      const unsigned log2_block_size = exact_log2(params->block_size);
+      const unsigned log2_granule_size = exact_log2(params->granule_size);
       assert(log2_block_size <= log2_granule_size, "Sanity");
       return log2_granule_size - log2_block_size;
     } ()),
@@ -68,11 +70,11 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
     } ()),
   _decay_factor(
     [params]() -> uint8_t {
-      assert(params.decay_factor >= 0.0 && params.decay_factor <= 1.0, "factor must be between 0.0 and 1.0");
-      const unsigned i = (unsigned)((params.decay_factor * 100.0) + 0.5);
+      assert(params->decay_factor >= 0.0 && params->decay_factor <= 1.0, "factor must be between 0.0 and 1.0");
+      const unsigned i = (unsigned)((params->decay_factor * 100.0) + 0.5);
       return checked_cast<uint8_t>(i);
     } () ),
-  _release_boundary(params.release_boundary >> _blocks_to_granule_shift), // parameter is in num blocks, we hold num granules
+  _release_boundary(params->release_boundary >> _blocks_to_granule_shift), // parameter is in num blocks, we hold num granules
   _base(arena_heap->reserve_slab_memory(_block_size, _granule_size, _num_blocks)),
   _block_range(_base, _block_size, _num_blocks),
   _granule_range(_base, _granule_size, _num_granules),
@@ -95,7 +97,7 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
   // this portion will never be released and will be, if possible, backed by
   // large pages (even if we don't use them for the burst portion of the slab).
   if (_release_boundary > 0) {
-    assert(_release_boundary << _blocks_to_granule_shift == params.release_boundary,
+    assert(_release_boundary << _blocks_to_granule_shift == params->release_boundary,
            "Release Boundary not a common multiple of granule size");
     const const_blockptr_t release_boundary_pointer =
       _granule_range.index_to_block_incl(_release_boundary);
@@ -151,6 +153,9 @@ void ArenaSlab::ensure_committed(IndexType block_index) {
 // returns the number of blocks actually allocated (which may be smaller if we cannot allocate)
 // The returned blocks are guaranteed to be ordered by address, low to high.
 unsigned ArenaSlab::allocate_blocks(const_blockptr_t out[], unsigned outlen) {
+
+  ArenaMutexLocker locker(_hot->_lock);
+
   IndexType idx = 0, highest_block_idx = 0;
   unsigned n = 0;
   while (n < outlen) {
@@ -185,6 +190,9 @@ unsigned ArenaSlab::allocate_blocks(const_blockptr_t out[], unsigned outlen) {
 // Allocate a contiguous range spanning multiple blocks. Only used for
 // huge blocks. Called rarely.
 const_blockptr_t ArenaSlab::allocate_huge_block(size_t size) {
+
+  ArenaMutexLocker locker(_hot->_lock);
+
   assert(size > 0, "num must be non-zero");
   assert(is_aligned(size, ArenaBlockHelpers::huge_block_granularity), "Size misaligned");
 
@@ -226,6 +234,9 @@ const_blockptr_t ArenaSlab::allocate_huge_block(size_t size) {
 
 // Given a list of blocks, return them to the associated slab
 void ArenaSlab::deallocate_blocks(const_blockptr_t blocks[], unsigned num) {
+
+  ArenaMutexLocker locker(_hot->_lock);
+
   for (unsigned i = 0; i < num; i++) {
     const IndexType block_index = _block_range.block_to_index(blocks[i]);
     assert(_in_use_bitmap.at(block_index), "double free?");
@@ -237,6 +248,9 @@ void ArenaSlab::deallocate_blocks(const_blockptr_t blocks[], unsigned num) {
 
 // huge blocks. Called rarely.
 void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
+
+  ArenaMutexLocker locker(_hot->_lock);
+
   // We only ever call this for huge blocks, not standard blocks - and there the granules
   // are exactly block sized. So we get away with treating granules as blocks and vice versa.
   assert(block_size() > ArenaBlockHelpers::max_standard_block_size, "only for huge blocks");
@@ -282,6 +296,9 @@ void ArenaSlab::verify_block(const_blockptr_t block) const {
 }
 
 void ArenaSlab::verify() const {
+
+  ArenaMutexLocker locker(_hot->_lock);
+
   assert(count_dirty_blocks() >= count_in_use_blocks(), "Sanity");
   assert(is_aligned(count_dirty_blocks(), blocks_per_granule()), "Sanity");
   _in_use_bitmap.verify();
@@ -398,24 +415,24 @@ ArenaSlabGroup::ArenaSlabGroup(ArenaHeap* arena_heap,
   {},
   {},
   // 256
-  { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_256] }, // 256
+  { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_256] }, // 256
   // 512 (unused)
   {},
   // 1024
-  { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_1K] }, // 1024
+  { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_1K] }, // 1024
   // [2K, 32K) unused
   {},
   {},
   {},
   {},
   // from 64K on we have slabs for every size
- { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_32K] }, // 32K
- { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_64K] }, // 64K
- { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_128K] }, // 128K
- { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_256K] }, // 256K
- { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_512K] }, // 512K
- { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_1M] }, // 1M
- { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_2M] }, // 2M
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_32K] }, // 32K
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_64K] }, // 64K
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_128K] }, // 128K
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_256K] }, // 256K
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_512K] }, // 512K
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_1M] }, // 1M
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_2M] }, // 2M
   }
 {
 }

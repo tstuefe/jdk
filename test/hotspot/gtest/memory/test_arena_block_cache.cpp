@@ -39,6 +39,7 @@
 
 //#define LOG_PLEASE
 #include "testutils.hpp"
+#include "memory/arena/arenaSlab.hpp"
 
 
 namespace {
@@ -267,11 +268,11 @@ namespace {
   class Tester {
     // For the slab. We don't test the slab in this test, so these values only matter
     // are a valid slab configuration
-    static constexpr size_t blocksize = 32 * K;
-    static constexpr unsigned num_blocks = 1024;
-    static constexpr size_t granule_size = ArenaHeapBase::large_page_size;
+    static constexpr ArenaSlab::Parameters _params = {
+      32 * K, ArenaHeapBase::large_page_size, 1024, 0, 0.0f
+    };
 
-    typedef AllocationPredictionModel<blocksize, cachesize> ModelType;
+    typedef AllocationPredictionModel<_params.block_size, cachesize> ModelType;
 
     ArenaHeap _arena_heap;
     ArenaMetadataHeap _metadata_heap;
@@ -281,14 +282,18 @@ namespace {
     BlockRange<unsigned> _block_range;
     ModelType _model;
 
+    size_t block_size() const { return _params.block_size; }
+    size_t granule_size() const { return _params.granule_size; }
+    unsigned num_blocks() const { return _params.num_blocks; }
+
     // Setup world as if cache were empty and all slabs were in-use by callers
     void set_all_allocated() {
       _block_cache.flush();
       _model.init_all_owned_by_caller();
-      const unsigned saturate = num_blocks + 1;
+      const unsigned saturate = num_blocks() + 1;
       const_blockptr_t* dontcare = NEW_C_HEAP_ARRAY(const_blockptr_t, saturate, mtTest);
       const unsigned fetched = _slab.allocate_blocks(dontcare, saturate);
-      ASSERT_EQ(fetched, num_blocks);
+      ASSERT_EQ(fetched, num_blocks());
       FREE_C_HEAP_ARRAY(dontcare);
     }
 
@@ -335,11 +340,11 @@ namespace {
 
     Tester() :
       _arena_heap(), _metadata_heap(),
-      _slab(&_arena_heap, &_metadata_heap, blocksize, granule_size, num_blocks, 0, 0.0),
+      _slab(&_arena_heap, &_metadata_heap, &_params),
       _block_cache(&_slab, cachesize),
       _random(),
-      _block_range(_slab.base(), blocksize, num_blocks),
-      _model(num_blocks, _slab.base()) {
+      _block_range(_slab.base(), _params.block_size, num_blocks()),
+      _model(num_blocks(), _slab.base()) {
     }
 
     const_blockptr_t allocate_from_cache_and_test_expect_success() {
@@ -392,7 +397,7 @@ namespace {
 
     void test_allocate() {
       // Allocate till we used up the slab
-      for (unsigned i = 0; i < num_blocks; i++) {
+      for (unsigned i = 0; i < num_blocks(); i++) {
         allocate_from_cache_and_test_expect_success();
         if (::testing::Test::HasFailure()) {
           return;
@@ -405,7 +410,7 @@ namespace {
     void test_deallocate() {
       set_all_allocated();
       // Deallocate till we returned all blocks to the cache, sequentially, low to high
-      for (unsigned i = 0; i < num_blocks; i++) {
+      for (unsigned i = 0; i < num_blocks(); i++) {
         deallocate_to_cache_and_test(_block_range.index_to_block(i));
         if (::testing::Test::HasFailure()) {
           return;
@@ -493,11 +498,11 @@ namespace {
     void test_random() {
       for (int cycle = 0; cycle < 10000; cycle++) {
         const int op_select = _random.next(16);
-        if (op_select < 12 && _model.num_owned_by_caller() < num_blocks) {
+        if (op_select < 12 && _model.num_owned_by_caller() < num_blocks()) {
           allocate_from_cache_and_test_expect_success();
         } else if (op_select < 14 && _model.num_owned_by_caller() > 0) {
           deallocate_to_cache_and_test();
-        } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks / 2) {
+        } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks() / 2) {
           constexpr int max = ArenaBlockCache::max_blocks_for_bulk_add;
           const_blockptr_t arr[max];
           const int limit = _random.tosscoin() ? MIN2(max, 3) : max;

@@ -291,7 +291,18 @@ class ArenaCacheGroup {
   // block sizes overrule others, eg for a request of size 2K we return 32K
   // blocks)
   ArenaBlockCache** const _cache_lut; // lookup table, one per size class
-  Mutex _lock;
+
+  // Todo, we also need a list of "significant" caches for cases where we
+  // loop over all caches (eg flush, tick)
+
+  // We need to use a platform mutex here since it is very difficult to find a
+  // mutex rank that is low enough for callers (arena chunk allocations can be
+  // triggered from anywhere, really, where resource areas are used) and still
+  // allows NMT to function properly (which we may end up calling when redirecting
+  // to the slab on overflow/underflow).
+  // There are several ways around this, but for now lets just use a PlatformMutex.
+  // All we call under us is
+  PlatformMutex _lock;
 
 public:
 
@@ -303,8 +314,9 @@ public:
     ArenaBlockCache* const cache = _cache_lut[szclass];
     return cache;
   }
+// Todo: mutex-less cache, but: Add statistics! (Make it first class citizen)
 
-  Mutex* lock() { return &_lock; }
+  PlatformMutex* lock() { return &_lock; }
 };
 /*
 // The ArenaCacheGroupTable exists only once. It contains a cache group

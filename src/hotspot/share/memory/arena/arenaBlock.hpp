@@ -94,7 +94,7 @@ struct ArenaBlockHelpers : public AllStatic {
 
   // block_size_class_t handling
 
-  static constexpr block_size_class_t szclass_256 = constexpr_exact_log2(256);
+  static constexpr block_size_class_t szclass_256 = constexpr_exact_log2(256u);
   static constexpr block_size_class_t szclass_1K  = constexpr_exact_log2(K);
   static constexpr block_size_class_t szclass_32K  = constexpr_exact_log2(32*K);
   static constexpr block_size_class_t szclass_64K  = constexpr_exact_log2(64*K);
@@ -112,12 +112,14 @@ struct ArenaBlockHelpers : public AllStatic {
   static constexpr unsigned num_standard_size_classes = szclass_1M + 1;
 
 
+  static constexpr bool is_valid_standard_size_class(block_size_class_t szclass) {
+    return szclass == szclass_256 || szclass == szclass_1K ||
+            szclass == szclass_32K || szclass == szclass_64K || szclass == szclass_128K || szclass == szclass_256K ||
+              szclass == szclass_512K || szclass == szclass_1M;
+  }
 
   static constexpr bool is_valid_size_class(block_size_class_t szclass) {
-    return szclass == szclass_256 || szclass == szclass_1K ||
-           szclass >= szclass_32K && szclass <= szclass_2M) {
-      return true;
-    }
+    return is_valid_standard_size_class(szclass) || szclass == szclass_2M;
   }
 
   static constexpr size_t size_class_to_block_size(block_size_class_t szclass) {
