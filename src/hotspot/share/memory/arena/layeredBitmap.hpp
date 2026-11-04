@@ -451,6 +451,9 @@ private:
 
 public:
 
+  // Creates an empty, unusuable bitmap.
+  LayeredBitmap();
+
   LayeredBitmap(ArenaMetadataHeap* heap, unsigned num_bits);
 
   IndexType size() const { return num_bits(); }

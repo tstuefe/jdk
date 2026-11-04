@@ -39,6 +39,21 @@ class ArenaSlab {
 public:
   typedef BitMap::idx_t IndexType;
 
+  // factor out construction parameters to make construction of the
+  // standard slab group more palatable.
+  struct Parameters {
+    // all sizes in bytes
+    size_t block_size;
+    size_t granule_size;
+    // total number of blocks
+    unsigned num_blocks;
+    // Release boundary, in number of blocks
+    // (must be a multiple of granule size)
+    unsigned release_boundary;
+    // Between 0.0 and 1.0
+    double decay_factor;
+  };
+
 private:
 
   // How much we overcommit when moving the commit boundary
@@ -162,9 +177,12 @@ public:
 
   ArenaSlab(ArenaHeap* arena_heap,
             ArenaMetadataHeap* metadata_heap,
-            size_t block_size, size_t granule_size,
-            unsigned num_blocks, unsigned release_boundary,
-            double decay_factor);
+            Parameters params);
+
+  // This constructor creates an inactive slab that cannot be used for anything.
+  // We use it to fill in slots in the slab group for block sizes that are unused
+  // in the current scheme.
+  ArenaSlab();
 
   const_blockptr_t base() const { return _block_range.base(); }
   size_t size_in_bytes() const { return _block_range.size_in_bytes(); }
@@ -193,6 +211,9 @@ public:
     return _block_range.contains(block);
   }
 
+  // Returns true if this is a valid slab
+  bool is_valid() const { return _base != nullptr; }
+
 #ifdef ASSERT
   void verify() const;
   void verify_block(const_blockptr_t block) const;
@@ -206,6 +227,35 @@ public:
   unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
 
   PlatformMutex& lock() const { return _hot->_lock; }
+
+};
+
+// The ArenaSlabGroup holds one slab per block size. This object exists as
+// singleton (outside of tests).
+class ArenaSlabGroup {
+
+  static constexpr unsigned num_slots = ArenaBlockHelpers::num_size_classes;
+
+  ArenaSlab _slabs[num_slots];
+
+public:
+
+  // Creates a slab group with the given slab geometries (see params)
+  ArenaSlabGroup(ArenaHeap* arena_heap,
+                 ArenaMetadataHeap* metadata_heap,
+                 const ArenaSlab::Parameters params[num_slots]);
+
+  // Creates a slab group with the default geometries for hotspot
+  ArenaSlabGroup(ArenaHeap* arena_heap,
+                 ArenaMetadataHeap* metadata_heap);
+
+  ArenaSlab* slab_for_size_class(block_size_class_t szclass) {
+    assert(ArenaBlockHelpers::is_valid_size_class(szclass), "sanity");
+    assert(szclass < num_slots, "sanity");
+    ArenaSlab* const slab = &(_slabs[szclass]);
+    assert(slab->is_valid(), "Slab for this size class not valid (%u)", szclass);
+    return slab;
+  }
 
 };
 

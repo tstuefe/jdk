@@ -39,34 +39,95 @@ typedef const uint8_t* const_blockptr_t;
 static_assert(std::is_pointer_v<blockptr_t>, "Type must be a pointer");
 static_assert(sizeof(std::remove_pointer_t<blockptr_t>) == 1, "Pointer arithmetic must be in byte-sized increments");
 
-// We have 8 standard size classes: 256, 1K, 32K, 64K, ... 1M
-// Anything beyond that is a huge block and var-sized.
+// (need a constexpr version of exact_log2)
+template <typename T>
+constexpr int constexpr_exact_log2(T n) {
+  static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
+                "exact_log2 requires an unsigned integer type.");
+  int result = 0;
+  while (n > 1) {
+    n >>= 1;
+    ++result;
+  }
+  return result;
+}
+static_assert(constexpr_exact_log2(16u) == 4, "Passed");
+
+// We have 8 standard size classes: 256, 1K, 32K, 64K, ... 1M and another huge size class 2M.
+// Block sizes > 1M are huge and var-sized and consist of several adjacent 2MB blocks.
+
+// A "block class" identifies a valid block size. In practice, its log2 of the block size, normalized to 0.
+typedef uint8_t block_size_class_t;
 
 struct ArenaBlockHelpers : public AllStatic {
 
-  static constexpr size_t min_block_size = 256;
-  static constexpr size_t max_standard_block_size = M;
-  static constexpr size_t max_huge_block_size = G;
-  static constexpr size_t huge_block_granularity = 2 * M;
+  static constexpr unsigned log2_min_block_size = 8; // 256
+  static constexpr size_t min_block_size = nth_bit(log2_min_block_size);
+  static constexpr unsigned log2_max_standard_block_size = 20;
+  static constexpr size_t max_standard_block_size = nth_bit(log2_min_block_size); // 1MB
+  static constexpr unsigned log2_huge_block_granularity = log2_max_standard_block_size + 1;
+  static constexpr size_t huge_block_granularity = nth_bit(log2_huge_block_granularity); // 2MB
+
   static constexpr size_t slab_alignment = huge_block_granularity; // To be able to back it with 2MB pages
 
-  static constexpr bool is_valid_standard_size_class(size_t szclass) {
-    return szclass == 256 || szclass == K || szclass == K * 32 || szclass == K * 64 ||
-           szclass == K * 128 || szclass == K * 256 || szclass == K * 512 || szclass == M;
+  static constexpr bool is_valid_standard_block_size(size_t blocksize) {
+    return blocksize == 256 || blocksize == K || blocksize == K * 32 || blocksize == K * 64 ||
+           blocksize == K * 128 || blocksize == K * 256 || blocksize == K * 512 || blocksize == M;
   }
 
-  static constexpr bool is_valid_huge_size(size_t szclass) {
-    return szclass > max_standard_block_size &&
-           szclass <= max_huge_block_size &&
-           is_aligned(szclass, huge_block_granularity);
+  static constexpr bool is_valid_huge_size(size_t blocksize) {
+    return blocksize > max_standard_block_size &&
+           is_aligned(blocksize, huge_block_granularity);
   }
 
-  static constexpr bool is_valid_standard_block(size_t szclass, const_blockptr_t b) {
-    return is_aligned(b, szclass);
+  static constexpr bool is_valid_block_size(size_t blocksize) {
+    return is_valid_standard_block_size(blocksize) || blocksize == huge_block_granularity;
+  }
+
+  static constexpr bool is_valid_standard_block(size_t blocksize, const_blockptr_t b) {
+    return is_aligned(b, blocksize);
   }
 
   static constexpr bool is_valid_huge_block(const_blockptr_t b) {
     return is_aligned(b, huge_block_granularity);
+  }
+
+  // block_size_class_t handling
+
+  static constexpr block_size_class_t szclass_256 = constexpr_exact_log2(256);
+  static constexpr block_size_class_t szclass_1K  = constexpr_exact_log2(K);
+  static constexpr block_size_class_t szclass_32K  = constexpr_exact_log2(32*K);
+  static constexpr block_size_class_t szclass_64K  = constexpr_exact_log2(64*K);
+  static constexpr block_size_class_t szclass_128K  = constexpr_exact_log2(128*K);
+  static constexpr block_size_class_t szclass_256K  = constexpr_exact_log2(256*K);
+  static constexpr block_size_class_t szclass_512K  = constexpr_exact_log2(512*K);
+  static constexpr block_size_class_t szclass_1M  = constexpr_exact_log2(M);
+  static constexpr block_size_class_t szclass_2M  = constexpr_exact_log2(2*M);
+
+  // We mostly use the size class for looking up slabs or caches for a given block size.
+  // These lookup tables contain slots for all size classes, including invalid ones (which
+  // makes lookup very easy).
+  static constexpr unsigned highest_size_class = szclass_2M;
+  static constexpr unsigned num_size_classes = szclass_2M + 1;
+  static constexpr unsigned num_standard_size_classes = szclass_1M + 1;
+
+
+
+  static constexpr bool is_valid_size_class(block_size_class_t szclass) {
+    return szclass == szclass_256 || szclass == szclass_1K ||
+           szclass >= szclass_32K && szclass <= szclass_2M) {
+      return true;
+    }
+  }
+
+  static constexpr size_t size_class_to_block_size(block_size_class_t szclass) {
+    assert(is_valid_size_class(szclass), "invalid block size");
+    return nth_bit(szclass);
+  }
+
+  static constexpr block_size_class_t block_size_to_size_class(size_t blocksize) {
+    assert(is_valid_block_size(blocksize), "invalid block size");
+    return constexpr_exact_log2(blocksize);
   }
 
 };
@@ -82,6 +143,13 @@ class BlockRange {
   static_assert(std::is_unsigned_v<IndexType>, "invalid block index type");
 
 public:
+
+  // Creates an empty, unusable object
+  BlockRange() :
+    _base(nullptr),
+    _block_size(0),
+    _num_blocks(0) {
+  }
 
   BlockRange(const_blockptr_t base, IndexType block_size, IndexType num_blocks)
     : _base(base), _block_size(block_size), _num_blocks(num_blocks) {

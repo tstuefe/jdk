@@ -46,7 +46,7 @@ TEST_VM(Arena2_Heap, arena_heap_basics) {
        blocksize <= ArenaBlockHelpers::huge_block_granularity;
        blocksize = blocksize * 2) {
 
-    if (!ArenaBlockHelpers::is_valid_standard_size_class(blocksize) &&
+    if (!ArenaBlockHelpers::is_valid_standard_block_size(blocksize) &&
         blocksize != ArenaBlockHelpers::huge_block_granularity) {
       // We have some "holes" in the list of valid block sizes. Skip those.
       continue;

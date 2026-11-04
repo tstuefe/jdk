@@ -30,6 +30,10 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+// Creates an empty, unusuable bitmap.
+LayeredBitmap::LayeredBitmap() :
+  _data() {
+}
 
 LayeredBitmap::LayeredBitmap(ArenaMetadataHeap* heap, unsigned num_bits) :
   _data([heap, num_bits]() {
@@ -50,6 +54,6 @@ LayeredBitmap::LayeredBitmap(ArenaMetadataHeap* heap, unsigned num_bits) :
   () )
 {
   assert(num_bits <= _max_num_bits, "Sanity");
-  assert(num_bits >= 1, "Sanity");
+  assert(num_bits > 0, "Sanity");
   STATIC_ASSERT(BitsPerWord == _num_bits_per_segment);
 }

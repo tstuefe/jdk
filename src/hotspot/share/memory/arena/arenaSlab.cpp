@@ -47,21 +47,18 @@ static T* allocate_padded_from_metadata_heap(ArenaMetadataHeap* metadata_heap) {
   return p2;
 }
 
-
 ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
                      ArenaMetadataHeap* metadata_heap,
-                     size_t block_size, size_t granule_size,
-                     unsigned num_blocks, unsigned release_boundary,
-                     double decay_factor) :
+                     Parameters params) :
   _arena_heap(arena_heap),
   _metadata_heap(metadata_heap),
-  _block_size(block_size),
-  _granule_size(granule_size),
-  _num_blocks(num_blocks),
+  _block_size(params.block_size),
+  _granule_size(params.granule_size),
+  _num_blocks(params.num_blocks),
   _blocks_to_granule_shift(
-    [block_size, granule_size]() {
-      const unsigned log2_block_size = exact_log2(block_size);
-      const unsigned log2_granule_size = exact_log2(granule_size);
+    [params]() {
+      const unsigned log2_block_size = exact_log2(params.block_size);
+      const unsigned log2_granule_size = exact_log2(params.granule_size);
       assert(log2_block_size <= log2_granule_size, "Sanity");
       return log2_granule_size - log2_block_size;
     } ()),
@@ -70,23 +67,23 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
       return _num_blocks >> _blocks_to_granule_shift;
     } ()),
   _decay_factor(
-    [decay_factor]() -> uint8_t {
-      assert(decay_factor >= 0.0 && decay_factor <= 1.0, "factor must be between 0.0 and 1.0");
-      const unsigned i = (unsigned)((decay_factor * 100.0) + 0.5);
+    [params]() -> uint8_t {
+      assert(params.decay_factor >= 0.0 && params.decay_factor <= 1.0, "factor must be between 0.0 and 1.0");
+      const unsigned i = (unsigned)((params.decay_factor * 100.0) + 0.5);
       return checked_cast<uint8_t>(i);
     } () ),
-  _release_boundary(release_boundary),
-  _base(arena_heap->reserve_slab_memory(block_size, granule_size, num_blocks)),
-  _block_range(_base, block_size, num_blocks),
-  _granule_range(_base, granule_size, _num_granules),
+  _release_boundary(params.release_boundary >> _blocks_to_granule_shift), // parameter is in num blocks, we hold num granules
+  _base(arena_heap->reserve_slab_memory(_block_size, _granule_size, _num_blocks)),
+  _block_range(_base, _block_size, _num_blocks),
+  _granule_range(_base, _granule_size, _num_granules),
   _dirty_bitmap(metadata_heap, _num_granules),
-  _in_use_bitmap(metadata_heap, num_blocks),
+  _in_use_bitmap(metadata_heap, _num_blocks),
   _commit_boundary(0),
   _hot(allocate_padded_from_metadata_heap<SlabHotData>(metadata_heap)),
   _per_tick(allocate_padded_from_metadata_heap<SlabPerTickData>(metadata_heap))
 {
-  assert(ArenaBlockHelpers::is_valid_standard_size_class(block_size) ||
-         block_size == ArenaBlockHelpers::huge_block_granularity, "invalid block size (%zu)", block_size);
+  assert(ArenaBlockHelpers::is_valid_standard_block_size(block_size()) ||
+         block_size() == ArenaBlockHelpers::huge_block_granularity, "invalid block size (%zu)", block_size());
   assert(_num_blocks > 0, "Sanity");
   assert(is_aligned(_num_blocks,blocks_per_granule()), "Sanity");
   assert(is_power_of_2(_granule_size), "Sanity");
@@ -98,6 +95,8 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
   // this portion will never be released and will be, if possible, backed by
   // large pages (even if we don't use them for the burst portion of the slab).
   if (_release_boundary > 0) {
+    assert(_release_boundary << _blocks_to_granule_shift == params.release_boundary,
+           "Release Boundary not a common multiple of granule size");
     const const_blockptr_t release_boundary_pointer =
       _granule_range.index_to_block_incl(_release_boundary);
     assert(release_boundary_pointer <= end(), "Sanity");
@@ -106,6 +105,27 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
     _arena_heap->advise_large_page_use(base(), release_boundary_pointer, resident_uses_large_pages);
     _commit_boundary = _release_boundary;
   }
+}
+
+// Creates an unusable slot.
+ArenaSlab::ArenaSlab() :
+  _arena_heap(nullptr),
+  _metadata_heap(nullptr),
+  _block_size(0),
+  _granule_size(0),
+  _num_blocks(0),
+  _blocks_to_granule_shift(0),
+  _num_granules(0),
+  _decay_factor(0),
+  _release_boundary(0),
+  _base(nullptr),
+  _block_range(),
+  _granule_range(),
+  _dirty_bitmap(),
+  _in_use_bitmap(),
+  _commit_boundary(0),
+  _hot(nullptr),
+  _per_tick(nullptr) {
 }
 
 // Ensure this and all lower-address blocks are committed.
@@ -291,3 +311,118 @@ void ArenaSlab::verify() const {
 
 }
 #endif
+
+// This table holds the geometries of the standard slabs hotspot uses.
+// Note that some of them are zero-sized. That is because we don't use them.
+// We keep the entries in tables to make log2(blocksize) the universal lookup
+// index for caches, slabs, and slab parameters.
+
+static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num_size_classes] = {
+
+  // blocksize    granulesize   numblocks   release_boundary    decay_factor
+
+  // Slabs [1, 256) dont exist
+  {  },
+{  },
+{  },
+{  },
+{  },
+{  },
+{  },
+{  },
+
+  // 256 byte blocks
+  // We keep all of them inside a single (large) page that is fully resident.
+  // (Todo: this could actually share a single large page with the next slab, 1K)
+  // (      which would require ArenaHeap to be able to recognise neighboring fully resident
+  //        slabs - would save 2MB. Really Worth it?? )
+  { 256, 2*M, 8192 /* 2M */,  8192,  0.0f },
+
+  // 512 does not exist.
+{  },
+
+  // 1K blocks
+  // We keep all of them inside a single (large) page that is fully resident.
+  // (Todo: this could actually share a single large page with the 256 byte slab)
+{ K, 2*M, 2048 /* 2M */,  2048,  0.0f },
+
+  // the next few slabs dont exist.
+{  },
+{  },
+{  },
+{  },
+
+  // 32K blocks
+  // This block size sees the highest allocation churn and the highest peak live and average live number.
+  // Number of blocks: 32768 - enough to absorb 99.9% of all peaks
+  // Release Boundary: 384   - Dacapo benchmarks (default datasize) show an avg peak live of 50, with tomcat
+  //                           and spring in the 300s; 384 absorbs most of those scenario at a cost of 12MB.
+  // Note that this scales with number of mutators (resource area chunks). The numbers are fine to absorb
+  // a standard app's needs with resident and 99.9% of all apps needs with burst section; beyond that we
+  // will use C-heap.
+{ 32*K, 64*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.0f },
+
+
+  // 64K blocks: semi important
+{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.0f },
+
+  // From here on, we have very little average live blocks. Large block sizes get increasingly
+  // uncommon with size. In all of these cases, granulesize == blocksize since reducing footprint becomes
+  // more important than allocation speed. And we don't have a resident part, since we want those blocks to be
+  // released to the OS completely, not cached.
+{ 128*K, 128*K, 1024 /* 128 MB */,  0 /* no resident section */,  0.0f },
+{ 256*K, 256*K, 1024 /* 256 MB */,  0 /* no resident section */,  0.0f },
+{ 512*K, 512*K, 512  /* 256 MB */,  0 /* no resident section */,  0.0f },
+{ 1*M, 1*M, 256      /* 256 MB */,  0 /* no resident section */,  0.0f },
+
+  // 2MB blocks really are huge blocks (consisting of sequences of neighboring 2MB blocks). Keep the total size of this
+  // slab large enough to absorb most of the abnormal allocations a compiler may do.
+{ 2*M, 2*M, 1024 /* 2GB */,  0 /* no resident section */,  0.0f }
+
+};
+
+
+/// ArenaSlabGroup
+
+ArenaSlabGroup::ArenaSlabGroup(ArenaHeap* arena_heap,
+                               ArenaMetadataHeap* metadata_heap,
+                               const ArenaSlab::Parameters params[num_slots]) :
+  _slabs{
+    // Size classes [1, 256) are unused
+  {},
+  {},
+  {},
+  {},
+  {},
+  {},
+  {},
+  {},
+  // 256
+  { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_256] }, // 256
+  // 512 (unused)
+  {},
+  // 1024
+  { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_1K] }, // 1024
+  // [2K, 32K) unused
+  {},
+  {},
+  {},
+  {},
+  // from 64K on we have slabs for every size
+ { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_32K] }, // 32K
+ { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_64K] }, // 64K
+ { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_128K] }, // 128K
+ { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_256K] }, // 256K
+ { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_512K] }, // 512K
+ { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_1M] }, // 1M
+ { arena_heap, metadata_heap, params[ArenaBlockHelpers::szclass_2M] }, // 2M
+  }
+{
+}
+
+// Creates a slab group with the default geometries for hotspot
+ArenaSlabGroup::ArenaSlabGroup(ArenaHeap* arena_heap,
+                               ArenaMetadataHeap* metadata_heap) :
+  ArenaSlabGroup(arena_heap, metadata_heap, global_slab_params)
+{
+}

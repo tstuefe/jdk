@@ -33,7 +33,7 @@
 #include "utilities/globalDefinitions.hpp"
 
 
-class ArenaBlockCache {
+class alignas(DEFAULT_PADDING_SIZE) ArenaBlockCache {
 
   NONCOPYABLE(ArenaBlockCache);
 
@@ -281,10 +281,43 @@ public:
 
 };
 
-// A cache group holds one cache per block size.
-class ArenaBlockCacheGroup {
+// A cache table holds one cache per block size, and a shared mutex
+class ArenaCacheGroup {
 
+  static constexpr unsigned num_slots = ArenaBlockHelpers::num_standard_size_classes;
+
+  // Lookup table for caches. We use that instead of a flat table since we
+  // have a 1:n relationship between block sizes and cache sizes (since some
+  // block sizes overrule others, eg for a request of size 2K we return 32K
+  // blocks)
+  ArenaBlockCache** const _cache_lut; // lookup table, one per size class
+  Mutex _lock;
+
+public:
+
+  ArenaCacheGroup(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group);
+
+  ArenaBlockCache* cache_for_size_class(block_size_class_t szclass) const {
+    assert(ArenaBlockHelpers::is_valid_size_class(szclass), "sanity");
+    assert(szclass < num_slots, "sanity");
+    ArenaBlockCache* const cache = _cache_lut[szclass];
+    return cache;
+  }
+
+  Mutex* lock() { return &_lock; }
+};
+/*
+// The ArenaCacheGroupTable exists only once. It contains a cache group
+// per core.
+class ArenaCacheGroupTable {
+
+  const unsigned _num_groups;
+  ArenaCacheGroup* const _groups;
+
+public:
+
+  ArenaCacheGroupTable(ArenaSlab* slabs[num_caches]);
 
 };
-
+*/
 #endif // SHARE_MEMORY_ARENA_ARENABLOCKCACHE_HPP
