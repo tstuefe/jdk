@@ -44,19 +44,25 @@ TEST_VM(Arena2_SlabGroup, default_group) {
   ArenaMetadataHeap metadata_heap;
   ArenaSlabGroup group(&arena_heap, &metadata_heap);
 
-  for (block_size_class_t szclass = 0; szclass <= ArenaBlockHelpers::highest_size_class; ++szclass) {
+  auto tester = [&group](block_size_class_t szclass) {
     if (ArenaBlockHelpers::is_valid_standard_size_class(szclass)) {
+
       const size_t block_size = ArenaBlockHelpers::size_class_to_block_size(szclass);
       ArenaSlab* const slab = group.slab_for_size_class(szclass);
       ASSERT_EQ(slab->block_size(), block_size);
       ASSERT_GE(slab->granule_size(), 64 * K); // default slabs use 64K for the lower bound of granule size since we have 64K paged platforms
-      // Every one of the standard slabs should allow for at least 256 blocks.
-      // Lets allocate a few. This should, in theory, not cost memory, since we never
-      // touch the memory. We don't allocate too much since even though we don't use memory,
-      // we commit, so the commit charge of the process goes up.
+
+      // Test-allocate a few blocks (should fit, and in theory not use memory, since we never touch the blocks)
       const_blockptr_t blocks [64];
       const unsigned num_allocated = slab->allocate_blocks(blocks, 64);
       ASSERT_EQ(num_allocated, 64u);
+
+    } else if (ArenaBlockHelpers::is_valid_huge_size_class(szclass)) {
+      // Test-allocate a huge block
+      ArenaSlab* const slab = group.slab_for_size_class(szclass);
+      const const_blockptr_t p = slab->allocate_huge_block(5 * ArenaBlockHelpers::huge_block_granularity);
+      ASSERT_NE(p, nullptr);
     }
-  }
+  };
+  ArenaBlockHelpers::iterate_size_classes_backward(tester);
 }

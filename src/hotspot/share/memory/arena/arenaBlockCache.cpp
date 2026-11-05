@@ -135,10 +135,9 @@ static ArenaBlockCache* allocate_cache(ArenaMetadataHeap* metadata_heap,
   return cache;
 }
 
-ArenaCacheGroup::ArenaCacheGroup(ArenaMetadataHeap* metadataHeap, ArenaSlabGroup* slabGroup) :
-  _cache_lut (
-    [metadataHeap, slabGroup]() {
-
+ArenaCacheGroup::ArenaCacheGroup(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group) :
+  _cache_lut(
+    [metadata_heap, slab_group]() {
       // We allocate only those caches we actually need from the heap, then populate the lookup table.
       // The lookup table contains for every size class (including invalid) a pointer to the cache.
       // Some size classes are not valid: for those size classes, we simply use the cache of the next upper
@@ -146,19 +145,19 @@ ArenaCacheGroup::ArenaCacheGroup(ArenaMetadataHeap* metadataHeap, ArenaSlabGroup
       // This way, we can use a simple log2(chunk size) lookup for the cache and if the chunk size e.g. is 4KB,
       // we automatically use the 32K cache and return a 32K chunks. This avoids having to do range checks on every
       // allocation.
-      metadataHeap->align_hwm_to_padded_size();
-      ArenaBlockCache** const lookup_table = (ArenaBlockCache**)metadataHeap->allocate(sizeof(ArenaBlockCache*) * num_slots);
+      metadata_heap->align_hwm_to_padded_size();
+      ArenaBlockCache **const lookup_table = (ArenaBlockCache **) metadata_heap->allocate(
+        sizeof(ArenaBlockCache *) * num_slots);
 
       // cache sizes: [256, 64K) = 7, [64K-256K) = 3, [256K - 1M) = 1
-
-      ArenaBlockCache* const cache_256 = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_256, 7 );
-      ArenaBlockCache* const cache_1K = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_1K, 7 );
-      ArenaBlockCache* const cache_32K = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_32K, 7 );
-      ArenaBlockCache* const cache_64K = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_64K, 3 );
-      ArenaBlockCache* const cache_128K = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_128K, 3 );
-      ArenaBlockCache* const cache_256K = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_256K, 1 );
-      ArenaBlockCache* const cache_512K = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_512K, 1 );
-      ArenaBlockCache* const cache_1M = allocate_cache(metadataHeap, slabGroup, ArenaBlockHelpers::szclass_1M, 1 );
+      ArenaBlockCache *const cache_256 = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_256, 7);
+      ArenaBlockCache *const cache_1K = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_1K, 7);
+      ArenaBlockCache *const cache_32K = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_32K, 7);
+      ArenaBlockCache *const cache_64K = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_64K, 3);
+      ArenaBlockCache *const cache_128K = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_128K, 3);
+      ArenaBlockCache *const cache_256K = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_256K, 1);
+      ArenaBlockCache *const cache_512K = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_512K, 1);
+      ArenaBlockCache *const cache_1M = allocate_cache(metadata_heap, slab_group, ArenaBlockHelpers::szclass_1M, 1);
 
       // We route allocation requests < 256 to the 256 cache, < 1K to the 1K, < 32K to the 32K
       int slot = 0;
@@ -181,8 +180,18 @@ ArenaCacheGroup::ArenaCacheGroup(ArenaMetadataHeap* metadataHeap, ArenaSlabGroup
       assert(slot == num_slots, "Sanity");
 
       return lookup_table;
+    }()),
+  _lock() {
+}
 
-    } () ),
-  _lock()
-{
+// Flush all caches
+void ArenaCacheGroup::flush() const {
+  auto fun = [this](block_size_class_t szclass) { _cache_lut[szclass]->flush(); };
+  ArenaBlockHelpers::iterate_standard_size_classes_forward(fun);
+}
+
+// Tick all caches
+void ArenaCacheGroup::tick() const {
+  auto fun = [this](block_size_class_t szclass) { _cache_lut[szclass]->tick(); };
+  ArenaBlockHelpers::iterate_standard_size_classes_forward(fun);
 }

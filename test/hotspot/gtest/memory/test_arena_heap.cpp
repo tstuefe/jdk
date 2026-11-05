@@ -39,26 +39,35 @@
 //#define LOG_PLEASE
 #include "testutils.hpp"
 
-TEST_VM(Arena2_Heap, arena_heap_basics) {
+
+
+static void test_reserve_slab_memory(bool forward) {
   ArenaHeap heap;
   constexpr size_t slabsize = 4 * M;
-  for (size_t blocksize = ArenaBlockHelpers::min_block_size;
-       blocksize <= ArenaBlockHelpers::huge_block_granularity;
-       blocksize = blocksize * 2) {
 
-    if (!ArenaBlockHelpers::is_valid_standard_block_size(blocksize) &&
-        blocksize != ArenaBlockHelpers::huge_block_granularity) {
-      // We have some "holes" in the list of valid block sizes. Skip those.
-      continue;
-    }
+  auto tester = [&heap](block_size_class_t szclass) {
     const const_address hwm1 = heap.hwm();
+    const size_t blocksize = ArenaBlockHelpers::size_class_to_block_size(szclass);
     const size_t granule_size = MAX2(os::vm_page_size(), blocksize);
     const unsigned num_blocks = (unsigned)(slabsize / blocksize);
     const const_address p = (const_address) heap.reserve_slab_memory(blocksize, granule_size, num_blocks);
     ASSERT_NE(p, nullptr);
     ASSERT_TRUE(is_aligned(p, granule_size));
     ASSERT_EQ(hwm1 + blocksize * num_blocks, heap.hwm());
+  };
+  if (forward) {
+    ArenaBlockHelpers::iterate_size_classes_forward(tester);
+  } else {
+    ArenaBlockHelpers::iterate_size_classes_backward(tester);
   }
+}
+
+TEST_VM(Arena2_Heap, reserve_slab_memory_forward) {
+  test_reserve_slab_memory(true);
+}
+
+TEST_VM(Arena2_Heap, reserve_slab_memory_backward) {
+  test_reserve_slab_memory(false);
 }
 
 TEST_VM(Arena2_Heap, arena_metaheap_basics) {

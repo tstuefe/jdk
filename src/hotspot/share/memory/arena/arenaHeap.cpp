@@ -107,9 +107,7 @@ ArenaHeap::ArenaHeap() : ArenaHeapBase(), _hwm(base()) {}
 // Reserves memory for a slab. Slab start will be aligned to granule size.
 const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granule_size, unsigned num_blocks) {
 
-  assert(ArenaBlockHelpers::is_valid_standard_block_size(block_size) ||
-         block_size == ArenaBlockHelpers::huge_block_granularity,
-         "Invalid block size (%zu)", block_size);
+  DEBUG_ONLY(ArenaBlockHelpers::verify_valid_block_size(block_size));
   assert(block_size <= granule_size, "Sanity");
   assert(granule_size >= os::vm_page_size(), "Sanity");
   assert(is_power_of_2(granule_size), "Sanity");

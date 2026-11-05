@@ -24,9 +24,9 @@
  */
 
 #include "memory/arena/arenaBlock.hpp"
+#include "memory/arena/arenaMutex.hpp"
 #include "memory/arena/arenaSlab.hpp"
 
-#include "arenaMutex.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -84,8 +84,7 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
   _hot(allocate_padded_from_metadata_heap<SlabHotData>(metadata_heap)),
   _per_tick(allocate_padded_from_metadata_heap<SlabPerTickData>(metadata_heap))
 {
-  assert(ArenaBlockHelpers::is_valid_standard_block_size(block_size()) ||
-         block_size() == ArenaBlockHelpers::huge_block_granularity, "invalid block size (%zu)", block_size());
+  DEBUG_ONLY(ArenaBlockHelpers::verify_valid_block_size(block_size()));
   assert(_num_blocks > 0, "Sanity");
   assert(is_aligned(_num_blocks,blocks_per_granule()), "Sanity");
   assert(is_power_of_2(_granule_size), "Sanity");
@@ -194,14 +193,13 @@ const_blockptr_t ArenaSlab::allocate_huge_block(size_t size) {
   ArenaMutexLocker locker(_hot->_lock);
 
   assert(size > 0, "num must be non-zero");
-  assert(is_aligned(size, ArenaBlockHelpers::huge_block_granularity), "Size misaligned");
+  DEBUG_ONLY(ArenaBlockHelpers::verify_valid_huge_size(size));
 
   const size_t size_aligned = align_up(size, block_size());
   const unsigned num = size_aligned / block_size();
 
   // We only ever call this for huge blocks, not standard blocks - and there the granules
   // are exactly block sized.
-  assert(block_size() > ArenaBlockHelpers::max_standard_block_size, "only for huge blocks");
   assert(granule_size() == block_size(), "Sanity");
 
   // Find the lowest-address hole into which this allocation would fit
@@ -251,9 +249,11 @@ void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
 
   ArenaMutexLocker locker(_hot->_lock);
 
+  assert(size > 0, "num must be non-zero");
+  DEBUG_ONLY(ArenaBlockHelpers::verify_valid_huge_size(size));
+
   // We only ever call this for huge blocks, not standard blocks - and there the granules
   // are exactly block sized. So we get away with treating granules as blocks and vice versa.
-  assert(block_size() > ArenaBlockHelpers::max_standard_block_size, "only for huge blocks");
   assert(_granule_size == block_size(), "Sanity");
 
   DEBUG_ONLY(_block_range.check_is_valid_block(block);)
@@ -334,7 +334,7 @@ void ArenaSlab::verify() const {
 // We keep the entries in tables to make log2(blocksize) the universal lookup
 // index for caches, slabs, and slab parameters.
 
-static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num_size_classes] = {
+static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::highest_size_class + 1] = {
 
   // blocksize    granulesize   numblocks   release_boundary    decay_factor
 

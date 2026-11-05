@@ -269,7 +269,7 @@ public:
 
   // how many entries to prefetch on underflow
   static int num_prefetch_on_underflow(int cachesize)     { return cachesize / 2; }
-  int num_prefetch_on_underflow() const                   { return num_prefetch_on_underflow(cachesize()); }
+  int num_prefetch_on_underflow() const                   { return MAX2(1,num_prefetch_on_underflow(cachesize())); }
 
   // how many entries to evict on a tick if cache is busy
   static int num_evict_on_tick_busy(int cachesize)        { (void)cachesize; return 1; }
@@ -284,16 +284,13 @@ public:
 // A cache table holds one cache per block size, and a shared mutex
 class ArenaCacheGroup {
 
-  static constexpr unsigned num_slots = ArenaBlockHelpers::num_standard_size_classes;
+  static constexpr unsigned num_slots = ArenaBlockHelpers::highest_standard_size_class + 1;
 
-  // Lookup table for caches. We use that instead of a flat table since we
-  // have a 1:n relationship between block sizes and cache sizes (since some
-  // block sizes overrule others, eg for a request of size 2K we return 32K
-  // blocks)
+  // Immutable lookup table for caches. Index is szclass, which is log2 blocksize.
+  // Note that this table has duplicates: we redirect requests for invalid
+  // block sizes (eg 4K) to the cache for the next larger blocksize cache.
+  // So, _cache_lut[log2 4K] == cache-for 32K.
   ArenaBlockCache** const _cache_lut; // lookup table, one per size class
-
-  // Todo, we also need a list of "significant" caches for cases where we
-  // loop over all caches (eg flush, tick)
 
   // We need to use a platform mutex here since it is very difficult to find a
   // mutex rank that is low enough for callers (arena chunk allocations can be
@@ -309,12 +306,16 @@ public:
   ArenaCacheGroup(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group);
 
   ArenaBlockCache* cache_for_size_class(block_size_class_t szclass) const {
-    assert(ArenaBlockHelpers::is_valid_size_class(szclass), "sanity");
     assert(szclass < num_slots, "sanity");
     ArenaBlockCache* const cache = _cache_lut[szclass];
     return cache;
   }
-// Todo: mutex-less cache, but: Add statistics! (Make it first class citizen)
+
+  // Flush all caches
+  void flush() const;
+
+  // Tick all caches
+  void tick() const;
 
   PlatformMutex* lock() { return &_lock; }
 };
