@@ -40,7 +40,7 @@
 
 //#define LOG_PLEASE
 #include "testutils.hpp"
-
+#include "threadHelper.inline.hpp"
 
 struct PerCoreFixture {
   ArenaHeap arena_heap;
@@ -60,4 +60,59 @@ TEST_VM(Arena2_PerCore, layout) {
   STATIC_ASSERT(alignof(ArenaPerCoreDataHolder::Data) == DEFAULT_PADDING_SIZE);
   const ArenaPerCoreDataHolder::Data* const d = f.holder.get_current_core_data();
   ASSERT_TRUE(is_aligned(d, DEFAULT_PADDING_SIZE));
+}
+
+
+TEST_VM(Arena2_PerCore, stress) {
+  PerCoreFixture f;
+  auto stresser = [&f] (Thread* t, int id) {
+    for (int i = 0; i < 10000; i++) {
+      constexpr  block_size_class_t szclass = ArenaBlockHelpers::szclass_32K;
+      constexpr  size_t block_size = ArenaBlockHelpers::size_class_to_block_size(szclass);
+      blockptr_t blocks[4];
+      {
+        ArenaPerCoreDataHolder::Data* const data1 = f.holder.get_current_core_data();
+        ASSERT_TRUE(is_aligned(data1, DEFAULT_PADDING_SIZE));
+        {
+          const ArenaMutexLocker ml(data1->_lock);
+          ArenaBlockCache* const c = data1->_cache_group.cache_for_log2_block_size(szclass);
+          for (int j = 0; j < 4; j++) {
+            blocks[j] = (blockptr_t)c->allocate_block();
+            ASSERT_NE(blocks[j], nullptr);
+            ASSERT_TRUE(is_aligned(blocks[j], block_size));
+          }
+        }
+      }
+      // Touch outside the lock: a block handed out twice would show up as a
+      // corrupted pattern (or as an assert in the cache/slab on free).
+      for (int j = 0; j < 4; j++) {
+        uintptr_t* const p = (uintptr_t*) blocks[j];
+        (*p) = p2u(blocks + j); // Unique per thread and per slot. To catch the cache returning a block twice.
+      }
+      os::naked_yield();
+      // Nobody should have touched our blocks.
+      for (int j = 0; j < 4; j++) {
+        const uintptr_t* const p = (const uintptr_t*) blocks[j];
+        ASSERT_EQ(*p, p2u(blocks + j));
+      }
+
+      // Free may happen on a different slot than we allocated from (migration, cross-core free).
+      {
+        ArenaPerCoreDataHolder::Data* const data2 = f.holder.get_current_core_data();
+        ArenaMutexLocker ml(data2->_lock);
+        ArenaBlockCache* const c = data2->_cache_group.cache_for_log2_block_size(szclass);
+        for (int j = 0; j < 4; j++) {
+          c->deallocate_block(blocks[j]);
+        }
+      }
+    }
+  };
+  const unsigned num_threads = os::processor_count() * 2;
+  // we should not exhaust the slab. The worst allocation load can be 4 * number-of-stressers
+  // if all allocations from all stressers synchronize.
+  // Lets keep that number well below the max number of 32k blocks.
+  constexpr unsigned max_num_threads = 1024;
+  TestThreadGroup ttg(stresser, MIN2(max_num_threads, num_threads));
+  ttg.doit();
+  ttg.join();
 }
