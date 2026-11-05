@@ -81,6 +81,7 @@ struct ArenaBlockHelpers : public AllStatic {
   static constexpr block_size_class_t highest_standard_size_class = szclass_1M;
   static constexpr block_size_class_t highest_size_class = szclass_2M;
   static constexpr size_t huge_block_granularity = block_size_2M;
+  static constexpr size_t max_standard_block_size = nth_bit(highest_standard_size_class);
 
   static constexpr bool is_valid_block_size(size_t blocksize) {
     return

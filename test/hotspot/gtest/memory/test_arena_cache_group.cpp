@@ -41,28 +41,29 @@ TEST_VM(Arena2_CacheGroup, basic) {
   ArenaHeap arena_heap;
   ArenaMetadataHeap metadata_heap;
   ArenaSlabGroup slab_group(&arena_heap, &metadata_heap);
-  ArenaCacheGroup cache_group(&metadata_heap, &slab_group);
+  ArenaCacheGroup cache_group(&slab_group);
 
-  unsigned num_checked = 0;
-  auto checker = [&cache_group, &num_checked](block_size_class_t szclass) {
-    const size_t block_size = ArenaBlockHelpers::size_class_to_block_size(szclass);
-    ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
+  for (unsigned log2_block_size = 0; log2_block_size <= ArenaBlockHelpers::highest_standard_size_class;
+       log2_block_size++)
+  {
+    ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(log2_block_size);
+    const size_t block_size = nth_bit(log2_block_size);
     ASSERT_NE(cache, nullptr);
     const const_blockptr_t p1 = cache->allocate_block();
     const const_blockptr_t p2 = cache->allocate_block();
-    ASSERT_NE(p1, nullptr);
-    ASSERT_EQ(p2, p1 + block_size);
-    num_checked++;
-  };
-  ArenaBlockHelpers::iterate_standard_size_classes_forward(checker);
-  ASSERT_EQ(num_checked, ArenaBlockHelpers::num_valid_standard_size_classes);
+    const const_blockptr_t p3 = cache->allocate_block();
+    const size_t real_blocksize = p2 - p1;
+    ASSERT_TRUE(ArenaBlockHelpers::is_valid_standard_block_size(real_blocksize));
+    ASSERT_GE(real_blocksize, block_size);
+    ASSERT_EQ(p3, p2 + real_blocksize);
+  }
 }
 
 // Helper function; Given a cache group whose caches are empty, triggers
 // prefetch on all of them
 static void prefetch_all(ArenaCacheGroup& cache_group) {
   auto cache_filler = [&cache_group](block_size_class_t szclass) {
-    ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
+    ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(szclass);
     ASSERT_EQ(cache->count(), 0);                       // Cache should be empty
     const const_blockptr_t p = cache->allocate_block(); // Prefetch should partly fill the cache
     ASSERT_NE(p, nullptr);
@@ -75,14 +76,14 @@ TEST_VM(Arena2_CacheGroup, flush_all) {
   ArenaHeap arena_heap;
   ArenaMetadataHeap metadata_heap;
   ArenaSlabGroup slab_group(&arena_heap, &metadata_heap);
-  ArenaCacheGroup cache_group(&metadata_heap, &slab_group);
+  ArenaCacheGroup cache_group(&slab_group);
 
   prefetch_all(cache_group);
 
   cache_group.flush();
 
   auto check = [&cache_group](block_size_class_t szclass) {
-    const ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
+    const ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(szclass);
     ASSERT_EQ(cache->count(), 0); // should have flushed
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(check);
@@ -92,14 +93,14 @@ TEST_VM(Arena2_CacheGroup, tick_all) {
   ArenaHeap arena_heap;
   ArenaMetadataHeap metadata_heap;
   ArenaSlabGroup slab_group(&arena_heap, &metadata_heap);
-  ArenaCacheGroup cache_group(&metadata_heap, &slab_group);
+  ArenaCacheGroup cache_group(&slab_group);
 
   prefetch_all(cache_group);
 
   // how big are caches before tick
   unsigned num[ArenaBlockHelpers::highest_size_class + 1];
   auto take_counts = [&cache_group, &num](block_size_class_t szclass) {
-    num[szclass] = cache_group.cache_for_size_class(szclass)->count();
+    num[szclass] = cache_group.cache_for_log2_block_size(szclass)->count();
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(take_counts);
 
@@ -108,7 +109,7 @@ TEST_VM(Arena2_CacheGroup, tick_all) {
 
   // Every cache should have shed at least one item
   auto check = [&cache_group, &num](block_size_class_t szclass) {
-    const ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
+    const ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(szclass);
     ASSERT_LT((unsigned)cache->count(), num[szclass]); // should have flushed
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(check);

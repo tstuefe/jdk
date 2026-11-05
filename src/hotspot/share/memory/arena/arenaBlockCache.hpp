@@ -281,56 +281,53 @@ public:
 
 };
 
-// A cache table holds one cache per block size, and a shared mutex
+// A cache table holds one cache per block size
 class ArenaCacheGroup {
 
-  static constexpr unsigned num_slots = ArenaBlockHelpers::highest_standard_size_class + 1;
+  static constexpr unsigned num_caches = ArenaBlockHelpers::num_valid_standard_size_classes;
 
   // Immutable lookup table for caches. Index is szclass, which is log2 blocksize.
-  // Note that this table has duplicates: we redirect requests for invalid
-  // block sizes (eg 4K) to the cache for the next larger blocksize cache.
-  // So, _cache_lut[log2 4K] == cache-for 32K.
-  ArenaBlockCache** const _cache_lut; // lookup table, one per size class
+  // Output is the index of the cache to use for that size class.
+  // We redirect requests for invalid block sizes (eg 4K) to the cache for the next larger blocksize cache (e.g. 32K)
+  static constexpr unsigned size_class_to_cache_index[ArenaBlockHelpers::highest_standard_size_class + 1] = {
+    // [1, 256] => 256
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    // [512, 1K] => 1K
+    1, 1,
+    // [2K, 32K] => 32K
+    2, 2, 2, 2, 2,
+    // From now on its 1:1
+    3, 4, 5, 6, 7
+  };
 
-  // We need to use a platform mutex here since it is very difficult to find a
-  // mutex rank that is low enough for callers (arena chunk allocations can be
-  // triggered from anywhere, really, where resource areas are used) and still
-  // allows NMT to function properly (which we may end up calling when redirecting
-  // to the slab on overflow/underflow).
-  // There are several ways around this, but for now lets just use a PlatformMutex.
-  // All we call under us is
-  PlatformMutex _lock;
+  ArenaBlockCache _caches[num_caches];
+
+  ArenaBlockCache* at(unsigned cache_index) {
+    assert(cache_index < num_caches, "sanity");
+    return _caches + cache_index;
+  }
+
+  const ArenaBlockCache* at(unsigned cache_index) const {
+    assert(cache_index < num_caches, "sanity");
+    return _caches + cache_index;
+  }
 
 public:
 
-  ArenaCacheGroup(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group);
+  ArenaCacheGroup(ArenaSlabGroup* slab_group);
 
-  ArenaBlockCache* cache_for_size_class(block_size_class_t szclass) const {
-    assert(szclass < num_slots, "sanity");
-    ArenaBlockCache* const cache = _cache_lut[szclass];
-    return cache;
+  ArenaBlockCache* cache_for_log2_block_size(unsigned log2_block_size) {
+    assert(log2_block_size <= ArenaBlockHelpers::highest_standard_size_class, "sanity");
+    const unsigned cache_index = size_class_to_cache_index[log2_block_size];
+    return at(cache_index);
   }
 
   // Flush all caches
-  void flush() const;
+  void flush();
 
   // Tick all caches
-  void tick() const;
-
-  PlatformMutex* lock() { return &_lock; }
-};
-/*
-// The ArenaCacheGroupTable exists only once. It contains a cache group
-// per core.
-class ArenaCacheGroupTable {
-
-  const unsigned _num_groups;
-  ArenaCacheGroup* const _groups;
-
-public:
-
-  ArenaCacheGroupTable(ArenaSlab* slabs[num_caches]);
+  void tick();
 
 };
-*/
+
 #endif // SHARE_MEMORY_ARENA_ARENABLOCKCACHE_HPP
