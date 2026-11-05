@@ -118,7 +118,7 @@ class alignas(DEFAULT_PADDING_SIZE) ArenaBlockCache {
     if (pos == 0) {
       return;
     }
-    assert(pos < cachesize() && pos > 0, "Sanity");
+    assert(pos <= cachesize() && pos > 0, "Sanity");
     assert(pos + num <= cachesize(), "Sanity");
     for (int i = 0; i < num; i++) {
       _blocks[i] = _blocks[pos + i];
