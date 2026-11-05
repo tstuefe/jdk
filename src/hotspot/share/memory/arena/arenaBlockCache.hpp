@@ -268,8 +268,8 @@ public:
   int num_evict_on_overflow() const                       { return num_evict_on_overflow(cachesize()); }
 
   // how many entries to prefetch on underflow
-  static int num_prefetch_on_underflow(int cachesize)     { return cachesize / 2; }
-  int num_prefetch_on_underflow() const                   { return MAX2(1,num_prefetch_on_underflow(cachesize())); }
+  static int num_prefetch_on_underflow(int cachesize)     { return MAX2(1,cachesize / 2); }
+  int num_prefetch_on_underflow() const                   { return num_prefetch_on_underflow(cachesize()); }
 
   // how many entries to evict on a tick if cache is busy
   static int num_evict_on_tick_busy(int cachesize)        { (void)cachesize; return 1; }
