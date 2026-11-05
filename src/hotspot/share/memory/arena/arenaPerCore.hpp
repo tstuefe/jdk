@@ -90,6 +90,8 @@ public:
 
   Data* get_current_core_data() { return at(current_core()); }
 
+  unsigned num_cpus() const { return _num_cpus; }
+
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENAPERCORE_HPP
