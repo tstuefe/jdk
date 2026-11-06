@@ -46,7 +46,7 @@ TEST_VM(Arena2_CacheGroup, basic) {
   for (unsigned log2_block_size = 0; log2_block_size <= ArenaBlockHelpers::highest_standard_size_class;
        log2_block_size++)
   {
-    ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(log2_block_size);
+    ArenaBlockCache* const cache = cache_group.cache_for_size_class(log2_block_size);
     const size_t block_size = nth_bit(log2_block_size);
     ASSERT_NE(cache, nullptr);
     const const_blockptr_t p1 = cache->allocate_block();
@@ -63,7 +63,7 @@ TEST_VM(Arena2_CacheGroup, basic) {
 // prefetch on all of them
 static void prefetch_all(ArenaCacheGroup& cache_group) {
   auto cache_filler = [&cache_group](block_size_class_t szclass) {
-    ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(szclass);
+    ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
     ASSERT_EQ(cache->count(), 0);                       // Cache should be empty
     const const_blockptr_t p = cache->allocate_block(); // Prefetch should partly fill the cache
     ASSERT_NE(p, nullptr);
@@ -83,7 +83,7 @@ TEST_VM(Arena2_CacheGroup, flush_all) {
   cache_group.flush();
 
   auto check = [&cache_group](block_size_class_t szclass) {
-    const ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(szclass);
+    const ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
     ASSERT_EQ(cache->count(), 0); // should have flushed
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(check);
@@ -100,7 +100,7 @@ TEST_VM(Arena2_CacheGroup, tick_all) {
   // how big are caches before tick
   unsigned num[ArenaBlockHelpers::highest_size_class + 1];
   auto take_counts = [&cache_group, &num](block_size_class_t szclass) {
-    num[szclass] = cache_group.cache_for_log2_block_size(szclass)->count();
+    num[szclass] = cache_group.cache_for_size_class(szclass)->count();
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(take_counts);
 
@@ -109,7 +109,7 @@ TEST_VM(Arena2_CacheGroup, tick_all) {
 
   // Every cache should have shed at least one item
   auto check = [&cache_group, &num](block_size_class_t szclass) {
-    const ArenaBlockCache* const cache = cache_group.cache_for_log2_block_size(szclass);
+    const ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
     ASSERT_LT((unsigned)cache->count(), num[szclass]); // should have flushed
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(check);

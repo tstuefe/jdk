@@ -232,7 +232,7 @@ public:
 // singleton (outside of tests).
 class ArenaSlabGroup {
 
-  static constexpr unsigned num_slots = ArenaBlockHelpers::highest_size_class + 1;
+  static constexpr unsigned num_slots = ArenaBlockHelpers::num_size_classes;
 
   ArenaSlab _slabs[num_slots];
 

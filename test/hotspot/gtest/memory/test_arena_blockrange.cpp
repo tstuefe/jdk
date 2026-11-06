@@ -67,3 +67,23 @@ TEST_VM(Arena2_BlockRange, aligned_base) {
   do_test<uintptr_t>(256);
   do_test<unsigned>(32 * K);
 }
+
+
+TEST_VM(Arena2_BlockHelpers, size_class_helpers) {
+  ASSERT_EQ(ArenaBlockHelpers::size_class_to_block_size(ArenaBlockHelpers::szclass_256), 256u);
+  ASSERT_EQ(ArenaBlockHelpers::size_class_to_block_size(ArenaBlockHelpers::szclass_1K), K);
+  ASSERT_EQ(ArenaBlockHelpers::size_class_to_block_size(ArenaBlockHelpers::szclass_32K), 32 * K);
+  ASSERT_EQ(ArenaBlockHelpers::size_class_to_block_size(ArenaBlockHelpers::szclass_64K), 64 * K);
+  ASSERT_EQ(ArenaBlockHelpers::size_class_to_block_size(ArenaBlockHelpers::szclass_2M), 2 * M);
+
+  block_size_class_t szclass_last = 0;
+  for (unsigned i = 0; i <= constexpr_exact_log2(2 * M); i ++) {
+    const size_t block_size = nth_bit(i);
+    const block_size_class_t szclass = ArenaBlockHelpers::log2_block_size_to_size_class(i);
+    const size_t block_size_redirect = ArenaBlockHelpers::size_class_to_block_size(szclass);
+    ASSERT_LE(block_size, block_size_redirect);
+    ASSERT_LT(szclass, ArenaBlockHelpers::num_size_classes);
+    ASSERT_GE(szclass, szclass_last);
+    szclass_last = szclass;
+  }
+}

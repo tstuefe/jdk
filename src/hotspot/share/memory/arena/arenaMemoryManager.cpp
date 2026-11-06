@@ -23,7 +23,7 @@
  *
  */
 
-0
+#if 0
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaPerCore.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
@@ -148,3 +148,4 @@ void ArenaMemoryManagerImpl::deallocate_chunks(Chunk* chunk, size_t arena_size_h
 
 
 }
+#endif

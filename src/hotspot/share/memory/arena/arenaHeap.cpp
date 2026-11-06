@@ -112,7 +112,7 @@ const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granul
   assert(granule_size >= os::vm_page_size(), "Sanity");
   assert(is_power_of_2(granule_size), "Sanity");
 
-  // Slabs are always aligned to large page size, independent from granule size.
+  // Slabs are always aligned to large page size, independent of granule size.
   // That makes dealing with commit- and release- boundaries a lot easier.
   constexpr size_t alignment = large_page_size;
   _hwm = align_up(_hwm, alignment);

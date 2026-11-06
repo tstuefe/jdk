@@ -65,7 +65,7 @@ TEST_VM(Arena2_PerCore, layout) {
 
 TEST_VM(Arena2_PerCore, stress) {
   PerCoreFixture f;
-  auto stresser = [&f] (Thread* t, int id) {
+  auto stresser = [&f] (Thread*, int) {
     for (int i = 0; i < 10000; i++) {
       constexpr  block_size_class_t szclass = ArenaBlockHelpers::szclass_32K;
       constexpr  size_t block_size = ArenaBlockHelpers::size_class_to_block_size(szclass);
@@ -75,7 +75,7 @@ TEST_VM(Arena2_PerCore, stress) {
         ASSERT_TRUE(is_aligned(data1, DEFAULT_PADDING_SIZE));
         {
           const ArenaMutexLocker ml(data1->_lock);
-          ArenaBlockCache* const c = data1->_cache_group.cache_for_log2_block_size(szclass);
+          ArenaBlockCache* const c = data1->_cache_group.cache_for_size_class(szclass);
           for (int j = 0; j < 4; j++) {
             blocks[j] = (blockptr_t)c->allocate_block();
             ASSERT_NE(blocks[j], nullptr);
@@ -100,7 +100,7 @@ TEST_VM(Arena2_PerCore, stress) {
       {
         ArenaPerCoreDataHolder::Data* const data2 = f.holder.get_current_core_data();
         ArenaMutexLocker ml(data2->_lock);
-        ArenaBlockCache* const c = data2->_cache_group.cache_for_log2_block_size(szclass);
+        ArenaBlockCache* const c = data2->_cache_group.cache_for_size_class(szclass);
         c->bulk_deallocate_block(blocks, 4);
       }
     }

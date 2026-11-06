@@ -275,21 +275,7 @@ public:
 // A cache table holds one cache per block size
 class ArenaCacheGroup {
 
-  static constexpr unsigned num_caches = ArenaBlockHelpers::num_valid_standard_size_classes;
-
-  // Immutable lookup table for caches. Index is szclass, which is log2 blocksize.
-  // Output is the index of the cache to use for that size class.
-  // We redirect requests for invalid block sizes (eg 4K) to the cache for the next larger blocksize cache (e.g. 32K)
-  static constexpr unsigned size_class_to_cache_index[ArenaBlockHelpers::highest_standard_size_class + 1] = {
-    // [1, 256] => 256
-    0, 0, 0, 0, 0, 0, 0, 0, 0,
-    // [512, 1K] => 1K
-    1, 1,
-    // [2K, 32K] => 32K
-    2, 2, 2, 2, 2,
-    // From now on its 1:1
-    3, 4, 5, 6, 7
-  };
+  static constexpr unsigned num_caches = ArenaBlockHelpers::num_standard_size_classes;
 
   ArenaBlockCache _caches[num_caches];
 
@@ -307,10 +293,8 @@ public:
 
   ArenaCacheGroup(ArenaSlabGroup* slab_group);
 
-  ArenaBlockCache* cache_for_log2_block_size(unsigned log2_block_size) {
-    assert(log2_block_size <= ArenaBlockHelpers::highest_standard_size_class, "sanity");
-    const unsigned cache_index = size_class_to_cache_index[log2_block_size];
-    return at(cache_index);
+  ArenaBlockCache* cache_for_size_class(block_size_class_t szclass) {
+    return at(szclass);
   }
 
   // Flush all caches

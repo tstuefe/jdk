@@ -23,9 +23,8 @@
  *
  */
 
-
-#ifndef SHARE_MEMORY_ARENA_ARENABLOCK
-#define SHARE_MEMORY_ARENA_ARENABLOCK
+#ifndef SHARE_MEMORY_ARENA_ARENABLOCK_HPP
+#define SHARE_MEMORY_ARENA_ARENABLOCK_HPP
 
 #include "memory/allStatic.hpp"
 #include "utilities/align.hpp"
@@ -56,39 +55,105 @@ static_assert(constexpr_exact_log2(16u) == 4, "Passed");
 // We have 8 standard size classes: 256, 1K, 32K, 64K, ... 1M and another huge size class 2M.
 // Block sizes > 1M are huge and var-sized and consist of several adjacent 2MB blocks.
 
-// A "block class" identifies a valid block size. In practice, its log2 of the block size, normalized to 0.
+// A "block class" identifies a valid block size. Its really an enum, but uint8 is more handy.
 typedef uint8_t block_size_class_t;
 
 struct ArenaBlockHelpers : public AllStatic {
 
 #define ARENA_VALID_BLOCK_SIZES_DO(X) \
-  X(256u, 256) \
-  X(1024u, 1K) \
-  X(32768u, 32K) \
-  X(65536u, 64K) \
-  X(131072u, 128K) \
-  X(262144u, 256K) \
-  X(524288u, 512K) \
-  X(1048576u, 1M) \
-  X(2097152u, 2M)
+  X(0, 256u, 256) \
+  X(1, 1024u, 1K) \
+  X(2, 32768u, 32K) \
+  X(3, 65536u, 64K) \
+  X(4, 131072u, 128K) \
+  X(5, 262144u, 256K) \
+  X(6, 524288u, 512K) \
+  X(7, 1048576u, 1M) \
+  X(8, 2097152u, 2M)
 
-#define X(sz, name) \
-  static constexpr block_size_class_t szclass_ ## name = constexpr_exact_log2(sz); \
-  static constexpr size_t block_size_ ## name = sz;
+#define X(szclass, blocksize, name) \
+  static constexpr block_size_class_t szclass_ ## name = szclass; \
+  static constexpr size_t block_size_ ## name = blocksize;
   ARENA_VALID_BLOCK_SIZES_DO(X)
 #undef X
 
   static constexpr block_size_class_t highest_standard_size_class = szclass_1M;
   static constexpr block_size_class_t highest_size_class = szclass_2M;
   static constexpr size_t huge_block_granularity = block_size_2M;
-  static constexpr size_t max_standard_block_size = nth_bit(highest_standard_size_class);
 
-  static constexpr bool is_valid_block_size(size_t blocksize) {
-    return
-#define X(sz, ignored) (blocksize == sz) ||
-      ARENA_VALID_BLOCK_SIZES_DO(X)
+  // A translation table translates from size class to block size
+  static constexpr size_t size_class_to_block_size_table[] = {
+#define X(szclass, blocksize, name) blocksize,
+    ARENA_VALID_BLOCK_SIZES_DO(X)
 #undef X
-    false;
+  };
+
+  static constexpr unsigned num_size_classes = sizeof(size_class_to_block_size_table)/sizeof(size_class_to_block_size_table[0]);
+  static constexpr unsigned num_standard_size_classes = num_size_classes - 1;
+
+  static constexpr size_t max_standard_block_size = block_size_1M;
+
+
+  // Given a size class, return block size
+  static constexpr size_t size_class_to_block_size(block_size_class_t szclass) {
+    assert(szclass < num_size_classes, "Invalid size class (%u)", szclass);
+    return size_class_to_block_size_table[szclass];
+  }
+
+  // A translation table translates from a log2 block size to size class
+  static constexpr block_size_class_t log2_block_size_to_size_class_table[constexpr_exact_log2(block_size_2M) + 1] = {
+    // [1, 256] => 256
+    szclass_256,
+    szclass_256,
+    szclass_256,
+    szclass_256,
+    szclass_256,
+    szclass_256,
+    szclass_256,
+    szclass_256,
+    szclass_256,
+    // [512, 1K] => 1K
+    szclass_1K,
+    szclass_1K,
+    // [2K, 32K] => 32K
+    szclass_32K,
+    szclass_32K,
+    szclass_32K,
+    szclass_32K,
+    szclass_32K,
+    // From now on its 1:1
+    szclass_64K,
+    szclass_128K,
+    szclass_256K,
+    szclass_512K,
+    szclass_1M,
+    szclass_2M
+  };
+
+  static constexpr block_size_class_t log2_block_size_to_size_class(unsigned log2_block_size) {
+    assert(log2_block_size < (sizeof(log2_block_size_to_size_class_table) /
+                              sizeof(log2_block_size_to_size_class_table[0])), "Sanity");
+    return log2_block_size_to_size_class_table[log2_block_size];
+  }
+
+  static constexpr bool is_valid_standard_size_class(block_size_class_t szclass) {
+    return szclass <= highest_standard_size_class;
+  }
+
+  static constexpr bool is_valid_huge_size_class(block_size_class_t szclass) {
+    return szclass == highest_size_class;
+  }
+
+  static constexpr bool is_valid_size_class(block_size_class_t szclass) {
+    return szclass <= highest_size_class;
+  }
+
+  // Given a block size, returns true if its one of our valid block sizes
+  static constexpr bool is_valid_block_size(size_t blocksize) {
+#define X(ignored, size, ignored2) if (blocksize == size) return true;
+    ARENA_VALID_BLOCK_SIZES_DO(X)
+#undef X
+    return false;
   }
 
   static constexpr bool is_valid_standard_block_size(size_t blocksize) {
@@ -111,28 +176,17 @@ struct ArenaBlockHelpers : public AllStatic {
   }
 #endif // ASSERT
 
-  // block_size_class_t handling
-
-  // Only the *valid* size classes.
-  static constexpr unsigned num_valid_standard_size_classes = 8;
-  static constexpr unsigned num_valid_size_classes = num_valid_standard_size_classes + 1;
-
-  static constexpr block_size_class_t valid_size_classes[num_valid_size_classes] = {
-#define X(ignored, name) szclass_ ## name,
-    ARENA_VALID_BLOCK_SIZES_DO(X)
-#undef X
-  };
-
+  // Todo: we can probably scrap that, we removed most usages
   template <typename function, bool forward, bool including_huge>
   static void iterate_size_classes_X_X(function f) {
-    constexpr unsigned limit = including_huge ? num_valid_size_classes : num_valid_standard_size_classes;
+    constexpr unsigned limit = including_huge ? num_size_classes : num_standard_size_classes;
     if (forward) {
       for (unsigned i = 0; i < limit; i++) {
-        f(valid_size_classes[i]);
+        f(i);
       }
     } else {
       for (unsigned i = limit - 1; i < limit; i--) {
-        f(valid_size_classes[i]);
+        f(i);
       }
     }
   }
@@ -145,22 +199,6 @@ struct ArenaBlockHelpers : public AllStatic {
   template <typename function>
   static void iterate_standard_size_classes_backward(function f) { iterate_size_classes_X_X<function, false, false>(f); }
 
-  static constexpr bool is_valid_size_class(block_size_class_t szclass) {
-    return
-#define X(ignored, name) szclass == szclass_ ## name ||
-    ARENA_VALID_BLOCK_SIZES_DO(X)
-#undef X
-    false;
-  }
-
-  static constexpr bool is_valid_standard_size_class(block_size_class_t szclass) {
-    return szclass < szclass_2M && is_valid_size_class(szclass);
-  }
-
-  static constexpr bool is_valid_huge_size_class(block_size_class_t szclass) {
-    return szclass == szclass_2M;
-  }
-
 #ifdef ASSERT
   static void verify_valid_standard_size_class(block_size_class_t szclass) {
     assert(is_valid_standard_size_class(szclass), "Not a valid standard size class (%u)", szclass);
@@ -172,16 +210,6 @@ struct ArenaBlockHelpers : public AllStatic {
     assert(is_valid_size_class(szclass), "Not a valid size class (%u)", szclass);
   }
 #endif // ASSERT
-
-  static constexpr size_t size_class_to_block_size(block_size_class_t szclass) {
-    assert(is_valid_size_class(szclass), "invalid block size class (%u)", szclass);
-    return nth_bit(szclass);
-  }
-
-  static constexpr block_size_class_t block_size_to_size_class(size_t blocksize) {
-    assert(is_valid_block_size(blocksize), "invalid block size (%zu)", blocksize);
-    return constexpr_exact_log2(blocksize);
-  }
 
 };
 
@@ -308,5 +336,5 @@ public:
 #endif
 };
 
-#endif // SHARE_MEMORY_ARENA_ARENABLOCK
+#endif // SHARE_MEMORY_ARENA_ARENABLOCK_HPP
 

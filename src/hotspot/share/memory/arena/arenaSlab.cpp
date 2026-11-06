@@ -330,23 +330,10 @@ void ArenaSlab::verify() const {
 #endif
 
 // This table holds the geometries of the standard slabs hotspot uses.
-// Note that some of them are zero-sized. That is because we don't use them.
-// We keep the entries in tables to make log2(blocksize) the universal lookup
-// index for caches, slabs, and slab parameters.
 
-static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::highest_size_class + 1] = {
+static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num_size_classes] = {
 
   // blocksize    granulesize   numblocks   release_boundary    decay_factor
-
-  // Slabs [1, 256) dont exist
-  {  },
-{  },
-{  },
-{  },
-{  },
-{  },
-{  },
-{  },
 
   // 256 byte blocks
   // We keep all of them inside a single (large) page that is fully resident.
@@ -355,19 +342,10 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::hig
   //        slabs - would save 2MB. Really Worth it?? )
   { 256, 2*M, 8192 /* 2M */,  8192,  0.0f },
 
-  // 512 does not exist.
-{  },
-
   // 1K blocks
   // We keep all of them inside a single (large) page that is fully resident.
   // (Todo: this could actually share a single large page with the 256 byte slab)
 { K, 2*M, 2048 /* 2M */,  2048,  0.0f },
-
-  // the next few slabs dont exist.
-{  },
-{  },
-{  },
-{  },
 
   // 32K blocks
   // This block size sees the highest allocation churn and the highest peak live and average live number.
@@ -378,7 +356,6 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::hig
   // a standard app's needs with resident and 99.9% of all apps needs with burst section; beyond that we
   // will use C-heap.
 { 32*K, 64*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.0f },
-
 
   // 64K blocks: semi important
 { 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.0f },
@@ -404,35 +381,16 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::hig
 ArenaSlabGroup::ArenaSlabGroup(ArenaHeap* arena_heap,
                                ArenaMetadataHeap* metadata_heap,
                                const ArenaSlab::Parameters params[num_slots]) :
-  _slabs{
-    // Size classes [1, 256) are unused
-  {},
-  {},
-  {},
-  {},
-  {},
-  {},
-  {},
-  {},
-  // 256
-  { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_256] }, // 256
-  // 512 (unused)
-  {},
-  // 1024
-  { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_1K] }, // 1024
-  // [2K, 32K) unused
-  {},
-  {},
-  {},
-  {},
-  // from 64K on we have slabs for every size
- { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_32K] }, // 32K
- { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_64K] }, // 64K
- { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_128K] }, // 128K
- { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_256K] }, // 256K
- { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_512K] }, // 512K
- { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_1M] }, // 1M
- { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_2M] }, // 2M
+  _slabs {
+  { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_256] },
+  { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_1K] },
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_32K] },
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_64K] },
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_128K] },
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_256K] },
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_512K] },
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_1M] },
+ { arena_heap, metadata_heap, &params[ArenaBlockHelpers::szclass_2M] },
   }
 {
 }
