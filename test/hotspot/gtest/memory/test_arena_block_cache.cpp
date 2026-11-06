@@ -359,16 +359,8 @@ namespace {
     }
 
     void deallocate_to_cache_and_test(const_blockptr_t block = nullptr) {
-      DEBUG_ONLY(_block_cache.verify_cache();)
-      reality_test();
-
-      const const_blockptr_t b = (block == nullptr) ? _model.get_random_caller_owned_block(_random) : block;
-      assert(b != nullptr, "no in-use blocks left to deallocate?");
-      _model.model_deallocation(b);
-      _block_cache.deallocate_block(b);
-
-      reality_test();
-      DEBUG_ONLY(_block_cache.verify_cache();)
+      const_blockptr_t b = (block == nullptr) ? _model.get_random_caller_owned_block(_random) : block;
+      bulk_deallocate_to_cache_and_test(&b, 1);
     }
 
     void bulk_deallocate_to_cache_and_test(const_blockptr_t blocks[], int num) {

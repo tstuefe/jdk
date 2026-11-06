@@ -56,17 +56,17 @@ public:
     explicit Data(ArenaSlabGroup* slab_group);
   };
 
+private:
+
   // Note: identity for affinity is really just any number that uniquely identifies
   // this thread. Here, we just use the address of a __thread TLS variable (we just
   // reuse &_cpu). That works and is fast and guaranteed to be unique for every (live)
   // thread. And it does not rely on Thread::current().
   static uintptr_t this_thread_identity() { return (uintptr_t)(&_cpu);}
 
-private:
-
   const unsigned _num_cpus;
   Data* const _data; // var-sized array, lives in metadata-arena
-
+  
   static THREAD_LOCAL unsigned   _cpu;
 
   unsigned current_core_slow();

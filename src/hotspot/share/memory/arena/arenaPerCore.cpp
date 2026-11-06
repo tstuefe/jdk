@@ -67,6 +67,7 @@ ArenaPerCoreDataHolder::ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap,
 }
 
 unsigned ArenaPerCoreDataHolder::current_core_slow() {
+
   // Set current CPU
   _cpu = os::processor_id();
 

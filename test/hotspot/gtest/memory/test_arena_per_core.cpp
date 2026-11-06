@@ -69,7 +69,7 @@ TEST_VM(Arena2_PerCore, stress) {
     for (int i = 0; i < 10000; i++) {
       constexpr  block_size_class_t szclass = ArenaBlockHelpers::szclass_32K;
       constexpr  size_t block_size = ArenaBlockHelpers::size_class_to_block_size(szclass);
-      blockptr_t blocks[4];
+      const_blockptr_t blocks[4];
       {
         ArenaPerCoreDataHolder::Data* const data1 = f.holder.get_current_core_data();
         ASSERT_TRUE(is_aligned(data1, DEFAULT_PADDING_SIZE));
@@ -101,9 +101,7 @@ TEST_VM(Arena2_PerCore, stress) {
         ArenaPerCoreDataHolder::Data* const data2 = f.holder.get_current_core_data();
         ArenaMutexLocker ml(data2->_lock);
         ArenaBlockCache* const c = data2->_cache_group.cache_for_log2_block_size(szclass);
-        for (int j = 0; j < 4; j++) {
-          c->deallocate_block(blocks[j]);
-        }
+        c->bulk_deallocate_block(blocks, 4);
       }
     }
   };

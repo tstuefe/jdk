@@ -33,22 +33,34 @@
 #include "utilities/globalDefinitions.hpp"
 
 
+
+// The block cache is a vector of blocks of one block size.
+// A vector for cache-friendly iteration and because the arena manager never writes to free blocks as a policy
+// (avoids cache misses), so linked lists are out of question.
+// The vector is small, since we don't need nor want to cache a large number of blocks per core. Cache sizes are
+// custom-sized for each block size (with the lower sizes, 256, 1K, 32K having the largest caches since these see
+// the largest amount of alloc churn).
+
+// Like all other parts of the memory manager, the cache returns low-address blocks first.
+// The vector is ordered in descending order, highest-addresses first, lowest last. That is because we have more
+// allocation calls than deallocation. Allocation always happens as single blocks whereas we bulk-deallocate a couple
+// of blocks on arena death or resource mark scope end. So we want allocation to be fast. Allocation takes the top
+// (lowest) address from the vector and returns it, so in general, an allocation is really cheap, since vector does
+// not need reshuffling.
+
 class alignas(DEFAULT_PADDING_SIZE) ArenaBlockCache {
+public:
+
+  // one cache line size - one word for control members (count etc)
+  static constexpr int max_cachesize = 7;
+
+private:
 
   NONCOPYABLE(ArenaBlockCache);
-
-  // We allocate all caches with fixed offsets in a big table; keeping their sizes
-  // uniform makes matters simpler.
-  // Cache has one control word holding several values (cache size, count etc) and up to 7 cache entries.
-  // That makes the cache fit into a cache line.
-  // (Todo: make slab an uint8_t index (eg log2 blocksize) then it fits into the control word too)
-  static constexpr int max_cachesize = 7;
 
   const uint8_t _cachesize;   // actual cache size
   uint8_t _count;             // Number of blocks in cache
   bool _is_busy;              // true if allocation requests came in since the last tick
-  // Blocks are ordered on insert, high-to-low
-  // (const pointers since we never change block content from here)
   const_blockptr_t _blocks[max_cachesize];
 
   // Next cacheline, which is okay for now.
@@ -134,32 +146,11 @@ class alignas(DEFAULT_PADDING_SIZE) ArenaBlockCache {
 
 public:
 
+
   ArenaBlockCache(ArenaSlab* slab, int cachesize);
 
   int cachesize() const { return _cachesize; }
   int count() const { return _count; }
-
-  void deallocate_block(const_blockptr_t block) {
-    DEBUG_ONLY(verify_block(block);)
-    const int c = count();
-    block = insert(block, c);
-    if (block != nullptr) {
-      // Overflow: We need to evict. We evict a few blocks from the cache as well
-      // to reduce calls into the slab allocator.
-      assert(c == cachesize(), "Cache should be full");
-      const_blockptr_t eviction_set [max_cachesize + 1];
-      eviction_set[0] = block;
-      for (int i = 0; i < num_evict_on_overflow(); i++) {
-        eviction_set[i + 1] = _blocks[i];
-      }
-      _slab->deallocate_blocks(eviction_set, num_evict_on_overflow() + 1);
-      const int c2 = cachesize() - num_evict_on_overflow();
-      compress_cache(num_evict_on_overflow(), c2);
-      set_count(c2);
-    } else {
-      set_count(c + 1);
-    }
-  }
 
   const_blockptr_t allocate_block() {
     // Remove block with lowest address. This is the top block and typically the hottest.
