@@ -81,8 +81,8 @@ public:
 
   static void chop(Chunk* chunk);                  // Chop this chunk
   static void next_chop(Chunk* chunk);             // Chop next chunk
-  static size_t aligned_overhead_size(void) { return ARENA_ALIGN(sizeof(Chunk)); }
-  static size_t aligned_overhead_size(size_t byte_size) { return ARENA_ALIGN(byte_size); }
+  static constexpr size_t aligned_overhead_size(void) { return ARENA_ALIGN(sizeof(Chunk)); }
+  static constexpr size_t aligned_overhead_size(size_t byte_size) { return ARENA_ALIGN(byte_size); }
 
   size_t length() const         { return _len;  }
   Chunk* next() const           { return _next;  }

@@ -416,7 +416,7 @@ namespace {
       set_all_allocated();
       // Test bulk deallocate without overflow
       constexpr int N = test_overflow ?
-                          ArenaBlockCache::max_blocks_for_bulk_add : cachesize;
+                          ArenaBlockCache::max_blocks_for_bulk_deallocate : cachesize;
       STATIC_ASSERT(!test_overflow || N > cachesize);
       const_blockptr_t arr[N];
       switch(mode) {
@@ -495,7 +495,7 @@ namespace {
         } else if (op_select < 14 && _model.num_owned_by_caller() > 0) {
           deallocate_to_cache_and_test();
         } else if (op_select == 14 && _model.num_owned_by_caller() > num_blocks() / 2) {
-          constexpr int max = ArenaBlockCache::max_blocks_for_bulk_add;
+          constexpr int max = ArenaBlockCache::max_blocks_for_bulk_deallocate;
           const_blockptr_t arr[max];
           const int limit = _random.tosscoin() ? MIN2(max, 3) : max;
           const int num = 1 + (int)_random.next(limit);

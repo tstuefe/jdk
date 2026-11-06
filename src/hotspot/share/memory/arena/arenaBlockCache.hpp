@@ -54,6 +54,8 @@ public:
   // one cache line size - one word for control members (count etc)
   static constexpr int max_cachesize = 7;
 
+  static constexpr int max_blocks_for_bulk_deallocate = 16;
+
 private:
 
   NONCOPYABLE(ArenaBlockCache);
@@ -188,16 +190,14 @@ public:
     return result;
   }
 
-  static constexpr int max_blocks_for_bulk_add = 16;
-
   // Bulk-add a number of blocks to this cache.
   void bulk_deallocate_block(const_blockptr_t blocks[], int num_blocks) {
     assert(blocks != nullptr, "sanity");
     assert(num_blocks > 0, "sanity");
-    assert(num_blocks <= max_blocks_for_bulk_add, "sanity");
+    assert(num_blocks <= max_blocks_for_bulk_deallocate, "sanity");
     DEBUG_ONLY(verify_blocks(blocks, num_blocks);)
 
-    constexpr int eviction_set_max_size = max_blocks_for_bulk_add + max_cachesize;
+    constexpr int eviction_set_max_size = max_blocks_for_bulk_deallocate + max_cachesize;
     const_blockptr_t evict_set [eviction_set_max_size];
     int num_in_eviction_set = 0;
     int num_in_cache = count();

@@ -23,7 +23,7 @@
  *
  */
 
-#if 0
+0
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaPerCore.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
@@ -33,10 +33,7 @@
 
 #include "memory/arena/arenaMemoryManager.hpp"
 
-// We need to know what a chunk is
-#include <algorithm>
 
-#include "ci/ciTypeFlow.hpp"
 #include "memory/arena.hpp"
 
 
@@ -106,9 +103,6 @@ public:
 private:
   Basket<max> _baskets[ArenaBlockHelpers::num_valid_size_classes];
 public:
-  bool add(const_blockptr_t v, unsigned basket) {
-    return _baskets[basket].add(v);
-  }
   Basket<max>* basket(unsigned basket) {
     return _baskets[basket];
   }
@@ -116,11 +110,27 @@ public:
 
 template <size_t basket_max>
 void ArenaMemoryManagerImpl::deallocate_chunks_0(Chunk* chunk) {
+  typedef Basket<basket_max> BasketType;
   // Minimize iterations over chain and minimize number of lockings:
   // We pull the core lock once for all chunks to be returned, regardless
   // of their sizes. We also minimize the number of cache deallocation
   // requests
   BasketGroup<basket_max> basket_group;
+  const Chunk* c = chunk;
+  size_t last_chunk_size = 0;
+  unsigned basket_slot = 0;
+  constexpr size_t chunk_header_size = Chunk::aligned_overhead_size();
+  while (c != nullptr) {
+    const size_t outer_chunk_size = c->length() + chunk_header_size;
+    if (last_chunk_size != outer_chunk_size) {
+      // The size must be a valid block size since it was allocated via ArenaMemoryManagerImpl::allocate..
+      assert(ArenaBlockHelpers::is_valid_block_size(outer_chunk_size), "invalid block size");
+      const block_size_class_t szclass = ArenaBlockHelpers::block_size_to_size_class(outer_chunk_size);
+      basket_slot = ArenaBlockHelpers::valid_size_classes[szclass];
+    }
+    BasketType* basket = basket_group.basket(szclass);
+    c = c->next();
+  }
   for
 
 }
@@ -135,8 +145,6 @@ void ArenaMemoryManagerImpl::deallocate_chunks(Chunk* chunk, size_t arena_size_h
 
   // We want to iterate over the chunks only once, and optimize return to the block caches.
   // About 80% of arenas are < 200K, and consist of only a starter block (256 or 1K) and 1..n 32K blocks.
-  //
+
 
 }
-
-#endif

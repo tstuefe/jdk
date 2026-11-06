@@ -31,7 +31,6 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-#if 0
 class Chunk;
 class outputStream;
 class ArenaMemoryManagerImpl;
@@ -66,5 +65,5 @@ public:
   static ArenaMemoryManager* the_manager();
 
 };
-#endif
+
 #endif // SHARE_MEMORY_ARENA_ARENAMANAGER_HPP
