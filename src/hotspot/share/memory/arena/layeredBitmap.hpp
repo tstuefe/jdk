@@ -516,6 +516,22 @@ public:
     return find_X_X_bit<false, true>(beg, end);
   }
 
+  IndexType find_last_clear_bit(IndexType beg) const {
+    return find_X_X_bit<false, false>(beg, num_bits());
+  }
+
+  IndexType find_first_set_bit(IndexType beg) const {
+    return find_X_X_bit<true, true>(beg, num_bits());
+  }
+
+  IndexType find_first_clear_bit(IndexType beg) const {
+    return find_X_X_bit<true, false>(beg, num_bits());
+  }
+
+  IndexType find_last_set_bit(IndexType beg) const {
+    return find_X_X_bit<false, true>(beg, num_bits());
+  }
+
   IndexType find_last_clear_bit(IndexType beg, IndexType end) const {
     return find_X_X_bit<false, false>(beg, end);
   }

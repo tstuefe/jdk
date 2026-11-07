@@ -39,27 +39,24 @@ class ArenaMemoryManagerImpl;
 // converts Chunk to Blocks
 class ArenaMemoryManager {
 
-  ArenaMemoryManagerImpl* const _impl;
-
-  ArenaMemoryManager(ArenaMemoryManagerImpl* impl);
+  ArenaMemoryManagerImpl* _impl;
 
 public:
 
   ArenaMemoryManager();
-  ~ArenaMemoryManager();
 
   void initialize();
-  void cleanup();
+  void cleanup(); // Tests only, the global memory manager is never released.
+  bool is_initialized() const { return _impl != nullptr; }
 
   // Given a chain of chunks, deallocate all of them. After returning
   // from this functions, chunks are invalid and should not be accessed.
-  // The arena_size_hint is a (upper ceiling) of the total size all chunks
-  // together are expected to have.
-  void deallocate_chunks(Chunk* chunk, size_t arena_size_hint);
+  void deallocate_chunks(const Chunk* first_chunk) const;
 
-  // Allocate a single chunk of the given size. Chunk
-  // returned may be of larger size.
-  Chunk* allocate_chunk(size_t requested_size);
+  // Allocate memory for a single chunk of the given size. Chunk
+  // returned may be of larger size. Note that the returned memory is not
+  // yet initialized.
+  const_blockptr_t allocate_chunk_storage(size_t requested_size, size_t& real_size) const;
 
   // Returns pointer to the global manager
   static ArenaMemoryManager* the_manager();

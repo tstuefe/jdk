@@ -78,8 +78,14 @@ struct ArenaBlockHelpers : public AllStatic {
 #undef X
 
   static constexpr block_size_class_t highest_standard_size_class = szclass_1M;
-  static constexpr block_size_class_t highest_size_class = szclass_2M;
-  static constexpr size_t huge_block_granularity = block_size_2M;
+  static constexpr block_size_class_t huge_size_class = szclass_2M;
+  static constexpr block_size_class_t highest_size_class = huge_size_class;
+
+  static constexpr unsigned log2_max_standard_block_size = 20; // 1MB
+  static constexpr size_t max_standard_block_size = nth_bit(log2_max_standard_block_size);
+  static constexpr unsigned log2_huge_block_granularity = log2_max_standard_block_size + 1;
+  static constexpr size_t huge_block_granularity = nth_bit(log2_huge_block_granularity); // 2MB
+  static constexpr size_t huge_block_max_size = 2 * G;
 
   // A translation table translates from size class to block size
   static constexpr size_t size_class_to_block_size_table[] = {
@@ -91,17 +97,14 @@ struct ArenaBlockHelpers : public AllStatic {
   static constexpr unsigned num_size_classes = sizeof(size_class_to_block_size_table)/sizeof(size_class_to_block_size_table[0]);
   static constexpr unsigned num_standard_size_classes = num_size_classes - 1;
 
-  static constexpr size_t max_standard_block_size = block_size_1M;
-
-
-  // Given a size class, return block size
+  // Given a size class, return block size (for huge_size_class, returns huge_block_granularity)
   static constexpr size_t size_class_to_block_size(block_size_class_t szclass) {
     assert(szclass < num_size_classes, "Invalid size class (%u)", szclass);
     return size_class_to_block_size_table[szclass];
   }
 
-  // A translation table translates from a log2 block size to size class
-  static constexpr block_size_class_t log2_block_size_to_size_class_table[constexpr_exact_log2(block_size_2M) + 1] = {
+  // A translation table translates from log2 block size to size class
+  static constexpr block_size_class_t log2_block_size_to_size_class_table[log2_max_standard_block_size + 1] = {
     // [1, 256] => 256
     szclass_256,
     szclass_256,
@@ -126,14 +129,34 @@ struct ArenaBlockHelpers : public AllStatic {
     szclass_128K,
     szclass_256K,
     szclass_512K,
-    szclass_1M,
-    szclass_2M
+    szclass_1M
   };
 
-  static constexpr block_size_class_t log2_block_size_to_size_class(unsigned log2_block_size) {
-    assert(log2_block_size < (sizeof(log2_block_size_to_size_class_table) /
-                              sizeof(log2_block_size_to_size_class_table[0])), "Sanity");
-    return log2_block_size_to_size_class_table[log2_block_size];
+  // Returns the size class for a given valid standard block size (one of 256, K, 32K, 64K ...).
+  static constexpr block_size_class_t valid_standard_block_size_to_size_class(size_t block_size) {
+    DEBUG_ONLY(verify_valid_standard_block_size(block_size);)
+    const unsigned log2_blocksize = constexpr_exact_log2(block_size);
+    return log2_block_size_to_size_class_table[log2_blocksize];
+  }
+
+  // Returns the size class for a given pow2-aligned block size that can be represented by a standard
+  // block size. If no size class for this exact size exist, the next larger size class is returned.
+  // E.g. 8K => szclass_32K.
+  static constexpr block_size_class_t pow2_block_size_to_standard_size_class(size_t block_size) {
+    assert(is_power_of_2(block_size), "Block size must be a power of 2 (%zu)", block_size);
+    assert(block_size <= max_standard_block_size, "Block size too large (%zu)", block_size);
+    const unsigned log2_blocksize = constexpr_exact_log2(block_size);
+    return log2_block_size_to_size_class_table[log2_blocksize];
+  }
+
+  // Returns the size class for a given block size that can be represented by a standard
+  // block size. The block size does not have to be aligned.
+  // If no size class for this exact size exist, the next larger size class is returned.
+  // E.g. 9K => szclass_32K.
+  static constexpr block_size_class_t unaligned_block_size_to_standard_size_class(size_t block_size) {
+    assert(block_size <= max_standard_block_size, "Block size too large (%zu)", block_size);
+    const size_t pow2 = round_up_power_of_2(block_size);
+    return pow2_block_size_to_standard_size_class(pow2);
   }
 
   static constexpr bool is_valid_standard_size_class(block_size_class_t szclass) {
@@ -148,7 +171,8 @@ struct ArenaBlockHelpers : public AllStatic {
     return szclass <= highest_size_class;
   }
 
-  // Given a block size, returns true if its one of our valid block sizes
+  // Given a block size, returns true if its one of our valid standard block sizes
+  // or the huge block granularity
   static constexpr bool is_valid_block_size(size_t blocksize) {
 #define X(ignored, size, ignored2) if (blocksize == size) return true;
     ARENA_VALID_BLOCK_SIZES_DO(X)
@@ -161,7 +185,8 @@ struct ArenaBlockHelpers : public AllStatic {
   }
 
   static constexpr bool is_valid_huge_size(size_t blocksize) {
-    return blocksize > 0u && is_aligned(blocksize, huge_block_granularity);
+    return blocksize > 0u && blocksize < ArenaBlockHelpers::huge_block_max_size &&
+           is_aligned(blocksize, huge_block_granularity);
   }
 
 #ifdef ASSERT
@@ -200,13 +225,13 @@ struct ArenaBlockHelpers : public AllStatic {
   static void iterate_standard_size_classes_backward(function f) { iterate_size_classes_X_X<function, false, false>(f); }
 
 #ifdef ASSERT
-  static void verify_valid_standard_size_class(block_size_class_t szclass) {
+  static void verify_standard_size_class(block_size_class_t szclass) {
     assert(is_valid_standard_size_class(szclass), "Not a valid standard size class (%u)", szclass);
   }
-  static void verify_valid_huge_size_class(block_size_class_t szclass) {
+  static void verify_huge_size_class(block_size_class_t szclass) {
     assert(is_valid_huge_size_class(szclass), "Not a valid huge size class (%u)", szclass);
   }
-  static void verify_valid_size_class(block_size_class_t szclass) {
+  static void verify_size_class(block_size_class_t szclass) {
     assert(is_valid_size_class(szclass), "Not a valid size class (%u)", szclass);
   }
 #endif // ASSERT

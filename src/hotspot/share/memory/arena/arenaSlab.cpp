@@ -333,6 +333,8 @@ void ArenaSlab::verify() const {
 
 static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num_size_classes] = {
 
+  // Todo. Instead of literals, use the constants from ArenaBlockHelpers
+
   // blocksize    granulesize   numblocks   release_boundary    decay_factor
 
   // 256 byte blocks
@@ -371,7 +373,7 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
 
   // 2MB blocks really are huge blocks (consisting of sequences of neighboring 2MB blocks). Keep the total size of this
   // slab large enough to absorb most of the abnormal allocations a compiler may do.
-{ 2*M, 2*M, 1024 /* 2GB */,  0 /* no resident section */,  0.0f }
+{ 2*M, 2*M, ArenaBlockHelpers::huge_block_max_size / (2 * M) /* 2GB = 1024 */,  0 /* no resident section */,  0.0f }
 
 };
 

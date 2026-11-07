@@ -34,8 +34,8 @@
 #include "testutils.hpp"
 
 struct ArenaTestHelpers : public AllStatic {
-  template <bool set>
-  static BitMap::idx_t get_random_X_bit(PredictableRandom& rand, const BitMap& bm) {
+  template <class BitMapClass, bool set>
+  static BitMap::idx_t get_random_X_bit(PredictableRandom& rand, const BitMapClass& bm) {
     const BitMap::idx_t beg = rand.next(bm.size());
     BitMap::idx_t idx = set ? bm.find_first_set_bit(beg) : bm.find_first_clear_bit(beg);
     if (idx == bm.size()) {
@@ -48,13 +48,15 @@ struct ArenaTestHelpers : public AllStatic {
   }
 
   // Helper function, returns index of a random bit that is set in given bitmap, bm.size() if not found
-  static BitMap::idx_t get_random_set_bit(PredictableRandom& rand, const BitMap& bm) {
-    return get_random_X_bit<true>(rand, bm);
+  template <class BitMapClass>
+  static BitMap::idx_t get_random_set_bit(PredictableRandom& rand, const BitMapClass& bm) {
+    return get_random_X_bit<BitMapClass, true>(rand, bm);
   }
 
   // Helper function, returns index of a random bit that is set in given bitmap, bm.size() if not found
-  static BitMap::idx_t get_random_clear_bit(PredictableRandom& rand, const BitMap& bm) {
-    return get_random_X_bit<false>(rand, bm);
+  template <class BitMapClass>
+  static BitMap::idx_t get_random_clear_bit(PredictableRandom& rand, const BitMapClass& bm) {
+    return get_random_X_bit<BitMapClass, false>(rand, bm);
   }
 
   // Helper function, returns [0..outlen) randomly chosen bits that are set in the given bitmap.

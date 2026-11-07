@@ -77,13 +77,43 @@ TEST_VM(Arena2_BlockHelpers, size_class_helpers) {
   ASSERT_EQ(ArenaBlockHelpers::size_class_to_block_size(ArenaBlockHelpers::szclass_2M), 2 * M);
 
   block_size_class_t szclass_last = 0;
-  for (unsigned i = 0; i <= constexpr_exact_log2(2 * M); i ++) {
+  for (unsigned i = 0; i <= constexpr_exact_log2(1 * M); i ++) {
     const size_t block_size = nth_bit(i);
-    const block_size_class_t szclass = ArenaBlockHelpers::log2_block_size_to_size_class(i);
-    const size_t block_size_redirect = ArenaBlockHelpers::size_class_to_block_size(szclass);
-    ASSERT_LE(block_size, block_size_redirect);
+    const block_size_class_t szclass = ArenaBlockHelpers::pow2_block_size_to_standard_size_class(block_size);
     ASSERT_LT(szclass, ArenaBlockHelpers::num_size_classes);
     ASSERT_GE(szclass, szclass_last);
     szclass_last = szclass;
   }
+
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(1),
+            ArenaBlockHelpers::szclass_256);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(256u - 1),
+            ArenaBlockHelpers::szclass_256);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(256u),
+            ArenaBlockHelpers::szclass_256);
+
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(256u + 1),
+            ArenaBlockHelpers::szclass_1K);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(K - 1),
+            ArenaBlockHelpers::szclass_1K);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(K),
+            ArenaBlockHelpers::szclass_1K);
+
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(K + 1),
+            ArenaBlockHelpers::szclass_32K);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(4 * K),
+            ArenaBlockHelpers::szclass_32K);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(32 * K - 1),
+            ArenaBlockHelpers::szclass_32K);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(32 * K),
+            ArenaBlockHelpers::szclass_32K);
+
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(32 * K + 1),
+            ArenaBlockHelpers::szclass_64K);
+
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(M - 1),
+            ArenaBlockHelpers::szclass_1M);
+  ASSERT_EQ(ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(M),
+            ArenaBlockHelpers::szclass_1M);
+
 }

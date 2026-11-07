@@ -191,7 +191,7 @@ public:
   }
 
   // Bulk-add a number of blocks to this cache.
-  void bulk_deallocate_block(const_blockptr_t blocks[], int num_blocks) {
+  void bulk_deallocate_block(const const_blockptr_t blocks[], int num_blocks) {
     assert(blocks != nullptr, "sanity");
     assert(num_blocks > 0, "sanity");
     assert(num_blocks <= max_blocks_for_bulk_deallocate, "sanity");

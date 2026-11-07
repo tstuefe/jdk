@@ -45,7 +45,7 @@ public:
   // For now. Todo, needs refinement.
   static constexpr size_t large_page_size = 2 * M;
 
-  ArenaHeapBase();
+  ArenaHeapBase(size_t max_size);
   ~ArenaHeapBase();
 
   bool reserved_contains(const_blockptr_t block) const {
@@ -70,12 +70,14 @@ public:
 
 class ArenaHeap : public ArenaHeapBase {
 
+  static constexpr size_t max_size_default = 4 * G;
+
   // We hand out uncommitted memory. The slabs themselves take care of committing.
   const_blockptr_t _hwm;
 
 public:
 
-  ArenaHeap();
+  ArenaHeap(size_t max_size = max_size_default);
 
   // Reserves memory for a slab. Slab start will be aligned to granule size.
   // Slab will *not* be committed.
@@ -87,6 +89,8 @@ public:
 
 class ArenaMetadataHeap : public ArenaHeapBase {
 
+  static constexpr size_t max_size_default = 64 * M; // likely a lot less
+
   // We pre-commit the metadata heap. We then allocate all metadata (which happens
   // at VM startup), after which - see finalize() - we shrink the commit area to
   // what we actually allocated, and possibly adivise THP use.
@@ -94,11 +98,9 @@ class ArenaMetadataHeap : public ArenaHeapBase {
   // and two for precommit/finalize)
   address _hwm;
 
-
-
 public:
 
-  ArenaMetadataHeap();
+  ArenaMetadataHeap(size_t max_size = max_size_default);
 
   // Reserves memory at the hwm.
   address allocate(size_t size);
@@ -117,6 +119,7 @@ public:
   void align_hwm_to() { align_hwm_up(alignof(T)); }
 
   const_address hwm() const { return _hwm; }
+
 };
 
 

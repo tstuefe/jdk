@@ -36,19 +36,19 @@
 // Basically a fake implementation, real implementation comes later.
 // But it already does the important stuff (reserve, commit, release, madvise for yes no THP)
 
-static constexpr size_t max_heap = 4 * G;
-
-ArenaHeapBase::ArenaHeapBase() :
-  _base([]() {
-    const address p = (address) os::reserve_memory_aligned(max_heap, ArenaHeap::large_page_size, mtChunk, false);
+ArenaHeapBase::ArenaHeapBase(size_t max_size) :
+  _base([max_size]() {
+    assert(max_size > 0, "Sanity");
+    assert(is_aligned(max_size, large_page_size), "Sanity");
+    const address p = (address) os::reserve_memory_aligned(max_size, ArenaHeap::large_page_size, mtChunk, false);
     assert(p != nullptr, "OOM");
     return p;
   } ()),
-  _end(_base + max_heap)
+  _end(_base + max_size)
 {}
 
 ArenaHeapBase::~ArenaHeapBase() {
-  os::release_memory((char*)_base, max_heap);
+  os::release_memory((char*)_base, reserved_size());
 }
 
 void ArenaHeapBase::commit_memory(const_blockptr_t from, const_blockptr_t to){
@@ -102,7 +102,7 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
 
 /////////////
 
-ArenaHeap::ArenaHeap() : ArenaHeapBase(), _hwm(base()) {}
+ArenaHeap::ArenaHeap(size_t max_size) : ArenaHeapBase(max_size), _hwm(base()) {}
 
 // Reserves memory for a slab. Slab start will be aligned to granule size.
 const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granule_size, unsigned num_blocks) {
@@ -130,7 +130,7 @@ const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granul
 
 //////////////
 
-ArenaMetadataHeap::ArenaMetadataHeap() : ArenaHeapBase(),
+ArenaMetadataHeap::ArenaMetadataHeap(size_t max_size) : ArenaHeapBase(max_size),
   _hwm(base())
 {
   // Make it a multiple of THP size - we want to have to option to back this with

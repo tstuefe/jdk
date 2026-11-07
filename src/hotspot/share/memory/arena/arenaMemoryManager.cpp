@@ -23,7 +23,7 @@
  *
  */
 
-#if 0
+
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaPerCore.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
@@ -45,15 +45,44 @@
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
-class ArenaMemoryManagerImpl {
+
+typedef const Chunk* const_chunkptr_t;
+
+namespace {
+  // A simple fixed-sized array of chunk pointers
+  class Basket {
+    unsigned _count;
+    static constexpr unsigned max = ArenaBlockCache::max_blocks_for_bulk_deallocate;
+    const_chunkptr_t _chunks[ArenaBlockCache::max_blocks_for_bulk_deallocate];
+
+  public:
+
+    Basket() : _count(0), _chunks() {}
+
+    // Add block. Returns true if full.
+    bool add(const_chunkptr_t c) {
+      assert(_count < max, "must not be full");
+      _chunks[_count++] = c;
+      return _count == max;
+    }
+
+    unsigned count() const { return _count; }
+    const const_chunkptr_t* v() const { return _chunks; }
+    void reset() { _count = 0; }
+  };
+}
+
+
+class ArenaMemoryManagerImpl : public CHeapObj<mtChunk>{
 
   ArenaHeap _arena_heap;
   ArenaMetadataHeap _metadata_heap;
   ArenaSlabGroup _slab_group;
   ArenaPerCoreDataHolder _per_core;
 
-  template <size_t basket_max>
-  void deallocate_chunks_0(Chunk* chunk);
+  // Helper. Given a basket, return its content to the cache or the slab
+  // depending on who is resonsible for receiving it.
+  void deallocate_chunks_in_basket(ArenaCacheGroup& cache_group, block_size_class_t szclass, const Basket* basket);
 
 public:
 
@@ -64,88 +93,178 @@ public:
   {
   }
 
-  // Given a chain of chunks, deallocate all of them. After returning
-  // from this functions, chunks are invalid and should not be accessed.
-  // The arena_size_hint is a (upper ceiling) of the total size all chunks
-  // together are expected to have.
-  void deallocate_chunks(Chunk* chunk, size_t arena_size_hint);
-
-  // Allocate a single chunk of the given size. Chunk
-  // returned may be of larger size.
-  Chunk* allocate_chunk(size_t requested_size);
+  void deallocate_chunks(const Chunk* first_chunk);
+  const_blockptr_t allocate_chunk_storage(size_t requested_size, size_t& real_size);
 
 };
 
-template <size_t max>
-class Basket {
-  unsigned _count;
-  const_blockptr_t _v[max];
-public:
+// Helper. Given a basket, return its content to the cache or the slab
+// depending on who is responsible for receiving it.
+void ArenaMemoryManagerImpl::deallocate_chunks_in_basket(ArenaCacheGroup& cache_group, block_size_class_t szclass, const Basket* basket) {
+  assert(basket != nullptr, "invalid basket");
+  assert(basket->count() > 0, "basket empty?");
+  assert(ArenaBlockHelpers::is_valid_size_class(szclass), "invalid block size");
 
-  Basket() : _count(0), _v{} {}
+  DEBUG_ONLY(ArenaBlockHelpers::verify_size_class(szclass));
+  if (szclass < ArenaBlockHelpers::huge_size_class) {
+    // a basket with 1..n standard blocks. These are returned to their respective caches.
+    ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
+    cache->bulk_deallocate_block((const_blockptr_t*) basket->v(), basket->count());
+  } else {
+    // a basket with 1..n huge blocks. These are never cached but returned directly to the huge block slab.
+    ArenaSlab* const slab_for_huge_blocks = _slab_group.slab_for_size_class(szclass);
+    for (unsigned i = 0; i < basket->count(); i++) {
+      const const_chunkptr_t chunk = basket->v()[i];
+      const size_t outer_chunk_size = chunk->length() + Chunk::aligned_overhead_size();
+      DEBUG_ONLY(ArenaBlockHelpers::verify_valid_huge_size(outer_chunk_size);)
+      slab_for_huge_blocks->deallocate_huge_block((const_blockptr_t) chunk, outer_chunk_size);
+    }
+  }
+}
 
-  // Add block. Returns true if full.
-  bool add(const_blockptr_t v) {
-    assert(_count < max, "must not be full");
-    _v[_count++] = v;
-    return _count == max;
+// Allocate a single chunk of the given size. Chunk
+// returned may be of larger size.
+const_blockptr_t ArenaMemoryManagerImpl::allocate_chunk_storage(size_t requested_size, size_t& real_size) {
+
+  const_blockptr_t result;
+  size_t real;
+
+  assert(requested_size > 0, "Sanity");
+
+  if (requested_size <= ArenaBlockHelpers::max_standard_block_size) {
+    // Translate the request size into a valid block size.
+    const block_size_class_t szclass =
+      ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(requested_size);
+
+    // Grab the per-core data for the core we are running on
+    ArenaPerCoreDataHolder::Data* const per_core = _per_core.get_current_core_data();
+    assert(per_core != nullptr, "invalid block size");
+
+    {
+      // Lock per-core data
+      ArenaMutexLocker locker(per_core->_lock);
+
+      // Grab cache and allocate a block from it
+      ArenaBlockCache* const cache = per_core->_cache_group.cache_for_size_class(szclass);
+      result = cache->allocate_block();
+      real = ArenaBlockHelpers::size_class_to_block_size(szclass);
+    }
+
+  } else {
+    // It is a huge block. We allocate it directly from the huge-block slab.
+    ArenaSlab* const slab = _slab_group.slab_for_size_class(ArenaBlockHelpers::huge_size_class);
+    real = align_up(requested_size, ArenaBlockHelpers::huge_block_granularity);
+    result = slab->allocate_huge_block(real);
   }
 
-  unsigned count() const { return _count; }
-  const_blockptr_t* v() const { return _v; }
-  void reset() { _count = 0; }
-};
-
-template <size_t max>
-class BasketGroup {
-public:
-  static constexpr unsigned num_baskets = ArenaBlockHelpers::num_valid_size_classes;
-private:
-  Basket<max> _baskets[ArenaBlockHelpers::num_valid_size_classes];
-public:
-  Basket<max>* basket(unsigned basket) {
-    return _baskets[basket];
+  if (result != nullptr) {
+    real_size = real;
   }
-};
+  return result;
+}
 
-template <size_t basket_max>
-void ArenaMemoryManagerImpl::deallocate_chunks_0(Chunk* chunk) {
-  typedef Basket<basket_max> BasketType;
+void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
+
   // Minimize iterations over chain and minimize number of lockings:
   // We pull the core lock once for all chunks to be returned, regardless
   // of their sizes. We also minimize the number of cache deallocation
   // requests
-  BasketGroup<basket_max> basket_group;
-  const Chunk* c = chunk;
-  size_t last_chunk_size = 0;
-  unsigned basket_slot = 0;
-  constexpr size_t chunk_header_size = Chunk::aligned_overhead_size();
-  while (c != nullptr) {
-    const size_t outer_chunk_size = c->length() + chunk_header_size;
-    if (last_chunk_size != outer_chunk_size) {
-      // The size must be a valid block size since it was allocated via ArenaMemoryManagerImpl::allocate..
-      assert(ArenaBlockHelpers::is_valid_block_size(outer_chunk_size), "invalid block size");
-      const block_size_class_t szclass = ArenaBlockHelpers::block_size_to_size_class(outer_chunk_size);
-      basket_slot = ArenaBlockHelpers::valid_size_classes[szclass];
+
+  // Grab the per-core data for the core we are running on
+  ArenaPerCoreDataHolder::Data* const per_core = _per_core.get_current_core_data();
+  assert(per_core != nullptr, "invalid block size");
+
+  // The cache group to return blocks to
+  ArenaCacheGroup& cache_group = per_core->_cache_group;
+
+  // The baskets we collect our pointers in.
+  // Allocating this on stack is intended.
+  Basket baskets[ArenaBlockHelpers::num_size_classes];
+
+  {
+    // Minimize iterations over chain and minimize number of lockings:
+    // We pull the core lock once for all chunks to be returned, regardless
+    // of their sizes. We also minimize the number of cache deallocation
+    // requests
+
+    // Lock per-core data
+    ArenaMutexLocker locker(per_core->_lock);
+
+    // First walk the chunk chain and fill the return baskets.
+    {
+      const Chunk* c = chunk;
+      size_t last_outer_chunk_size = (size_t)-1;
+      block_size_class_t szclass = (block_size_class_t)-1;
+      Basket* current_basket = nullptr;
+      constexpr size_t chunk_header_size = Chunk::aligned_overhead_size();
+      while (c != nullptr) {
+        const size_t outer_chunk_size = c->length() + chunk_header_size;
+        if (last_outer_chunk_size != outer_chunk_size) {
+          // The size must be either a valid standard block size or a valid huge block size,
+          // size since it had been allocated before via ArenaMemoryManagerImpl::allocate..
+          szclass = (outer_chunk_size <= ArenaBlockHelpers::max_standard_block_size) ?
+            ArenaBlockHelpers::valid_standard_block_size_to_size_class(outer_chunk_size) :
+            ArenaBlockHelpers::huge_size_class;
+          current_basket = baskets + szclass;
+          last_outer_chunk_size = outer_chunk_size;
+        }
+
+        // Add to basket.
+        const bool basket_is_full = current_basket->add(c);
+
+        if (basket_is_full) { // prematurely full?
+          // Rare. Must be a large arena.
+          deallocate_chunks_in_basket(cache_group, szclass, current_basket);
+          current_basket->reset();
+        }
+        c = c->next();
+      }
     }
-    BasketType* basket = basket_group.basket(szclass);
-    c = c->next();
+
+    // Now return all standard chunks we collected
+    for (block_size_class_t szclass = 0; szclass <= ArenaBlockHelpers::highest_standard_size_class; szclass++) {
+      const Basket* const basket = baskets + szclass;
+      if (basket->count() > 0) {
+        deallocate_chunks_in_basket(cache_group, szclass, basket);
+      }
+    }
+
+    // Now return all huge blocks we collected.
+    {
+      const Basket* const huge_basket = baskets + ArenaBlockHelpers::highest_size_class;
+      if (huge_basket->count() > 0) {
+        deallocate_chunks_in_basket(cache_group, ArenaBlockHelpers::highest_size_class, huge_basket);
+      }
+    }
   }
-  for
-
 }
 
-// Given a chain of chunks, deallocate all of them. After returning
-// from this functions, chunks are invalid and should not be accessed.
-// The arena_size_hint is a (upper ceiling) of the total size all chunks
-// together are expected to have.
-void ArenaMemoryManagerImpl::deallocate_chunks(Chunk* chunk, size_t arena_size_hint) {
-  constexpr size_t basket_size = ArenaBlockCache::max_cachesize + ArenaBlockCache::max_blocks_for_bulk_add;
-  Basket<basket_size> basket;
-
-  // We want to iterate over the chunks only once, and optimize return to the block caches.
-  // About 80% of arenas are < 200K, and consist of only a starter block (256 or 1K) and 1..n 32K blocks.
-
-
+ArenaMemoryManager::ArenaMemoryManager() :
+  _impl(nullptr) {
 }
-#endif
+
+void ArenaMemoryManager::initialize() {
+  _impl = new ArenaMemoryManagerImpl();
+}
+
+void ArenaMemoryManager::cleanup() {
+  delete _impl;
+  _impl = nullptr;
+}
+
+void ArenaMemoryManager::deallocate_chunks(const Chunk* first_chunk) const {
+  assert(is_initialized(), "not initialized");
+  return _impl->deallocate_chunks(first_chunk);
+}
+
+const_blockptr_t ArenaMemoryManager::allocate_chunk_storage(size_t requested_size, size_t& real_size) const {
+  assert(is_initialized(), "not initialized");
+  return _impl->allocate_chunk_storage(requested_size, real_size);
+}
+
+static ArenaMemoryManager _the_manager;
+
+// Returns pointer to the global manager
+ArenaMemoryManager* ArenaMemoryManager::the_manager() {
+  return &_the_manager;
+}
