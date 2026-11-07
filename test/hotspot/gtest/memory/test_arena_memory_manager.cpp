@@ -89,7 +89,8 @@ namespace {
     void add_chunk(Chunk* c) {
       assert(c != nullptr, "Sanity");
       const BitMap::idx_t idx = _chunk_map.find_first_clear_bit(0);
-      assert(idx < max_num_allocations, "full?");
+      const bool is_full = idx == max_num_allocations;
+      assert(!is_full, "full?");
       assert(_chunks[idx] == nullptr, "out of sync");
       _chunks[idx] = c;
       _chunk_map.set_bit(idx);
@@ -218,7 +219,24 @@ namespace {
       while (deallocate_chunks_and_test(16));
     }
 
+    void test_random() {
+      for (int cycle = 0; cycle < 10000; cycle++) {
+        const int op_select = _random.next(16);
+        const size_t size = _random.next(16) > 14 ?
+          M + _random.next(M * 10) : 1 + _random.next(64 * K);
+        if (op_select < 12 && !_allocated_chunks.is_full()) {
+          allocate_chunk_and_test(size);
+        } else {
+          deallocate_chunks_and_test(4);
+        }
+        if (::testing::Test::HasFailure()) {
+          tty->print_cr("cycle %d op %d", cycle, op_select);
+          return;
+        }
+      }
+    }
   };
+
 }
 
 
@@ -232,6 +250,8 @@ TEST_VM(Arena2_ArenaMemoryManager, testname ) { \
   DEFINE_TESTS(seed, test_standard_alloc ) \
   DEFINE_TESTS(seed, test_huge_alloc_dealloc ) \
   DEFINE_TESTS(seed, test_chunk_chain_deallocation_samesize ) \
-  DEFINE_TESTS(seed, test_chunk_chain_deallocation_mixedsize )
+  DEFINE_TESTS(seed, test_chunk_chain_deallocation_mixedsize ) \
+  DEFINE_TESTS(seed, test_random )
+
 
 DEFINE_ALL_TESTS(0xdeadbeef)
