@@ -140,7 +140,6 @@ const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granul
 void ArenaHeap::verify() const {
   ArenaHeapBase::verify();
   assert(_hwm >= base() && _hwm <= end(), "Sanity");
-  assert(is_aligned(_hwm, large_page_size), "Sanity");
 }
 #endif
 

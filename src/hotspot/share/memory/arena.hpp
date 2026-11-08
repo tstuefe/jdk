@@ -36,7 +36,7 @@
 #define ARENA_ALIGN(x) (align_up((x), ARENA_AMALLOC_ALIGNMENT))
 
 // Linked list of raw memory chunks
-class Chunk {
+class alignas(BytesPerLong) Chunk {
 
  private:
   Chunk*       _next;     // Next Chunk in list

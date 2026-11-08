@@ -202,14 +202,14 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
       constexpr size_t chunk_header_size = Chunk::aligned_overhead_size();
       while (c != nullptr) {
         const size_t outer_chunk_size = c->length() + chunk_header_size;
+        const Chunk* const c_next = c->next();
 
         // We may rarely encounter chunks that are remnants from pre-initialization
         // time or had been allocated on the slab-exhausted fallback path. These
         // have to be returned to the C-Heap.
         if (c->on_c_heap()) {
-          const Chunk* const tmp = c->next();
           os::free((void*)c);
-          c = tmp;
+          c = c_next;
           continue;
         }
 
@@ -219,6 +219,7 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
             assert(is_aligned(c, outer_chunk_size), "invalid block alignment");
             szclass = ArenaBlockHelpers::valid_standard_block_size_to_size_class(outer_chunk_size);
           } else {
+            assert(outer_chunk_size > ArenaBlockHelpers::max_standard_block_size, "invalid block size");
             assert(is_aligned(c, ArenaBlockHelpers::huge_block_granularity), "invalid block alignment");
             szclass = ArenaBlockHelpers::huge_size_class;
           }
@@ -234,7 +235,7 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
           deallocate_chunks_in_basket(cache_group, szclass, current_basket);
           current_basket->reset();
         }
-        c = c->next();
+        c = c_next;
       }
     }
 

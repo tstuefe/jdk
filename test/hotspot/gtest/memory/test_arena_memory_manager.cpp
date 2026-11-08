@@ -298,6 +298,7 @@ TEST_VM(Arena2_ArenaMemoryManager, testname ) { \
   DEFINE_TESTS(seed, test_huge_alloc_dealloc ) \
   DEFINE_TESTS(seed, test_chunk_chain_deallocation_samesize ) \
   DEFINE_TESTS(seed, test_chunk_chain_deallocation_mixedsize ) \
+  DEFINE_TESTS(seed, test_chunk_chain_deallocation_some_in_c_heap) \
   DEFINE_TESTS(seed, test_random )
 
 

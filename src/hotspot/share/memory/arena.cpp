@@ -86,6 +86,7 @@ static Chunk* allocate_chunk(Arena* arena, size_t length, AllocFailType alloc_fa
 
   assert(is_aligned(length, ARENA_AMALLOC_ALIGNMENT), "chunk payload length misaligned: %zu.", length);
 
+  const size_t length_with_header = length + Chunk::aligned_overhead_size();
   Chunk* storage = nullptr;
   size_t real_size = 0;
   bool on_c_heap = false;
@@ -93,14 +94,14 @@ static Chunk* allocate_chunk(Arena* arena, size_t length, AllocFailType alloc_fa
   // Allocate from arena memory manager, if active
   ArenaMemoryManager& amm = ArenaMemoryManager::instance();
   if (amm.is_initialized()) {
-    storage = amm.allocate_chunk_storage(length, real_size);
+    storage = amm.allocate_chunk_storage(length_with_header, real_size);
   }
 
   // Still during initialization, or memory manager is exhausted?
   // Allocate a new Chunk from C-heap.
   if (storage == nullptr) {
-    real_size = ARENA_ALIGN(sizeof(Chunk)) + length;
-    storage = (Chunk*) os::malloc(real_size, mtChunk, CALLER_PC);
+    real_size = length_with_header;
+    storage = (Chunk*) os::malloc(length_with_header, mtChunk, CALLER_PC);
     on_c_heap = true;
   }
 
