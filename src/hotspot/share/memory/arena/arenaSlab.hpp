@@ -255,6 +255,8 @@ public:
     return slab;
   }
 
+  DEBUG_ONLY(void verify() const);
+
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENASLAB_HPP

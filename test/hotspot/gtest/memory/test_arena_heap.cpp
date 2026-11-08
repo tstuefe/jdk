@@ -60,6 +60,10 @@ static void test_reserve_slab_memory(bool forward) {
   } else {
     ArenaBlockHelpers::iterate_size_classes_backward(tester);
   }
+
+#ifdef ASSERT
+  heap.verify();
+#endif
 }
 
 TEST_VM(Arena2_Heap, reserve_slab_memory_forward) {
@@ -78,11 +82,15 @@ TEST_VM(Arena2_Heap, arena_metaheap_basics) {
   ASSERT_EQ(heap.base(), p1);
   ASSERT_EQ(heap.hwm(), heap.base() + sz1);
 
+  DEBUG_ONLY(heap.verify();)
+
   heap.align_hwm_to_padded_size();
   constexpr size_t sz2 = 17;
   const const_address p2 = heap.allocate(sz2);
   ASSERT_LT(p1 + sz1, p2);
   ASSERT_TRUE(is_aligned(p2, DEFAULT_PADDING_SIZE));
+
+  DEBUG_ONLY(heap.verify();)
 
   heap.align_hwm_to<void*>();
   constexpr size_t sz3 = 4;
@@ -90,17 +98,23 @@ TEST_VM(Arena2_Heap, arena_metaheap_basics) {
   ASSERT_LT(p2 + sz2, p3);
   ASSERT_TRUE(is_aligned(p3, alignof(void*)));
 
+  DEBUG_ONLY(heap.verify();)
+
   heap.align_hwm_to_page_size();
   constexpr size_t sz4 = 1024;
   const const_address p4 = heap.allocate(sz4);
   ASSERT_LT(p3 + sz3, p4);
   ASSERT_TRUE(is_aligned(p4, os::vm_page_size()));
 
+  DEBUG_ONLY(heap.verify();)
+
   heap.align_hwm_to_large_page_size();
   constexpr size_t sz5 = 23 * K;
   const const_address p5 = heap.allocate(sz5);
   ASSERT_LT(p4 + sz4, p5);
   ASSERT_TRUE(is_aligned(p5, ArenaHeapBase::large_page_size));
+
+  DEBUG_ONLY(heap.verify();)
 }
 
 TEST_VM(Arena2_Heap, disclaim) {
@@ -115,7 +129,11 @@ TEST_VM(Arena2_Heap, disclaim) {
   ASSERT_EQ(p[sz], 'A');
   ASSERT_EQ(p[sz + sz - 1], 'A');
 
+  DEBUG_ONLY(heap.verify();)
+
   heap.discard_memory(p + sz, p + sz * 2);
+
+  DEBUG_ONLY(heap.verify();)
 
   ASSERT_EQ(p[0], 'A');
   ASSERT_EQ(p[sz - 1], 'A');

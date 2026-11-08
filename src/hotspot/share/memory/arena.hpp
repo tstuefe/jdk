@@ -35,15 +35,6 @@
 #define ARENA_AMALLOC_ALIGNMENT BytesPerLong
 #define ARENA_ALIGN(x) (align_up((x), ARENA_AMALLOC_ALIGNMENT))
 
-class ChunkPoolLocker : public StackObj {
-  bool _locked;
- public:
-  enum class LockStrategy { Lock, Try };
-
-  ChunkPoolLocker(LockStrategy ls = LockStrategy::Lock);
-  ~ChunkPoolLocker();
-};
-
 // Linked list of raw memory chunks
 class Chunk {
 
@@ -52,6 +43,7 @@ class Chunk {
   const size_t _len;      // Size of this Chunk
   // Used for Compilation Memory Statistic
   uint64_t _stamp;
+  const bool _on_c_heap;
 
 public:
   NONCOPYABLE(Chunk);
@@ -59,7 +51,7 @@ public:
   void operator delete(void*) = delete;
   void* operator new(size_t) = delete;
 
-  Chunk(size_t length);
+  Chunk(size_t length, bool on_c_heap);
 
   enum {
     // default sizes; make them slightly smaller than 2**k to guard against
@@ -74,7 +66,6 @@ public:
 
     tiny_size  =  256  - slack, // Size of first chunk (tiny)
     init_size  =  1*K  - slack, // Size of first chunk (normal aka small)
-    medium_size= 10*K  - slack, // Size of medium-sized chunk
     size       = 32*K  - slack, // Default size of an Arena chunk (following the first)
     max_default_size = size     // Largest default size
   };
@@ -94,6 +85,7 @@ public:
 
   void set_stamp(uint64_t v) { _stamp = v; }
   uint64_t stamp() const     { return _stamp; }
+  bool on_c_heap() const { return _on_c_heap; }
 };
 
 // Arena types (for Compilation Memory Statistic)
@@ -158,10 +150,7 @@ protected:
   }
 
  public:
-  static void initialize_chunk_pool();
 
-  // Start the chunk_pool cleaner task
-  static void start_chunk_pool_cleaner_task();
   Arena(MemTag mem_tag, Tag tag = Tag::tag_other, size_t init_size = Chunk::init_size);
   ~Arena();
   void  destruct_contents();

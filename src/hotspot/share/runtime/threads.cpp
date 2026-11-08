@@ -51,6 +51,7 @@
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
 #include "memory/allocation.inline.hpp"
+#include "memory/arena/arenaMemoryManager.hpp"
 #include "memory/iterator.hpp"
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
@@ -469,8 +470,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Initialize the os module
   os::init();
 
-  // Initialize memory pools
-  Arena::initialize_chunk_pool();
 
   MACOS_AARCH64_ONLY(os::current_thread_enable_wx(WXWrite));
 
@@ -567,6 +566,11 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   main_thread->register_thread_stack_with_NMT();
   main_thread->set_active_handles(JNIHandleBlock::allocate_block());
   MACOS_AARCH64_ONLY(main_thread->init_wx());
+
+  // Arm the new arena system
+  if (UseNewArenas) {
+    ArenaMemoryManager::instance().initialize();
+  }
 
   // Set the _monitor_owner_id now since we will run Java code before the Thread instance
   // is even created. The same value will be assigned to the Thread instance on init.
@@ -737,8 +741,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   if (!EagerXrunInit) {
     JvmtiAgentList::load_xrun_agents();
   }
-
-  Arena::start_chunk_pool_cleaner_task();
 
   // Start the service thread
   // The service thread enqueues JVMTI deferred events and does various hashtable

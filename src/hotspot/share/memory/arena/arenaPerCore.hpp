@@ -92,6 +92,8 @@ public:
 
   unsigned num_cpus() const { return _num_cpus; }
 
+  DEBUG_ONLY(void verify() const);
+
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENAPERCORE_HPP

@@ -50,6 +50,14 @@ struct PerCoreFixture {
   PerCoreFixture() :
     slab_group(&arena_heap, &metadata_heap),
     holder(&metadata_heap, &slab_group) {}
+#ifdef ASSERT
+  void verify() const {
+    arena_heap.verify();
+    metadata_heap.verify();
+    slab_group.verify();
+    holder.verify();
+  }
+#endif
 };
 
 // Every slot is aligned and padded apart; the holder has one slot per possible CPU id.
@@ -60,6 +68,7 @@ TEST_VM(Arena2_PerCore, layout) {
   STATIC_ASSERT(alignof(ArenaPerCoreDataHolder::Data) == DEFAULT_PADDING_SIZE);
   const ArenaPerCoreDataHolder::Data* const d = f.holder.get_current_core_data();
   ASSERT_TRUE(is_aligned(d, DEFAULT_PADDING_SIZE));
+  DEBUG_ONLY(f.verify();)
 }
 
 
@@ -113,4 +122,5 @@ TEST_VM(Arena2_PerCore, stress) {
   TestThreadGroup ttg(stresser, MIN2(max_num_threads, num_threads));
   ttg.doit();
   ttg.join();
+  DEBUG_ONLY(f.verify();)
 }

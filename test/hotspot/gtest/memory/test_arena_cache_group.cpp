@@ -57,6 +57,13 @@ TEST_VM(Arena2_CacheGroup, basic) {
     ASSERT_GE(real_blocksize, block_size);
     ASSERT_EQ(p3, p2 + real_blocksize);
   }
+
+#ifdef ASSERT
+  arena_heap.verify();
+  metadata_heap.verify();
+  slab_group.verify();
+  cache_group.verify();
+#endif
 }
 
 // Helper function; Given a cache group whose caches are empty, triggers
@@ -87,6 +94,13 @@ TEST_VM(Arena2_CacheGroup, flush_all) {
     ASSERT_EQ(cache->count(), 0); // should have flushed
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(check);
+
+#ifdef ASSERT
+  arena_heap.verify();
+  metadata_heap.verify();
+  slab_group.verify();
+  cache_group.verify();
+#endif
 }
 
 TEST_VM(Arena2_CacheGroup, tick_all) {
@@ -113,4 +127,11 @@ TEST_VM(Arena2_CacheGroup, tick_all) {
     ASSERT_LT((unsigned)cache->count(), num[szclass]); // should have flushed
   };
   ArenaBlockHelpers::iterate_standard_size_classes_forward(check);
+
+#ifdef ASSERT
+  arena_heap.verify();
+  metadata_heap.verify();
+  slab_group.verify();
+  cache_group.verify();
+#endif
 }

@@ -65,4 +65,11 @@ TEST_VM(Arena2_SlabGroup, default_group) {
     }
   };
   ArenaBlockHelpers::iterate_size_classes_backward(tester);
+
+#ifdef ASSERT
+  arena_heap.verify();
+  metadata_heap.verify();
+  group.verify();
+#endif
+
 }

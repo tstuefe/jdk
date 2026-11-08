@@ -27,6 +27,9 @@
 #include "cppstdlib/new.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/arena.hpp"
+
+#include "arena/arenaBlock.hpp"
+#include "memory/arena/arenaMemoryManager.hpp"
 #include "memory/resourceArea.hpp"
 #include "nmt/memTracker.inline.hpp"
 #include "runtime/os.hpp"
@@ -36,36 +39,9 @@
 #include "utilities/debug.hpp"
 #include "utilities/ostream.hpp"
 
-// One global static mutex for chunk pools.
-// It is used very early in the vm initialization, in allocation
-// code and other areas.  For many calls, the current thread has not
-// been created so we cannot use Mutex.
-static DeferredStatic<PlatformMutex> GlobalChunkPoolMutex;
-
-void Arena::initialize_chunk_pool() {
-  GlobalChunkPoolMutex.initialize();
-}
-
-ChunkPoolLocker::ChunkPoolLocker(LockStrategy ls) {
-  if (ls == LockStrategy::Lock) {
-    GlobalChunkPoolMutex->lock();
-    _locked = true;
-  } else {
-    assert(ls == LockStrategy::Try, "must be");
-    _locked = GlobalChunkPoolMutex->try_lock();
-  }
-};
-
-ChunkPoolLocker::~ChunkPoolLocker() {
-  if (_locked) {
-    GlobalChunkPoolMutex->unlock();
-  }
-};
-
 // Pre-defined default chunk sizes must be arena-aligned, see Chunk::operator new()
 STATIC_ASSERT(is_aligned((int)Chunk::tiny_size, ARENA_AMALLOC_ALIGNMENT));
 STATIC_ASSERT(is_aligned((int)Chunk::init_size, ARENA_AMALLOC_ALIGNMENT));
-STATIC_ASSERT(is_aligned((int)Chunk::medium_size, ARENA_AMALLOC_ALIGNMENT));
 STATIC_ASSERT(is_aligned((int)Chunk::size, ARENA_AMALLOC_ALIGNMENT));
 
 
@@ -81,72 +57,6 @@ const char* Arena::tag_desc[] = {
 #undef ARENA_TAG_DESC
 };
 
-// MT-safe pool of same-sized chunks to reduce malloc/free thrashing
-// NB: not using Mutex because pools are used before Threads are initialized
-class ChunkPool {
-  // Our four static pools
-  static constexpr int _num_pools = 4;
-  static ChunkPool _pools[_num_pools];
-
-  Chunk*       _first;
-  const size_t _size;         // (inner payload) size of the chunks this pool serves
-
-  // Returns null if pool is empty.
-  Chunk* take_from_pool() {
-    ChunkPoolLocker lock;
-    Chunk* c = _first;
-    if (_first != nullptr) {
-      _first = _first->next();
-    }
-    return c;
-  }
-  void return_to_pool(Chunk* chunk) {
-    assert(chunk->length() == _size, "wrong pool for this chunk");
-    ChunkPoolLocker lock;
-    chunk->set_next(_first);
-    _first = chunk;
-  }
-
-  // Clear this pool of all contained chunks
-  void prune() {
-    // Free all chunks with ChunkPoolLocker lock
-    // so NMT adjustment is stable.
-    ChunkPoolLocker lock;
-    Chunk* cur = _first;
-    Chunk* next = nullptr;
-    while (cur != nullptr) {
-      next = cur->next();
-      os::free(cur);
-      cur = next;
-    }
-    _first = nullptr;
-  }
-
-  // Given a (inner payload) size, return the pool responsible for it, or null if the size is non-standard
-  static ChunkPool* get_pool_for_size(size_t size) {
-    for (int i = 0; i < _num_pools; i++) {
-      if (_pools[i]._size == size) {
-        return _pools + i;
-      }
-    }
-    return nullptr;
-  }
-
-public:
-  ChunkPool(size_t size) : _first(nullptr), _size(size) {}
-
-  static void clean() {
-    NativeHeapTrimmer::SuspendMark sm("chunk pool cleaner");
-    for (int i = 0; i < _num_pools; i++) {
-      _pools[i].prune();
-    }
-  }
-
-  // Returns an initialized and null-terminated Chunk of requested size
-  static Chunk* allocate_chunk(Arena* arena, size_t length, AllocFailType alloc_failmode);
-  static void deallocate_chunk(Chunk* p);
-};
-
 static bool on_compiler_thread() {
 #if defined(COMPILER1) || defined(COMPILER2)
   return Thread::current_or_null() != nullptr &&
@@ -155,7 +65,7 @@ static bool on_compiler_thread() {
   return false;
 }
 
-Chunk* ChunkPool::allocate_chunk(Arena* arena, size_t length, AllocFailType alloc_failmode) {
+static Chunk* allocate_chunk(Arena* arena, size_t length, AllocFailType alloc_failmode) {
   // - requested_size = sizeof(Chunk)
   // - length = payload size
   // We must ensure that the boundaries of the payload (C and D) are aligned to 64-bit:
@@ -175,26 +85,33 @@ Chunk* ChunkPool::allocate_chunk(Arena* arena, size_t length, AllocFailType allo
   //   aligning (D)
 
   assert(is_aligned(length, ARENA_AMALLOC_ALIGNMENT), "chunk payload length misaligned: %zu.", length);
-  // Try to reuse a freed chunk from the pool
-  ChunkPool* pool = ChunkPool::get_pool_for_size(length);
-  Chunk* chunk = nullptr;
-  if (pool != nullptr) {
-    Chunk* c = pool->take_from_pool();
-    if (c != nullptr) {
-      assert(c->length() == length, "wrong length?");
-      chunk = c;
-    }
+
+  Chunk* storage = nullptr;
+  size_t real_size = 0;
+  bool on_c_heap = false;
+
+  // Allocate from arena memory manager, if active
+  ArenaMemoryManager& amm = ArenaMemoryManager::instance();
+  if (amm.is_initialized()) {
+    storage = amm.allocate_chunk_storage(length, real_size);
   }
-  if (chunk == nullptr) {
-    // Either the pool was empty, or this is a non-standard length. Allocate a new Chunk from C-heap.
-    size_t bytes = ARENA_ALIGN(sizeof(Chunk)) + length;
-    void* p = os::malloc(bytes, mtChunk, CALLER_PC);
-    if (p == nullptr && alloc_failmode == AllocFailStrategy::EXIT_OOM) {
-      vm_exit_out_of_memory(bytes, OOM_MALLOC_ERROR, "Chunk::new");
-    }
-    chunk = (Chunk*)p;
+
+  // Still during initialization, or memory manager is exhausted?
+  // Allocate a new Chunk from C-heap.
+  if (storage == nullptr) {
+    real_size = ARENA_ALIGN(sizeof(Chunk)) + length;
+    storage = (Chunk*) os::malloc(real_size, mtChunk, CALLER_PC);
+    on_c_heap = true;
   }
-  ::new(chunk) Chunk(length);
+
+  if (storage == nullptr && alloc_failmode == AllocFailStrategy::EXIT_OOM) {
+    vm_exit_out_of_memory(real_size, OOM_MALLOC_ERROR, "Chunk::new");
+  }
+
+  assert(real_size > 0, "must be");
+  const size_t inner_size = real_size - Chunk::aligned_overhead_size();
+  Chunk* const chunk = ::new(storage) Chunk(inner_size, on_c_heap);
+
   // We rely on arena alignment <= malloc alignment.
   assert(is_aligned(chunk, ARENA_AMALLOC_ALIGNMENT), "Chunk start address misaligned.");
 
@@ -209,60 +126,52 @@ Chunk* ChunkPool::allocate_chunk(Arena* arena, size_t length, AllocFailType allo
   return chunk;
 }
 
-void ChunkPool::deallocate_chunk(Chunk* c) {
+static void deallocate_chunk_chain(Chunk* c) {
 
-  // Inform compilation memstat
-  if (CompilationMemoryStatistic::enabled() && c->stamp() != 0) {
-    assert(on_compiler_thread(), "we stamped this chunk");
-    CompilationMemoryStatistic::on_arena_chunk_deallocation(c->length(), c->stamp());
-    c->set_stamp(0);
+  const bool walk_chain_needed = ZapResourceArea || CompilationMemoryStatistic::enabled();
+
+  if (walk_chain_needed) {
+    Chunk* k = c;
+    while (k != nullptr) {
+      Chunk* tmp = k->next();
+      // Zap chunk memory
+      if (ZapResourceArea) {
+        memset(k->bottom(), badResourceValue, k->length());
+      }
+      // compilation statistic bookkeeping
+      if (k->stamp() != 0) {
+        assert(on_compiler_thread(), "we stamped this chunk");
+        CompilationMemoryStatistic::on_arena_chunk_deallocation(k->length(), k->stamp());
+        k->set_stamp(0);
+      }
+      k = tmp;
+    }
   }
 
-  // If this is a standard-sized chunk, return it to its pool; otherwise free it.
-  ChunkPool* pool = ChunkPool::get_pool_for_size(c->length());
-  if (pool != nullptr) {
-    pool->return_to_pool(c);
+  ArenaMemoryManager& amm = ArenaMemoryManager::instance();
+
+  if (amm.is_initialized()) {
+    amm.deallocate_chunks(c);
   } else {
-    // Free chunks under a lock so that NMT adjustment is stable.
-    ChunkPoolLocker lock;
-    os::free(c);
+    // Some or all of the chunks may have been allocated in C-heap. That can happen
+    // for a number of reasons. Here, just just handle the case where the ArenaMemoryManager
+    // has not yet been initialized. The ArenaMemoryManager itself handles the case of
+    // intermixed C-heap chunks.
+    Chunk* k = c;
+    while (k != nullptr) {
+      Chunk* const tmp = k->next();
+      os::free(k);
+      k = tmp;
+    }
   }
 }
 
-ChunkPool ChunkPool::_pools[] = { Chunk::size, Chunk::medium_size, Chunk::init_size, Chunk::tiny_size };
-
-class ChunkPoolCleaner : public PeriodicTask {
-  static const int cleaning_interval = 5000; // cleaning interval in ms
-
- public:
-   ChunkPoolCleaner() : PeriodicTask(cleaning_interval) {}
-   void task() {
-     ChunkPool::clean();
-   }
-};
-
-void Arena::start_chunk_pool_cleaner_task() {
-#ifdef ASSERT
-  static bool task_created = false;
-  assert(!task_created, "should not start chuck pool cleaner twice");
-  task_created = true;
-#endif
-  ChunkPoolCleaner* cleaner = new ChunkPoolCleaner();
-  cleaner->enroll();
-}
-
-Chunk::Chunk(size_t length) :
-    _next(nullptr), _len(length), _stamp(0) {
+Chunk::Chunk(size_t length, bool on_c_heap) :
+    _next(nullptr), _len(length), _stamp(0), _on_c_heap(on_c_heap) {
 }
 
 void Chunk::chop(Chunk* k) {
-  while (k != nullptr) {
-    Chunk* tmp = k->next();
-    // clear out this chunk (to detect allocation bugs)
-    if (ZapResourceArea) memset(k->bottom(), badResourceValue, k->length());
-    ChunkPool::deallocate_chunk(k);
-    k = tmp;
-  }
+  deallocate_chunk_chain(k);
 }
 
 void Chunk::next_chop(Chunk* k) {
@@ -278,7 +187,7 @@ Arena::Arena(MemTag mem_tag, Tag tag, size_t init_size) :
   _hwm(nullptr), _max(nullptr)
 {
   init_size = ARENA_ALIGN(init_size);
-  _chunk = ChunkPool::allocate_chunk(this, init_size, AllocFailStrategy::EXIT_OOM);
+  _chunk = allocate_chunk(this, init_size, AllocFailStrategy::EXIT_OOM);
   _first = _chunk;
   _hwm = _chunk->bottom();      // Save the cached hwm, max
   _max = _chunk->top();
@@ -337,7 +246,7 @@ void* Arena::grow(size_t x, AllocFailType alloc_failmode) {
   }
 
   Chunk* k = _chunk;            // Get filled-up chunk address
-  _chunk = ChunkPool::allocate_chunk(this, len, alloc_failmode);
+  _chunk = allocate_chunk(this, len, alloc_failmode);
 
   if (_chunk == nullptr) {
     _chunk = k;                 // restore the previous value of _chunk

@@ -2032,6 +2032,9 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   product(bool, UseHashcodeFastPath, true, DIAGNOSTIC,                      \
           "Use fast path for identityHashCode.")                            \
+                                                                            \
+  product(bool, UseNewArenas, false, EXPERIMENTAL,                          \
+          "Use new Arena system")                                           \
 
 // end of RUNTIME_FLAGS
 

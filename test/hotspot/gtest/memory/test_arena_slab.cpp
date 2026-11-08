@@ -61,6 +61,7 @@ namespace {
       EXPECT_TRUE(_control.is_same(tmp));
       EXPECT_EQ(_control.count_one_bits(), _slab.count_in_use_blocks());
       EXPECT_LE(_control.count_one_bits(), _slab.count_dirty_blocks());
+      DEBUG_ONLY(_slab.verify();)
     }
 
     // Allocates num blocks, with verification; returns number of allocated

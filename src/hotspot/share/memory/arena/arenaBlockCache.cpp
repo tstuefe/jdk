@@ -140,3 +140,11 @@ void ArenaCacheGroup::tick() {
     at(i)->tick();
   }
 }
+
+#ifdef ASSERT
+void ArenaCacheGroup::verify() const {
+  for (unsigned i = 0; i < num_caches; i++) {
+    at(i)->verify_cache();
+  }
+}
+#endif

@@ -100,6 +100,15 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
 #endif
 }
 
+#ifdef ASSERT
+void ArenaHeapBase::verify() const {
+  assert(_base != nullptr, "Sanity");
+  assert(_end > _base, "Sanity");
+  assert(is_aligned(_base, large_page_size), "Sanity");
+  assert(is_aligned(_end, large_page_size), "Sanity");
+}
+#endif
+
 /////////////
 
 ArenaHeap::ArenaHeap(size_t max_size) : ArenaHeapBase(max_size), _hwm(base()) {}
@@ -127,6 +136,13 @@ const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granul
 
 }
 
+#ifdef ASSERT
+void ArenaHeap::verify() const {
+  ArenaHeapBase::verify();
+  assert(_hwm >= base() && _hwm <= end(), "Sanity");
+  assert(is_aligned(_hwm, large_page_size), "Sanity");
+}
+#endif
 
 //////////////
 
@@ -184,3 +200,10 @@ void ArenaMetadataHeap::finalize() {
     os::uncommit_memory((char*)_hwm, end() - _hwm);
   }
 }
+
+#ifdef ASSERT
+void ArenaMetadataHeap::verify() const {
+  ArenaHeapBase::verify();
+  assert(_hwm >= base() && _hwm <= end(), "Sanity");
+}
+#endif

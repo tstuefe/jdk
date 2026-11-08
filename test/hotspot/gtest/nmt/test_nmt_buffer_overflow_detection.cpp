@@ -124,7 +124,7 @@ static void test_chunkpool_lock() {
   }
   PrintNMTStatistics = true;
   {
-    ChunkPoolLocker cpl;
+    //ChunkPoolLocker cpl;
     char* mem = (char*)os::malloc(100, mtTest);
     memset(mem - 16, 0, 100 + 16 + 2);
     os::free(mem);

@@ -303,6 +303,8 @@ public:
   // Tick all caches
   void tick();
 
+  DEBUG_ONLY(void verify() const);
+
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENABLOCKCACHE_HPP

@@ -38,6 +38,11 @@ class ArenaHeapBase {
   // Reserved space boundaries
   const address _base;
   const address _end;
+
+protected:
+
+  DEBUG_ONLY(void verify() const);
+
 public:
 
   NONCOPYABLE(ArenaHeapBase);
@@ -85,6 +90,8 @@ public:
 
   const_blockptr_t hwm() const { return _hwm; }
 
+  DEBUG_ONLY(void verify() const);
+
 };
 
 class ArenaMetadataHeap : public ArenaHeapBase {
@@ -120,6 +127,7 @@ public:
 
   const_address hwm() const { return _hwm; }
 
+  DEBUG_ONLY(void verify() const);
 };
 
 

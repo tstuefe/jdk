@@ -76,3 +76,14 @@ unsigned ArenaPerCoreDataHolder::current_core_slow() {
 
   return _cpu;
 }
+
+#ifdef ASSERT
+void ArenaPerCoreDataHolder::verify() const {
+  for (unsigned i = 0; i < _num_cpus; i++) {
+    Data* const data = (_data + i);
+    assert(data->_affinity > 0, "Sanity");
+    ArenaMutexLocker locker(data->_lock);
+    data->_cache_group.verify();
+  }
+}
+#endif

@@ -56,10 +56,14 @@ public:
   // Allocate memory for a single chunk of the given size. Chunk
   // returned may be of larger size. Note that the returned memory is not
   // yet initialized.
-  const_blockptr_t allocate_chunk_storage(size_t requested_size, size_t& real_size) const;
+  Chunk* allocate_chunk_storage(size_t requested_size, size_t& real_size) const;
 
   // Returns pointer to the global manager
-  static ArenaMemoryManager* the_manager();
+  static ArenaMemoryManager& instance();
+
+#ifdef ASSERT
+  void verify() const;
+#endif
 
 };
 

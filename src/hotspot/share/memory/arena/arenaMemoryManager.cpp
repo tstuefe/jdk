@@ -94,7 +94,10 @@ public:
   }
 
   void deallocate_chunks(const Chunk* first_chunk);
+
   const_blockptr_t allocate_chunk_storage(size_t requested_size, size_t& real_size);
+
+  DEBUG_ONLY(void verify() const;)
 
 };
 
@@ -199,12 +202,26 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
       constexpr size_t chunk_header_size = Chunk::aligned_overhead_size();
       while (c != nullptr) {
         const size_t outer_chunk_size = c->length() + chunk_header_size;
+
+        // We may rarely encounter chunks that are remnants from pre-initialization
+        // time or had been allocated on the slab-exhausted fallback path. These
+        // have to be returned to the C-Heap.
+        if (c->on_c_heap()) {
+          const Chunk* const tmp = c->next();
+          os::free((void*)c);
+          c = tmp;
+          continue;
+        }
+
+        // From here on, we are sure to have a chunk allocated via the memory manager.
         if (last_outer_chunk_size != outer_chunk_size) {
-          // The size must be either a valid standard block size or a valid huge block size,
-          // size since it had been allocated before via ArenaMemoryManagerImpl::allocate..
-          szclass = (outer_chunk_size <= ArenaBlockHelpers::max_standard_block_size) ?
-            ArenaBlockHelpers::valid_standard_block_size_to_size_class(outer_chunk_size) :
-            ArenaBlockHelpers::huge_size_class;
+          if (ArenaBlockHelpers::is_valid_standard_block_size(outer_chunk_size)) {
+            assert(is_aligned(c, outer_chunk_size), "invalid block alignment");
+            szclass = ArenaBlockHelpers::valid_standard_block_size_to_size_class(outer_chunk_size);
+          } else {
+            assert(is_aligned(c, ArenaBlockHelpers::huge_block_granularity), "invalid block alignment");
+            szclass = ArenaBlockHelpers::huge_size_class;
+          }
           current_basket = baskets + szclass;
           last_outer_chunk_size = outer_chunk_size;
         }
@@ -239,6 +256,15 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
   }
 }
 
+#ifdef ASSERT
+void ArenaMemoryManager::verify() const {
+  if (is_initialized()) {
+    _impl->verify();
+  }
+}
+#endif
+
+
 ArenaMemoryManager::ArenaMemoryManager() :
   _impl(nullptr) {
 }
@@ -257,14 +283,25 @@ void ArenaMemoryManager::deallocate_chunks(const Chunk* first_chunk) const {
   return _impl->deallocate_chunks(first_chunk);
 }
 
-const_blockptr_t ArenaMemoryManager::allocate_chunk_storage(size_t requested_size, size_t& real_size) const {
+Chunk* ArenaMemoryManager::allocate_chunk_storage(size_t requested_size, size_t& real_size) const {
   assert(is_initialized(), "not initialized");
-  return _impl->allocate_chunk_storage(requested_size, real_size);
+  return (Chunk*) _impl->allocate_chunk_storage(requested_size, real_size);
 }
+
+#ifdef ASSERT
+void ArenaMemoryManagerImpl::verify() const {
+  _arena_heap.verify();
+  _metadata_heap.verify();
+  _slab_group.verify();
+  _per_core.verify();
+}
+#endif
 
 static ArenaMemoryManager _the_manager;
 
 // Returns pointer to the global manager
-ArenaMemoryManager* ArenaMemoryManager::the_manager() {
-  return &_the_manager;
+ArenaMemoryManager& ArenaMemoryManager::instance() {
+  return _the_manager;
 }
+
+

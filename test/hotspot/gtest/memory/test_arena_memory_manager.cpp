@@ -111,7 +111,7 @@ namespace {
     const Chunk* allocate_chunk_and_test(size_t size) {
       size_t real_size = 0;
       Chunk* c = nullptr;
-      Chunk* const p = (Chunk*) _memory_manager.allocate_chunk_storage(size, real_size);
+      Chunk* const p = _memory_manager.allocate_chunk_storage(size, real_size);
       if (size <= 32 * K) {
         // smaller blocks should not run out, we don't allocate enough for that to happen
         EXPECT_NE(p, nullptr);
@@ -125,7 +125,7 @@ namespace {
         *((char*)p + real_size - 1) = 'A';
 
         // Create chunk and add it to our allocated chunks list
-        c = ::new (p) Chunk(payload_len);
+        c = ::new (p) Chunk(payload_len, false);
         c->set_next(nullptr);
         _allocated_chunks.add_chunk(c);
 
@@ -136,6 +136,7 @@ namespace {
               ArenaBlockHelpers::huge_size_class;
         _num_allocated_per_size[szclass]++;
       }
+      DEBUG_ONLY(verify());
       return c;
     }
 
@@ -143,11 +144,21 @@ namespace {
       unsigned num = 1 + _random.next(max);
       const Chunk* const c = _allocated_chunks.get_random_chain(_random, num, num);
       if (num > 0) {
-        assert(c != nullptr, "Sanity");
-        _memory_manager.deallocate_chunks(c);
+        deallocate_chunk_chain_and_test(c);
       }
       return num;
     }
+
+    void deallocate_chunk_chain_and_test(const Chunk* first) {
+      _memory_manager.deallocate_chunks(first);
+      DEBUG_ONLY(verify());
+    }
+
+#ifdef ASSERT
+    void verify() const {
+      _memory_manager.verify();
+    }
+#endif
 
   public:
 
@@ -217,6 +228,42 @@ namespace {
         ASSERT_NE(c, nullptr);
       }
       while (deallocate_chunks_and_test(16));
+    }
+
+    void test_chunk_chain_deallocation_some_in_c_heap() {
+      for (int i = 0; i < 500; i++) {
+        constexpr size_t max_block_size = 128 * K; // )
+        constexpr size_t min_block_size = 128;     // [
+        const size_t log2_block_size = exact_log2(min_block_size) +
+                                       _random.next(exact_log2(max_block_size) - exact_log2(min_block_size));
+        const Chunk* const c = allocate_chunk_and_test(nth_bit(log2_block_size));
+        ASSERT_NE(c, nullptr);
+      }
+
+      // Assemble a chunk list that has mixed C-heap chunks in them.
+      bool stop = false;
+      while (!stop) {
+        unsigned len = 16;
+        Chunk* const first = _allocated_chunks.get_random_chain(_random, len, len);
+        if (first == nullptr) {
+          stop = true;
+        } else {
+          // Mix in some C-heap chunks
+          Chunk* insertion_point = first;
+          while (insertion_point != nullptr) {
+            if (_random.tosscoin()) {
+              const size_t payload_size = _random.next(16) * BytesPerWord;
+              const size_t real_size = Chunk::aligned_overhead_size() + payload_size;
+              void* const p = os::malloc(real_size, mtTest);
+              Chunk* const c = ::new(p) Chunk(payload_size, true);
+              c->set_next(insertion_point->next());
+              insertion_point->set_next(c);
+            }
+            insertion_point = insertion_point->next();
+          }
+        }
+        deallocate_chunk_chain_and_test(first);
+      }
     }
 
     void test_random() {

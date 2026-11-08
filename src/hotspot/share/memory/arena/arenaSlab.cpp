@@ -403,3 +403,11 @@ ArenaSlabGroup::ArenaSlabGroup(ArenaHeap* arena_heap,
   ArenaSlabGroup(arena_heap, metadata_heap, global_slab_params)
 {
 }
+
+#ifdef ASSERT
+void ArenaSlabGroup::verify() const {
+  for (unsigned i = 0; i < num_slots; i++) {
+    _slabs[i].verify();
+  }
+}
+#endif
