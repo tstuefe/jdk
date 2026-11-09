@@ -27,6 +27,7 @@
 #define HOTSPOT_ARENAMUTEX_HPP
 
 #include "runtime/mutex.hpp"
+#include "runtime/os.inline.hpp"
 
 // Todo: not a great solution, maybe I can figure out something better?
 // Okay for v.01
