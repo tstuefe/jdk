@@ -43,7 +43,7 @@ class ArenaHeapBase {
   const address _end;
 
   // Some statistics
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
   Atomic<unsigned> _num_commit_ops;
   Atomic<unsigned> _num_discard_ops;
 #endif

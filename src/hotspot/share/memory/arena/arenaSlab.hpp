@@ -113,7 +113,7 @@ private:
   // enough to place it together with the other read-only data
   IndexType _commit_boundary;
 
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
   struct SlabStatistics {
     //  Number of standard blocks allocated, deallocated
     uint64_t _num_standard_block_allocated;
@@ -138,7 +138,7 @@ private:
     unsigned _num_blocks_in_use;
     // Highest number of blocks in-use since the last tick
     unsigned _num_blocks_in_use_max;
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
     SlabStatistics _stats;
 #endif
 

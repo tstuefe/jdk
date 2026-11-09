@@ -84,6 +84,22 @@ private:
     return _data + cpu;
   }
 
+  static constexpr uintptr_t invalid_identity = ((uintptr_t)-1);
+
+  // Execute operation on every (active) CPU.
+  // Under lock protection. Calls (unsigned cpu, Data* data)
+  template <typename Operation>
+  void iterate(Operation operation) const {
+    for (unsigned i = 0; i < _num_cpus; i++) {
+      Data* const data = (_data + i);
+      assert(data->_affinity > 0, "Sanity");
+      ArenaMutexLocker locker(data->_lock);
+      if (data->_affinity != invalid_identity) {
+        operation(i, data);
+      }
+    }
+  }
+
 public:
 
   ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group);
@@ -91,6 +107,9 @@ public:
   Data* get_current_core_data() { return at(current_core()); }
 
   unsigned num_cpus() const { return _num_cpus; }
+
+  // Tick all caches
+  void tick();
 
   void print_on(outputStream* st) const;
 

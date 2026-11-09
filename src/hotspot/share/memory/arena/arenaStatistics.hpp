@@ -30,10 +30,15 @@
 #include "utilities/globalDefinitions.hpp"
 
 #ifdef ASSERT
-#define ARENA_STATISTICS 1
+#define ARENA_STATS 1
+#define ARENA_STATS_ONLY(code) code
+#define NO_ARENA_STATS(code)
 #else
-#undef ARENA_STATISTICS
+#undef ARENA_STATS
+#define ARENA_STATS_ONLY(code)
+#define NO_ARENA_STATS(code) code
 #endif
+
 
 
 

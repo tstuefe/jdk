@@ -32,6 +32,18 @@
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
+#ifdef ARENA_STATS
+ArenaBlockCache::CacheStatistics::CacheStatistics() :
+  _num_blocks_allocated(0),
+  _num_blocks_deallocated(0),
+  _num_bulk_dealloc_ops(0),
+  _num_overflows(0),
+  _num_underflows(0),
+  _num_busy_ticks(0),
+  _num_idle_ticks(0) {
+}
+#endif // ARENA_STATS
+
 ArenaBlockCache::ArenaBlockCache(ArenaSlab* slab, int cachesize) :
   _cachesize(cachesize), _slab(slab)
 {
@@ -63,6 +75,13 @@ void ArenaBlockCache::tick() {
     }
     set_count(c2);
   }
+#ifdef ARENA_STATS
+  if (_is_busy) {
+    _stats._num_busy_ticks++;
+  } else {
+    _stats._num_idle_ticks++;
+  }
+#endif
   _is_busy = false; // reset flag
 }
 
@@ -111,6 +130,30 @@ void ArenaBlockCache::flush() {
   _is_busy = false;
 }
 
+void ArenaBlockCache::print_on(const size_t block_size, outputStream* st) const {
+  st->print_cr("ArenaBlockCache %zu", block_size);
+  StreamIndentor indentor(st);
+#define PRINT_HERE(fmt, ...) { st->print_cr(fmt, __VA_ARGS__); }
+#define PRINT_COUNTER(desc, name) { PRINT_HERE("%s: " UINT64_FORMAT, desc, name); }
+  PRINT_HERE("cache size: %u", cachesize());
+  PRINT_HERE("count: %u", count());
+#ifdef ARENA_STATS
+  PRINT_COUNTER("Blocks allocs", _stats._num_blocks_allocated);
+  PRINT_COUNTER("Blocks deallocs", _stats._num_blocks_deallocated);
+  PRINT_COUNTER("Bulk deallocs", _stats._num_bulk_dealloc_ops);
+  st->print_cr("Blocks per bulk dealloc, avg: %.2f",
+    _stats._num_bulk_dealloc_ops > 0 ?
+      _stats._num_blocks_deallocated /
+      (double)_stats._num_bulk_dealloc_ops : 0.0);
+  PRINT_COUNTER("Underflows", _stats._num_underflows);
+  PRINT_COUNTER("Overflows", _stats._num_overflows);
+  PRINT_HERE("Busy ticks: %u", _stats._num_busy_ticks);
+  PRINT_HERE("Idle ticks: %u", _stats._num_idle_ticks);
+#endif
+#undef PRINT_COUNTER
+#undef PRINT_HERE
+}
+
 ///// Arena cache group
 
 ArenaCacheGroup::ArenaCacheGroup(ArenaSlabGroup* slab_group) :
@@ -138,6 +181,14 @@ void ArenaCacheGroup::flush() {
 void ArenaCacheGroup::tick() {
   for (unsigned i = 0; i < num_caches; i++) {
     at(i)->tick();
+  }
+}
+
+// Tick all caches
+void ArenaCacheGroup::print_on(outputStream* st) const {
+  for (unsigned i = 0; i < num_caches; i++) {
+    const size_t block_size = ArenaBlockHelpers::size_class_to_block_size(i);
+    at(i)->print_on(block_size, st);
   }
 }
 

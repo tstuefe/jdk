@@ -28,6 +28,7 @@
 
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaSlab.hpp"
+#include "memory/arena/arenaStatistics.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -67,6 +68,22 @@ private:
 
   // Next cacheline, which is okay for now.
   ArenaSlab* const _slab;
+
+#ifdef ARENA_STATS
+  struct CacheStatistics {
+    uint64_t _num_blocks_allocated;
+    uint64_t _num_blocks_deallocated;
+    uint64_t _num_bulk_dealloc_ops;
+    // How often we fetched memory from slab/evicted memory to the slab
+    uint64_t _num_overflows;
+    // How often we fetched memory from slab/evicted memory to the slab
+    uint64_t _num_underflows;
+    unsigned _num_busy_ticks;
+    unsigned _num_idle_ticks;
+    void account_bulk_dealloc(unsigned num);
+    CacheStatistics();
+  } _stats;
+#endif
 
 #ifdef ASSERT
   void verify_block(const_blockptr_t block) const;
@@ -178,6 +195,10 @@ public:
         _blocks[j] = tmp[i];
       }
       set_count(num_fetched - 1);
+
+      ARENA_STATS_ONLY(_stats._num_underflows ++;)
+      ARENA_STATS_ONLY(_stats._num_blocks_allocated ++;)
+
       return result;
 
     } // end: underflow handling
@@ -187,11 +208,14 @@ public:
     const const_blockptr_t result = _blocks[c];
     DEBUG_ONLY(_blocks[c] = nullptr;)
     set_count(c);
+
+    ARENA_STATS_ONLY(_stats._num_blocks_allocated ++;)
+
     return result;
   }
 
   // Bulk-add a number of blocks to this cache.
-  void bulk_deallocate_block(const const_blockptr_t blocks[], int num_blocks) {
+  void bulk_deallocate_block(const const_blockptr_t blocks[], const int num_blocks) {
     assert(blocks != nullptr, "sanity");
     assert(num_blocks > 0, "sanity");
     assert(num_blocks <= max_blocks_for_bulk_deallocate, "sanity");
@@ -227,16 +251,23 @@ public:
       _slab->deallocate_blocks(evict_set, num_in_eviction_set);
       // post-cleanups
       compress_cache(num_evict_on_overflow(), num_in_cache);
+      ARENA_STATS_ONLY(_stats._num_overflows ++;)
     } else {
       assert(num_in_cache <= cachesize(), "sanity");
     }
     // repair count
     set_count(num_in_cache);
+
+    ARENA_STATS_ONLY(_stats._num_blocks_deallocated += num_blocks;)
+    ARENA_STATS_ONLY(_stats._num_bulk_dealloc_ops ++;)
+
   }
 
   // A tick frees part of the cache or all of the cache, depending on whether the
   // cache is busy or not.
   void tick();
+
+  void print_on(size_t block_size, outputStream* st) const;
 
 #ifdef ASSERT
   void verify_cache() const ;
@@ -302,6 +333,9 @@ public:
 
   // Tick all caches
   void tick();
+
+  // Print all caches
+  void print_on(outputStream* st) const;
 
   DEBUG_ONLY(void verify() const);
 

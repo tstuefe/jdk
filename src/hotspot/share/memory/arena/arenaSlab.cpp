@@ -32,7 +32,7 @@
 #include "utilities/globalDefinitions.hpp"
 
 
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
 ArenaSlab::SlabStatistics::SlabStatistics() :
   _num_standard_block_allocated(0),
   _num_standard_block_deallocated(0),
@@ -59,7 +59,7 @@ void ArenaSlab::SlabStatistics::account_bulk_dealloc(unsigned num) {
 ArenaSlab::SlabHotData::SlabHotData() :
   _num_blocks_in_use(0),
   _num_blocks_in_use_max(0),
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
   _stats(),
 #endif
   _lock()
@@ -207,7 +207,7 @@ unsigned ArenaSlab::allocate_blocks(const_blockptr_t out[], unsigned outlen) {
     ensure_committed(highest_block_idx);
     // Bookkeeping
     increase_block_counter(n);
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
     _hot->_stats.account_bulk_alloc(n);
 #endif
   }
@@ -248,7 +248,7 @@ const_blockptr_t ArenaSlab::allocate_huge_block(size_t size) {
 
         // Bookkeeping
         increase_block_counter(num);
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
         _hot->_stats._num_huge_blocks_allocated++;
 #endif
 
@@ -274,7 +274,7 @@ void ArenaSlab::deallocate_blocks(const_blockptr_t blocks[], unsigned num) {
   }
   // Bookkeeping
   decrease_block_counter(num);
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
   _hot->_stats.account_bulk_dealloc(num);
 #endif
 }
@@ -310,7 +310,7 @@ void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
 
   // Bookkeeping
   decrease_block_counter(idx2 - idx);
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
   _hot->_stats._num_huge_blocks_deallocated ++;
 #endif
 }
@@ -328,14 +328,9 @@ void ArenaSlab::decrease_block_counter(unsigned num) {
 }
 
 void ArenaSlab::print_on(outputStream* st) const {
-  char name[32];
-  if (block_size() <= ArenaBlockHelpers::max_standard_block_size) {
-    (void) os::snprintf(name, 32, "ArenaSlab %zu", block_size());
-  } else {
-    (void) os::snprintf(name, 32, "ArenaSlab huge");
-  }
+  st->print_cr("ArenaSlab %zu", block_size());
   StreamIndentor indentor(st);
-#define PRINT_HERE(fmt, ...) { st->print_raw(name); st->print_cr(" " fmt, __VA_ARGS__); }
+#define PRINT_HERE(fmt, ...) { st->print_cr(fmt, __VA_ARGS__); }
 
   // Geometry:
   PRINT_HERE("block_size: %zu bytes", block_size());
@@ -392,17 +387,17 @@ void ArenaSlab::print_on(outputStream* st) const {
   PRINT_HERE("Dirty granules: %u (%u blocks, %zu bytes)",
     dirty_granules, dirty_blocks, dirty_granules * granule_size());
 
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
 #define PRINT_COUNTER(desc, name) { PRINT_HERE("%s: " UINT64_FORMAT, desc, name); }
   PRINT_COUNTER("Standard blocks allocated", _hot->_stats._num_standard_block_allocated);
   PRINT_COUNTER("Bulk allocs", _hot->_stats._num_bulk_alloc_ops);
-  st->print_cr("  Blocks per bulk alloc, avg: %.2f",
+  st->print_cr("Blocks per bulk alloc, avg: %.2f",
     _hot->_stats._num_bulk_alloc_ops > 0 ?
       (double)_hot->_stats._num_standard_block_allocated /
       (double)_hot->_stats._num_bulk_alloc_ops : 0.0);
   PRINT_COUNTER("Standard blocks deallocated", _hot->_stats._num_standard_block_deallocated);
   PRINT_COUNTER("Bulk deallocs", _hot->_stats._num_bulk_dealloc_ops);
-  st->print_cr("  Blocks per bulk dealloc, avg: %.2f",
+  st->print_cr("Blocks per bulk dealloc, avg: %.2f",
     _hot->_stats._num_bulk_dealloc_ops > 0 ?
       (double)_hot->_stats._num_standard_block_deallocated /
       (double)_hot->_stats._num_bulk_dealloc_ops : 0.0);

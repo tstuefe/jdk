@@ -61,7 +61,7 @@ void ArenaHeapBase::commit_memory(const_blockptr_t from, const_blockptr_t to){
   const bool b = os::commit_memory((char*)from, sz, false);
   assert(b, "OOM?");
 
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
   _num_commit_ops.fetch_then_add(1u);
 #endif
 }
@@ -102,20 +102,20 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
   ShouldNotReachHere(); // Todo
 #endif
 
-#ifdef ARENA_STATISTICS
+#ifdef ARENA_STATS
   _num_discard_ops.fetch_then_add(1u);
 #endif
 }
 
-#ifdef ARENA_STATISTICS
 void ArenaHeapBase::print_on(const char* name, outputStream* st) const {
   st->print_cr("%s: ", name);
   StreamIndentor indentor(st);
   st->print_cr( RANGE2FMT, RANGE2FMTARGS(base(), end()));
+#ifdef ARENA_STATS
   st->print_cr("Num commit ops: %u", _num_commit_ops.load_acquire());
   st->print_cr("Num discard ops: %u", _num_discard_ops.load_acquire());
-}
 #endif
+}
 
 #ifdef ASSERT
 void ArenaHeapBase::verify() const {

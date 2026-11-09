@@ -37,13 +37,13 @@
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
-static constexpr uintptr_t invalid_identity = ((uintptr_t)-1);
 
 THREAD_LOCAL unsigned    ArenaPerCoreDataHolder::_cpu = 0u;
 
 
 ArenaPerCoreDataHolder::Data::Data(ArenaSlabGroup* slab_group) :
   _affinity(invalid_identity), _lock(), _cache_group(slab_group)
+
 {
 }
 
@@ -77,17 +77,27 @@ unsigned ArenaPerCoreDataHolder::current_core_slow() {
   return _cpu;
 }
 
+// Tick all caches
+void ArenaPerCoreDataHolder::tick() {
+  auto foo = [&](unsigned, Data* data) {
+    data->_cache_group.tick();
+  };
+  iterate(foo);
+}
+
 void ArenaPerCoreDataHolder::print_on(outputStream* st) const {
-  // Todo
+  auto foo = [&, st](unsigned cpu, Data* data) {
+    st->print_cr("PerCore data for CPU: %u", cpu);
+    data->_cache_group.print_on(st);
+  };
+  iterate(foo);
 }
 
 #ifdef ASSERT
 void ArenaPerCoreDataHolder::verify() const {
-  for (unsigned i = 0; i < _num_cpus; i++) {
-    Data* const data = (_data + i);
-    assert(data->_affinity > 0, "Sanity");
-    ArenaMutexLocker locker(data->_lock);
+  auto foo = [&](unsigned, Data* data) {
     data->_cache_group.verify();
-  }
+  };
+  iterate(foo);
 }
 #endif
