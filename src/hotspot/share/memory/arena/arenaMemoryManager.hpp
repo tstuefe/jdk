@@ -65,6 +65,7 @@ public:
   void verify() const;
 #endif
 
+  void print_on(outputStream* st) const;
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENAMANAGER_HPP

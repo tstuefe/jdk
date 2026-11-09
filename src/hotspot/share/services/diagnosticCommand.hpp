@@ -873,6 +873,17 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class ArenasDCmd : public DCmd {
+public:
+  ArenasDCmd(outputStream* output, bool heap);
+  static const char* name() { return "VM.arenas"; }
+  static const char* description() {
+    return "Prints arena information.";
+  }
+  static const char* impact() { return "Medium"; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 #if defined(LINUX) || defined(_WIN64) || defined(__APPLE__)
 
 class SystemMapDCmd : public DCmd {

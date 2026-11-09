@@ -92,6 +92,8 @@ public:
 
   unsigned num_cpus() const { return _num_cpus; }
 
+  void print_on(outputStream* st) const;
+
   DEBUG_ONLY(void verify() const);
 
 };

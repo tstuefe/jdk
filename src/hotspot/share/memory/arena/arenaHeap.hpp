@@ -29,7 +29,10 @@
 
 
 #include "memory/arena/arenaBlock.hpp"
+#include "memory/arena/arenaStatistics.hpp"
+#include "runtime/atomic.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/ostream.hpp"
 
 // Base class offers ways to commit, uncommit and thp-advise
 // ranges of memory. It has no concept of (commit, used) boundaries.
@@ -39,9 +42,18 @@ class ArenaHeapBase {
   const address _base;
   const address _end;
 
+  // Some statistics
+#ifdef ARENA_STATISTICS
+  Atomic<unsigned> _num_commit_ops;
+  Atomic<unsigned> _num_discard_ops;
+#endif
+
 protected:
 
   DEBUG_ONLY(void verify() const);
+  void print_on(const char* name, outputStream* st) const;
+
+  ArenaHeapBase(size_t max_size);
 
 public:
 
@@ -50,7 +62,6 @@ public:
   // For now. Todo, needs refinement.
   static constexpr size_t large_page_size = 2 * M;
 
-  ArenaHeapBase(size_t max_size);
   ~ArenaHeapBase();
 
   bool reserved_contains(const_blockptr_t block) const {
@@ -90,6 +101,8 @@ public:
 
   const_blockptr_t hwm() const { return _hwm; }
 
+  void print_on(outputStream* st) const;
+
   DEBUG_ONLY(void verify() const);
 
 };
@@ -126,6 +139,8 @@ public:
   void align_hwm_to() { align_hwm_up(alignof(T)); }
 
   const_address hwm() const { return _hwm; }
+
+  void print_on(outputStream* st) const;
 
   DEBUG_ONLY(void verify() const);
 };

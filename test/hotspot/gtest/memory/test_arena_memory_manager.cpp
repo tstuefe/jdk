@@ -282,15 +282,22 @@ namespace {
         }
       }
     }
+
+    void print_on(outputStream* st) {
+      _memory_manager.print_on(st);
+    }
   };
 
 }
 
+//#define PRINT_STATS_AFTER_TEST
+#define PRINT_STATS_AFTER_TEST tester.print_on(tty);
 
 #define DEFINE_TESTS(seed, testname) \
 TEST_VM(Arena2_ArenaMemoryManager, testname ) { \
   Tester tester; \
   tester. testname (); \
+  PRINT_STATS_AFTER_TEST \
 }
 
 #define DEFINE_ALL_TESTS(seed) \

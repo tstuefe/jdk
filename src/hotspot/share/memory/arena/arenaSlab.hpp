@@ -28,6 +28,7 @@
 
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaHeap.hpp"
+#include "memory/arena/arenaStatistics.hpp"
 #include "memory/arena/layeredBitmap.hpp"
 #include "runtime/mutex.hpp"
 #include "runtime/os.hpp"
@@ -112,13 +113,36 @@ private:
   // enough to place it together with the other read-only data
   IndexType _commit_boundary;
 
+#ifdef ARENA_STATISTICS
+  struct SlabStatistics {
+    //  Number of standard blocks allocated, deallocated
+    unsigned _num_standard_block_allocated;
+    unsigned _num_standard_block_deallocated;
+    // How many bulk allocations/deallocations we processed
+    unsigned _num_bulk_alloc_ops;
+    unsigned _num_bulk_dealloc_ops;
+    // How many huge blocks we allocated/deallocated in total
+    unsigned _num_huge_blocks_allocated;
+    unsigned _num_huge_blocks_deallocated;
+    // How often we discarded memory
+    unsigned _num_discard_ops;
+    void account_bulk_alloc(unsigned num);
+    void account_bulk_dealloc(unsigned num);
+
+    SlabStatistics();
+    void print_on(outputStream* st) const;
+  };
+#endif
+
   // 2) hot data
   struct alignas(DEFAULT_PADDING_SIZE) SlabHotData {
     // Current number of blocks in-use
     unsigned _num_blocks_in_use;
     // Highest number of blocks in-use since the last tick
     unsigned _num_blocks_in_use_max;
-    // Add more if needed, e.g. per allocation/deallocation statistics
+#ifdef ARENA_STATISTICS
+    SlabStatistics _stats;
+#endif
 
     // The lock for this slab.
     PlatformMutex _lock;
@@ -226,6 +250,7 @@ public:
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
   unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
 
+  void print_on(outputStream* st) const;
 };
 
 // The ArenaSlabGroup holds one slab per block size. This object exists as
@@ -254,6 +279,8 @@ public:
     assert(slab->is_valid(), "Slab for this size class not valid (%u)", szclass);
     return slab;
   }
+
+  void print_on(outputStream* st) const;
 
   DEBUG_ONLY(void verify() const);
 

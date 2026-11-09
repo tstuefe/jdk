@@ -60,6 +60,10 @@ void ArenaHeapBase::commit_memory(const_blockptr_t from, const_blockptr_t to){
   assert(is_aligned(to, os::vm_page_size()), "Sanity");
   const bool b = os::commit_memory((char*)from, sz, false);
   assert(b, "OOM?");
+
+#ifdef ARENA_STATISTICS
+  _num_commit_ops.fetch_then_add(1u);
+#endif
 }
 
 // Given a memory range, enforce or inhibit huge pages (THPs).
@@ -92,13 +96,26 @@ void ArenaHeapBase::discard_memory(const_blockptr_t from, const_blockptr_t to) {
 #elif defined(__APPLE__)
   // Use madvise(MADV_FREE) for lazy return
   // Use mmap to replace the pages for immediate return
-  void* const p = mmap((void*)from, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+  const void* const p = mmap((void*)from, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
   assert(p == from, "Sanity");
-
 #else
-  ShouldNotReachHere();
+  ShouldNotReachHere(); // Todo
+#endif
+
+#ifdef ARENA_STATISTICS
+  _num_discard_ops.fetch_then_add(1u);
 #endif
 }
+
+#ifdef ARENA_STATISTICS
+void ArenaHeapBase::print_on(const char* name, outputStream* st) const {
+  st->print_cr("%s: ", name);
+  StreamIndentor indentor(st);
+  st->print_cr( RANGE2FMT, RANGE2FMTARGS(base(), end()));
+  st->print_cr("Num commit ops: %u", _num_commit_ops.load_acquire());
+  st->print_cr("Num discard ops: %u", _num_discard_ops.load_acquire());
+}
+#endif
 
 #ifdef ASSERT
 void ArenaHeapBase::verify() const {
@@ -130,10 +147,16 @@ const_blockptr_t ArenaHeap::reserve_slab_memory(size_t block_size, size_t granul
 
   const const_blockptr_t p = _hwm;
   _hwm += needed;
-  assert(_hwm <= end(), "Sanity");
+  guarantee(_hwm <= end(), "Arena Heap too small");
 
   return p;
 
+}
+
+void ArenaHeap::print_on(outputStream* st) const {
+  ArenaHeapBase::print_on("Arena heap", st);
+  StreamIndentor indentor(st);
+  st->print_cr("hwm: " PTR_FORMAT " (base + %zu)", p2u(_hwm), _hwm - base());
 }
 
 #ifdef ASSERT
@@ -176,7 +199,7 @@ void ArenaMetadataHeap::align_hwm_to_padded_size() {
 address ArenaMetadataHeap::allocate(size_t size) {
   const address p = _hwm;
   _hwm += size;
-  assert(_hwm <= end(), "Sanity");
+  guarantee(_hwm <= end(), "Arena Metadata heap too small");
   return p;
 }
 
@@ -198,6 +221,12 @@ void ArenaMetadataHeap::finalize() {
   if (_hwm < end()) {
     os::uncommit_memory((char*)_hwm, end() - _hwm);
   }
+}
+
+void ArenaMetadataHeap::print_on(outputStream* st) const {
+  ArenaHeapBase::print_on("Arena Metadata heap", st);
+  StreamIndentor indentor(st);
+  st->print_cr("hwm: " PTR_FORMAT " (base + %zu)", p2u(_hwm), _hwm - base());
 }
 
 #ifdef ASSERT

@@ -39,6 +39,7 @@
 #include "compiler/directivesParser.hpp"
 #include "gc/shared/gcVMOperations.hpp"
 #include "jvm.h"
+#include "memory/arena/arenaMemoryManager.hpp"
 #include "memory/metaspace/metaspaceDCmd.hpp"
 #include "memory/metaspaceUtils.hpp"
 #include "memory/resourceArea.hpp"
@@ -120,6 +121,7 @@ void DCmd::register_dcmds() {
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SymboltableDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<StringtableDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<metaspace::MetaspaceDCmd>(full_export));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ArenasDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassPrintLayoutDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<EventLogDCmd>(full_export));
 #if INCLUDE_JVMTI // Both JVMTI and SERVICES have to be enabled to have this dcmd
@@ -1203,6 +1205,12 @@ CompilationMemoryStatisticDCmd::CompilationMemoryStatisticDCmd(outputStream* out
 void CompilationMemoryStatisticDCmd::execute(DCmdSource source, TRAPS) {
   const size_t minsize = _minsize.has_value() ? _minsize.value()._size : 0;
   CompilationMemoryStatistic::print_jcmd_report(output(), _verbose.value(), _legend.value(), minsize);
+}
+
+ArenasDCmd::ArenasDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
+
+void ArenasDCmd::execute(DCmdSource source, TRAPS) {
+  ArenaMemoryManager::instance().print_on(output());
 }
 
 #if defined(LINUX) || defined(_WIN64) || defined(__APPLE__)

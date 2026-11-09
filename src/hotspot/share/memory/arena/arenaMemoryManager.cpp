@@ -97,8 +97,9 @@ public:
 
   const_blockptr_t allocate_chunk_storage(size_t requested_size, size_t& real_size);
 
-  DEBUG_ONLY(void verify() const;)
+  void print_statistics(outputStream* st) const;
 
+  DEBUG_ONLY(void verify() const);
 };
 
 // Helper. Given a basket, return its content to the cache or the slab
@@ -257,6 +258,14 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
   }
 }
 
+void ArenaMemoryManagerImpl::print_statistics(outputStream* st) const {
+  st->print_cr("Arena Statistic:");
+  _arena_heap.print_on(st);
+  _metadata_heap.print_on(st);
+  _slab_group.print_on(st);
+  _per_core.print_on(st);
+}
+
 #ifdef ASSERT
 void ArenaMemoryManager::verify() const {
   if (is_initialized()) {
@@ -297,6 +306,14 @@ void ArenaMemoryManagerImpl::verify() const {
   _per_core.verify();
 }
 #endif
+
+void ArenaMemoryManager::print_on(outputStream* st) const {
+  if (is_initialized()) {
+    _impl->print_statistics(st);
+  } else {
+    st->print_cr("ArenaMemoryManager: not initialized");
+  }
+}
 
 static ArenaMemoryManager _the_manager;
 

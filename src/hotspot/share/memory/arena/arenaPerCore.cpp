@@ -77,6 +77,10 @@ unsigned ArenaPerCoreDataHolder::current_core_slow() {
   return _cpu;
 }
 
+void ArenaPerCoreDataHolder::print_on(outputStream* st) const {
+  // Todo
+}
+
 #ifdef ASSERT
 void ArenaPerCoreDataHolder::verify() const {
   for (unsigned i = 0; i < _num_cpus; i++) {
