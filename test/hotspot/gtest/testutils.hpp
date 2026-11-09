@@ -75,7 +75,7 @@ public:
 #define ASSERT_ALIGN(p, n) ASSERT_TRUE(is_aligned(p, n))
 
 #ifdef LOG_PLEASE
-#define LOG_HERE(s, ...) { printf(s, __VA_ARGS__); printf("\n"); fflush(stdout); }
+#define LOG_HERE(s, ...) { (void) printf(s, __VA_ARGS__); printf("\n"); fflush(stdout); }
 #else
 #define LOG_HERE(s, ...)
 #endif

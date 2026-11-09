@@ -30,6 +30,7 @@
 
 #include "memory/arena/arenaMutex.hpp"
 #include "memory/arena/arenaBlock.hpp"
+#include "memory/arena/arenaStatistics.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
 #include "memory/arena/arenaSlab.hpp"
 #include "utilities/align.hpp"
@@ -55,6 +56,10 @@ public:
     ArenaCacheGroup _cache_group; // seg. fits caches for all valid block sizes
     explicit Data(ArenaSlabGroup* slab_group);
   };
+#ifdef ARENA_STATS
+  uint64_t _num_slow_cpu_queries;
+  uint64_t _num_cpu_queries; // is this too expensive?
+#endif
 
 private:
 
@@ -73,6 +78,7 @@ private:
 
   unsigned current_core() {
     const uintptr_t affinity = at(_cpu)->_affinity;
+    ARENA_STATS_ONLY(_num_cpu_queries ++);
     if (affinity == this_thread_identity()) {
       return _cpu;
     }
@@ -107,6 +113,8 @@ public:
   Data* get_current_core_data() { return at(current_core()); }
 
   unsigned num_cpus() const { return _num_cpus; }
+
+  unsigned num_cpus_used() const;
 
   // Tick all caches
   void tick();

@@ -38,7 +38,7 @@
 
 #include "test_arena_helpers.hpp"
 
-//#define LOG_PLEASE
+#define LOG_PLEASE
 #include "testutils.hpp"
 #include "threadHelper.inline.hpp"
 
@@ -122,5 +122,18 @@ TEST_VM(Arena2_PerCore, stress) {
   TestThreadGroup ttg(stresser, MIN2(max_num_threads, num_threads));
   ttg.doit();
   ttg.join();
+
+  LOG_HERE("Num CPUs : %u", f.holder.num_cpus());
+  LOG_HERE("Num CPUs used: %u", f.holder.num_cpus_used());
+
+#ifdef ARENA_STATS
+#ifdef LOG_PLEASE
+  f.arena_heap.print_on(tty);
+  f.metadata_heap.print_on(tty);
+  f.slab_group.print_on(tty);
+  f.holder.print_on(tty);
+#endif
+#endif
+
   DEBUG_ONLY(f.verify();)
 }

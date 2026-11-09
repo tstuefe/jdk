@@ -37,6 +37,9 @@
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
 
 THREAD_LOCAL unsigned    ArenaPerCoreDataHolder::_cpu = 0u;
 
@@ -64,18 +67,49 @@ ArenaPerCoreDataHolder::ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap,
     return p;
   } ())
 {
+  ARENA_STATS_ONLY(_num_cpu_queries = 0);
+  ARENA_STATS_ONLY(_num_slow_cpu_queries = 0);
 }
 
 unsigned ArenaPerCoreDataHolder::current_core_slow() {
-
   // Set current CPU
-  _cpu = os::processor_id();
+
+  // Currently, os::processor_id() does not work on MacOS ARM.
+  // For now, implement it here using pthread_cpu_number_np.
+  // Note that that is slow, but we only use it for the slow path.
+  unsigned cpu = 0;
+#ifdef __APPLE__
+  {
+    size_t n = 0;
+    if (pthread_cpu_number_np(&n) == 0) {
+      cpu = n;
+    }
+    // to be careful. Pthread_cpu_number_np is not documented.
+    cpu = cpu % num_cpus();
+  }
+#else
+  cpu = os::processor_id();
+#endif
+
+  _cpu = cpu;
 
   // Update affinity
   at(_cpu)->_affinity = this_thread_identity();
 
+  ARENA_STATS_ONLY(_num_slow_cpu_queries++);
+
   return _cpu;
 }
+
+unsigned ArenaPerCoreDataHolder::num_cpus_used() const {
+  unsigned count = 0;
+  auto foo = [&count](unsigned, Data* data) {
+    count++;
+  };
+  iterate(foo);
+  return count;
+}
+
 
 // Tick all caches
 void ArenaPerCoreDataHolder::tick() {
@@ -86,6 +120,10 @@ void ArenaPerCoreDataHolder::tick() {
 }
 
 void ArenaPerCoreDataHolder::print_on(outputStream* st) const {
+  st->print_cr("PerCore Holder");
+  StreamIndentor indentor(st);
+  st->print_cr("CPUs/used: %u/%u", num_cpus_used(), num_cpus());
+  ARENA_STATS_ONLY(st->print_cr("Queries/Num slow queries: " UINT64_FORMAT "/" UINT64_FORMAT , _num_cpu_queries, _num_slow_cpu_queries);)
   auto foo = [&, st](unsigned cpu, Data* data) {
     st->print_cr("PerCore data for CPU: %u", cpu);
     data->_cache_group.print_on(st);
