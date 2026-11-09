@@ -248,6 +248,8 @@ public:
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
   unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
 
+  void tick();
+
   void print_on(outputStream* st) const;
 };
 
@@ -277,6 +279,8 @@ public:
     assert(slab->is_valid(), "Slab for this size class not valid (%u)", szclass);
     return slab;
   }
+
+  void tick();
 
   void print_on(outputStream* st) const;
 

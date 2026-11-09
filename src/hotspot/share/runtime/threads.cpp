@@ -871,6 +871,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Finish materializing AOT objects
   HeapShared::finish_materialize_objects();
 
+  // Start Arena Ticker Thread
+  ArenaMemoryManager::instance().start_ticker();
+
   create_vm_timer.end();
 #ifdef ASSERT
   _vm_complete = true;

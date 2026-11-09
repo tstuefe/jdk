@@ -327,6 +327,10 @@ void ArenaSlab::decrease_block_counter(unsigned num) {
   _hot->_num_blocks_in_use -= num;
 }
 
+void ArenaSlab::tick() {
+  // Todo
+}
+
 void ArenaSlab::print_on(outputStream* st) const {
   st->print_cr("ArenaSlab %zu", block_size());
   StreamIndentor indentor(st);
@@ -522,6 +526,12 @@ ArenaSlabGroup::ArenaSlabGroup(ArenaHeap* arena_heap,
                                ArenaMetadataHeap* metadata_heap) :
   ArenaSlabGroup(arena_heap, metadata_heap, global_slab_params)
 {
+}
+
+void ArenaSlabGroup::tick() {
+  for (unsigned i = 0; i < num_slots; i++) {
+    _slabs[i].tick();
+  }
 }
 
 void ArenaSlabGroup::print_on(outputStream* st) const {

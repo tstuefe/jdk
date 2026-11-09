@@ -23,15 +23,17 @@
  *
  */
 
+#include "logging/log.hpp"
+#include "logging/logStream.hpp"
 
 #include "memory/arena/arenaBlock.hpp"
-#include "memory/arena/arenaPerCore.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
 #include "memory/arena/arenaHeap.hpp"
-#include "memory/arena/arenaSlab.hpp"
-#include "memory/arena/arenaMutex.hpp"
-
 #include "memory/arena/arenaMemoryManager.hpp"
+#include "memory/arena/arenaMutex.hpp"
+#include "memory/arena/arenaPerCore.hpp"
+#include "memory/arena/arenaSlab.hpp"
+#include "memory/arena/arenaTick.hpp"
 
 
 #include "memory/arena.hpp"
@@ -72,13 +74,14 @@ namespace {
   };
 }
 
-
-class ArenaMemoryManagerImpl : public CHeapObj<mtChunk>{
-
+class ArenaMemoryManagerImpl : public CHeapObj<mtChunk>, public Tickable {
   ArenaHeap _arena_heap;
   ArenaMetadataHeap _metadata_heap;
   ArenaSlabGroup _slab_group;
   ArenaPerCoreDataHolder _per_core;
+  ArenaTickThread* _ticker;
+
+  static constexpr int seconds_per_tick = 1;
 
   // Helper. Given a basket, return its content to the cache or the slab
   // depending on who is resonsible for receiving it.
@@ -89,15 +92,24 @@ public:
   ArenaMemoryManagerImpl() :
     _arena_heap(), _metadata_heap(),
     _slab_group(&_arena_heap, &_metadata_heap),
-    _per_core(&_metadata_heap, &_slab_group)
+    _per_core(&_metadata_heap, &_slab_group),
+    _ticker(nullptr)
   {
+    log_info(arena)("Arena System Initialized");
+  }
+
+  void start_ticker() {
+    _ticker = new ArenaTickThread(this, seconds_per_tick);
+    _ticker->start();
   }
 
   void deallocate_chunks(const Chunk* first_chunk);
 
   const_blockptr_t allocate_chunk_storage(size_t requested_size, size_t& real_size);
 
-  void print_statistics(outputStream* st) const;
+  void tick(unsigned tick_number) override;
+
+  void print_on(outputStream* st) const;
 
   DEBUG_ONLY(void verify() const);
 };
@@ -258,7 +270,19 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
   }
 }
 
-void ArenaMemoryManagerImpl::print_statistics(outputStream* st) const {
+void ArenaMemoryManagerImpl::tick(unsigned tick_number) {
+  // We first tick the slabs, then the caches.
+  _slab_group.tick();
+  _per_core.tick();
+  LogTarget(Info, arena, stats) lt;
+  if (lt.is_enabled()) {
+    LogStream ls(lt);
+    ls.print_cr("Arena Memory Manager, Tick %u", tick_number);
+    print_on(&ls);
+  }
+}
+
+void ArenaMemoryManagerImpl::print_on(outputStream* st) const {
   st->print_cr("Arena Statistic:");
   _arena_heap.print_on(st);
   _metadata_heap.print_on(st);
@@ -281,6 +305,12 @@ ArenaMemoryManager::ArenaMemoryManager() :
 
 void ArenaMemoryManager::initialize() {
   _impl = new ArenaMemoryManagerImpl();
+}
+
+void ArenaMemoryManager::start_ticker() {
+  if (is_initialized()) {
+    _impl->start_ticker();
+  }
 }
 
 void ArenaMemoryManager::cleanup() {
@@ -307,9 +337,15 @@ void ArenaMemoryManagerImpl::verify() const {
 }
 #endif
 
+void ArenaMemoryManager::tick(unsigned tick_number) const {
+  if (is_initialized()) {
+    _impl->tick(tick_number);
+  }
+}
+
 void ArenaMemoryManager::print_on(outputStream* st) const {
   if (is_initialized()) {
-    _impl->print_statistics(st);
+    _impl->print_on(st);
   } else {
     st->print_cr("ArenaMemoryManager: not initialized");
   }

@@ -37,6 +37,7 @@ class ArenaMemoryManagerImpl;
 
 // The singleton which holds slabs and caches together and
 // converts Chunk to Blocks
+
 class ArenaMemoryManager {
 
   ArenaMemoryManagerImpl* _impl;
@@ -46,6 +47,7 @@ public:
   ArenaMemoryManager();
 
   void initialize();
+  void start_ticker();
   void cleanup(); // Tests only, the global memory manager is never released.
   bool is_initialized() const { return _impl != nullptr; }
 
@@ -64,6 +66,8 @@ public:
 #ifdef ASSERT
   void verify() const;
 #endif
+
+  void tick(unsigned tick_number) const;
 
   void print_on(outputStream* st) const;
 };

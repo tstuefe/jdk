@@ -39,6 +39,7 @@ class outputStream;
   LOG_TAG(alloc) \
   LOG_TAG(annotation) \
   LOG_TAG(aot) \
+  LOG_TAG(arena) \
   LOG_TAG(arguments) \
   LOG_TAG(array) \
   LOG_TAG(asan) \
