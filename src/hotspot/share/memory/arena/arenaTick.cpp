@@ -45,6 +45,8 @@ void ArenaTickThread::start() {
   if (os::create_thread(this, os::vm_thread)) {
     os::start_thread(this);
     log_info(arena)("Ticker thread started, interval %u seconds per tick", _seconds_per_tick);
+  } else {
+    log_warning(arena)("Ticker thread failed to start");
   }
 }
 

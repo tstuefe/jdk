@@ -99,6 +99,7 @@ public:
   }
 
   void start_ticker() {
+    assert(_ticker == nullptr, "we only need one");
     _ticker = new ArenaTickThread(this, seconds_per_tick);
     _ticker->start();
   }
