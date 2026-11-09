@@ -153,7 +153,7 @@ struct ArenaBlockHelpers : public AllStatic {
   // block size. The block size does not have to be aligned.
   // If no size class for this exact size exist, the next larger size class is returned.
   // E.g. 9K => szclass_32K.
-  static constexpr block_size_class_t unaligned_block_size_to_standard_size_class(size_t block_size) {
+  static block_size_class_t unaligned_block_size_to_standard_size_class(size_t block_size) {
     assert(block_size <= max_standard_block_size, "Block size too large (%zu)", block_size);
     const size_t pow2 = round_up_power_of_2(block_size);
     return pow2_block_size_to_standard_size_class(pow2);
@@ -190,13 +190,13 @@ struct ArenaBlockHelpers : public AllStatic {
   }
 
 #ifdef ASSERT
-  static void verify_valid_standard_block_size(size_t blocksize) {
+  static constexpr void verify_valid_standard_block_size(size_t blocksize) {
     assert(is_valid_standard_block_size(blocksize), "Not a valid standard block size (%zu)", blocksize);
   }
-  static void verify_valid_huge_size(size_t blocksize) {
+  static constexpr void verify_valid_huge_size(size_t blocksize) {
     assert(is_valid_huge_size(blocksize), "Not a valid huge size (%zu)", blocksize);
   }
-  static void verify_valid_block_size(size_t blocksize) {
+  static constexpr void verify_valid_block_size(size_t blocksize) {
     assert(is_valid_block_size(blocksize), "Not a valid block size (%zu)", blocksize);
   }
 #endif // ASSERT

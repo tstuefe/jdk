@@ -42,6 +42,4 @@ public:
   ~ArenaMutexLocker() { _mutex.unlock(); }
 };
 
-
-
 #endif //HOTSPOT_ARENAMUTEX_HPP
