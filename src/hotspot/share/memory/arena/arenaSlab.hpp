@@ -116,16 +116,16 @@ private:
 #ifdef ARENA_STATISTICS
   struct SlabStatistics {
     //  Number of standard blocks allocated, deallocated
-    unsigned _num_standard_block_allocated;
-    unsigned _num_standard_block_deallocated;
+    uint64_t _num_standard_block_allocated;
+    uint64_t _num_standard_block_deallocated;
     // How many bulk allocations/deallocations we processed
-    unsigned _num_bulk_alloc_ops;
-    unsigned _num_bulk_dealloc_ops;
+    uint64_t _num_bulk_alloc_ops;
+    uint64_t _num_bulk_dealloc_ops;
     // How many huge blocks we allocated/deallocated in total
-    unsigned _num_huge_blocks_allocated;
-    unsigned _num_huge_blocks_deallocated;
+    uint64_t _num_huge_blocks_allocated;
+    uint64_t _num_huge_blocks_deallocated;
     // How often we discarded memory
-    unsigned _num_discard_ops;
+    uint64_t _num_discard_ops;
     void account_bulk_alloc(unsigned num);
     void account_bulk_dealloc(unsigned num);
 

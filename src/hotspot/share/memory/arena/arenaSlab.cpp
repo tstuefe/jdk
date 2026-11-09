@@ -54,19 +54,21 @@ void ArenaSlab::SlabStatistics::account_bulk_dealloc(unsigned num) {
   _num_standard_block_deallocated += num;
 }
 
+#define PRTCNT(desc, name) { st->print_cr("%s: " UINT64_FORMAT, desc, name); }
+
 void ArenaSlab::SlabStatistics::print_on(outputStream *st) const {
   st->print_cr("SlabStatistics:");
-  st->print_cr("  Num standard blocks allocated: %u", _num_standard_block_allocated);
-  st->print_cr("  Num bulk alloc ops: %u", _num_bulk_alloc_ops);
-  st->print_cr("  Avg bulk alloc len: %.2f",
+  PRTCNT("Standard blocks allocated", _num_standard_block_allocated);
+  PRTCNT("Bulk allocs", _num_bulk_alloc_ops);
+  st->print_cr("  Blocks per bulk alloc, avg: %.2f",
     _num_bulk_alloc_ops > 0 ? (double)_num_standard_block_allocated / (double)_num_bulk_alloc_ops : 0.0);
-  st->print_cr("  Num standard blocks deallocated: %u", _num_standard_block_deallocated);
-  st->print_cr("  Num bulk dealloc ops: %u", _num_bulk_dealloc_ops);
-  st->print_cr("  Avg bulk dealloc len: %.2f",
+  PRTCNT("Standard blocks deallocated", _num_standard_block_deallocated);
+  PRTCNT("Bulk deallocs", _num_bulk_dealloc_ops);
+  st->print_cr("  Blocks per bulk dealloc, avg: %.2f",
     _num_bulk_dealloc_ops > 0 ? (double)_num_standard_block_deallocated / (double)_num_bulk_dealloc_ops : 0.0);
-  st->print_cr("  Num huge blocks allocated: %u", _num_huge_blocks_allocated);
-  st->print_cr("  Num huge blocks deallocated: %u", _num_huge_blocks_deallocated);
-  st->print_cr("  Num discard ops: %u", _num_discard_ops);
+  PRTCNT("Huge blocks allocated", _num_huge_blocks_allocated);
+  PRTCNT("Huge blocks deallocated", _num_huge_blocks_deallocated);
+  PRTCNT("Num discard ops", _num_discard_ops);
 }
 
 #endif
