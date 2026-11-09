@@ -54,23 +54,6 @@ void ArenaSlab::SlabStatistics::account_bulk_dealloc(unsigned num) {
   _num_standard_block_deallocated += num;
 }
 
-#define PRTCNT(desc, name) { st->print_cr("%s: " UINT64_FORMAT, desc, name); }
-
-void ArenaSlab::SlabStatistics::print_on(outputStream *st) const {
-  st->print_cr("SlabStatistics:");
-  PRTCNT("Standard blocks allocated", _num_standard_block_allocated);
-  PRTCNT("Bulk allocs", _num_bulk_alloc_ops);
-  st->print_cr("  Blocks per bulk alloc, avg: %.2f",
-    _num_bulk_alloc_ops > 0 ? (double)_num_standard_block_allocated / (double)_num_bulk_alloc_ops : 0.0);
-  PRTCNT("Standard blocks deallocated", _num_standard_block_deallocated);
-  PRTCNT("Bulk deallocs", _num_bulk_dealloc_ops);
-  st->print_cr("  Blocks per bulk dealloc, avg: %.2f",
-    _num_bulk_dealloc_ops > 0 ? (double)_num_standard_block_deallocated / (double)_num_bulk_dealloc_ops : 0.0);
-  PRTCNT("Huge blocks allocated", _num_huge_blocks_allocated);
-  PRTCNT("Huge blocks deallocated", _num_huge_blocks_deallocated);
-  PRTCNT("Num discard ops", _num_discard_ops);
-}
-
 #endif
 
 ArenaSlab::SlabHotData::SlabHotData() :
@@ -345,14 +328,20 @@ void ArenaSlab::decrease_block_counter(unsigned num) {
 }
 
 void ArenaSlab::print_on(outputStream* st) const {
-  st->print_cr("ArenaSlab for blocksize %zu %s: ",
-    block_size(), block_size() == ArenaBlockHelpers::huge_block_granularity ? "and larger (huge)" : "");
+  char name[32];
+  if (block_size() <= ArenaBlockHelpers::max_standard_block_size) {
+    (void) os::snprintf(name, 32, "ArenaSlab %zu", block_size());
+  } else {
+    (void) os::snprintf(name, 32, "ArenaSlab huge");
+  }
   StreamIndentor indentor(st);
+#define PRINT_HERE(fmt, ...) { st->print_raw(name); st->print_cr(" " fmt, __VA_ARGS__); }
+
   // Geometry:
-  st->print_cr("granule_size: %zu (%u blocks)",
-    granule_size(), blocks_per_granule());
-  st->print_cr("max blocks: %u ", num_blocks());
-  st->print_cr("release boundary: %u granules (%u blocks, %zu bytes)",
+  PRINT_HERE("block_size: %zu bytes", block_size());
+  PRINT_HERE("granule_size: %zu (%u blocks)", granule_size(), blocks_per_granule());
+  PRINT_HERE("max blocks: %u ", num_blocks());
+  PRINT_HERE("release boundary: %u granules (%u blocks, %zu bytes)",
     checked_cast<unsigned>(_release_boundary),
     checked_cast<unsigned>(_release_boundary) * blocks_per_granule(),
     _release_boundary * _granule_size
@@ -361,16 +350,16 @@ void ArenaSlab::print_on(outputStream* st) const {
     checked_cast<unsigned>(granule_index_to_first_block_index_incl(_release_boundary));
   const unsigned max_blocks_in_burst =
     num_blocks() - max_blocks_in_resident;
-  st->print_cr("max blocks in resident: %u ", max_blocks_in_resident);
-  st->print_cr("max blocks in burst: %u ", max_blocks_in_burst);
+  PRINT_HERE("max blocks in resident: %u ", max_blocks_in_resident);
+  PRINT_HERE("max blocks in burst: %u ", max_blocks_in_burst);
 
   // In use statistics
-  st->print_cr("in-use blocks: %u ", count_in_use_blocks());
-  st->print_cr("blocks in use (historical peak): %u ", _hot->_num_blocks_in_use_max);
+  PRINT_HERE("in-use blocks: %u ", count_in_use_blocks());
+  PRINT_HERE("blocks in use (historical peak): %u ", _hot->_num_blocks_in_use_max);
 
   // To get a glimpse at the decreasing density we expect:
   if (max_blocks_in_resident > 0) {
-    st->print_cr("in-use blocks in resident section: %u",
+    PRINT_HERE("in-use blocks in resident section: %u",
       checked_cast<unsigned>(_in_use_bitmap.count_one_bits(0, max_blocks_in_resident))
     );
   }
@@ -379,7 +368,8 @@ void ArenaSlab::print_on(outputStream* st) const {
   if (max_blocks_in_burst > 0) {
     const unsigned in_burst =
       checked_cast<unsigned>(_in_use_bitmap.count_one_bits(max_blocks_in_resident, num_blocks()));
-    st->print_cr("in-use blocks in burst: %u", in_burst);
+    PRINT_HERE("in-use blocks in burst: %u", in_burst);
+
     if (max_blocks_in_burst > 4) {
       const unsigned q = max_blocks_in_burst / 4;
       unsigned count[4];
@@ -391,7 +381,7 @@ void ArenaSlab::print_on(outputStream* st) const {
         count[i] = checked_cast<unsigned>(
           _in_use_bitmap.count_one_bits(max_blocks_in_resident + i * q, end_idx));
       }
-      st->print_cr("in-use blocks in burst per-quartile distribution: %u/%u/%u/%u",
+      PRINT_HERE("in-use blocks in burst per-quartile distribution: %u/%u/%u/%u",
         count[0], count[1], count[2], count[3]);
     }
   }
@@ -399,12 +389,29 @@ void ArenaSlab::print_on(outputStream* st) const {
   // Dirty statistics
   const unsigned dirty_granules = count_dirty_granules();
   const unsigned dirty_blocks = count_dirty_blocks();
-  st->print_cr("Dirty granules: %u (%u blocks, %zu bytes)",
+  PRINT_HERE("Dirty granules: %u (%u blocks, %zu bytes)",
     dirty_granules, dirty_blocks, dirty_granules * granule_size());
 
 #ifdef ARENA_STATISTICS
-  _hot->_stats.print_on(st);
+#define PRINT_COUNTER(desc, name) { PRINT_HERE("%s: " UINT64_FORMAT, desc, name); }
+  PRINT_COUNTER("Standard blocks allocated", _hot->_stats._num_standard_block_allocated);
+  PRINT_COUNTER("Bulk allocs", _hot->_stats._num_bulk_alloc_ops);
+  st->print_cr("  Blocks per bulk alloc, avg: %.2f",
+    _hot->_stats._num_bulk_alloc_ops > 0 ?
+      (double)_hot->_stats._num_standard_block_allocated /
+      (double)_hot->_stats._num_bulk_alloc_ops : 0.0);
+  PRINT_COUNTER("Standard blocks deallocated", _hot->_stats._num_standard_block_deallocated);
+  PRINT_COUNTER("Bulk deallocs", _hot->_stats._num_bulk_dealloc_ops);
+  st->print_cr("  Blocks per bulk dealloc, avg: %.2f",
+    _hot->_stats._num_bulk_dealloc_ops > 0 ?
+      (double)_hot->_stats._num_standard_block_deallocated /
+      (double)_hot->_stats._num_bulk_dealloc_ops : 0.0);
+  PRINT_COUNTER("Huge blocks allocated", _hot->_stats._num_huge_blocks_allocated);
+  PRINT_COUNTER("Huge blocks deallocated", _hot->_stats._num_huge_blocks_deallocated);
+  PRINT_COUNTER("Num discard ops", _hot->_stats._num_discard_ops);
+#undef PRINT_COUNTER
 #endif
+#undef PRINT_HERE
 }
 
 #ifdef ASSERT

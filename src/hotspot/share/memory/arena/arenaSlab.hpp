@@ -128,9 +128,7 @@ private:
     uint64_t _num_discard_ops;
     void account_bulk_alloc(unsigned num);
     void account_bulk_dealloc(unsigned num);
-
     SlabStatistics();
-    void print_on(outputStream* st) const;
   };
 #endif
 
