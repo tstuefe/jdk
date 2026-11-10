@@ -91,12 +91,11 @@ private:
   const unsigned _num_blocks;
   const unsigned _blocks_to_granule_shift;
   const unsigned _num_granules;
-  // decay factor in percent, see decaying.
-  // Number is in percentage, e.g. 75 = 0.75
-  const uint8_t _decay_factor;
   // Release Boundary (in number-of-granules). Granules below this are committed up-front
   // and never released
   const unsigned _release_boundary;
+  // decay factor [0.0, 1.0)
+  const double _decay_factor;
 
   const_blockptr_t _base;
   const BlockRange<IndexType> _block_range;
@@ -152,8 +151,9 @@ private:
 
   // 5) per-tick data
   struct alignas(DEFAULT_PADDING_SIZE) SlabPerTickData {
-    // The retain target from the last cycle (see tick handling)
-    IndexType _retain_target;
+    // The retain target from the last cycle (see tick handling),
+    // in number of blocks
+    unsigned _retain_target;
 
     SlabPerTickData() : _retain_target(0) {};
   };
@@ -198,6 +198,10 @@ private:
 
   void increase_block_counter(unsigned num);
   void decrease_block_counter(unsigned num);
+
+  // Releases memory. If squeeze is true, we ignore any limit toward the
+  // granularity of released memory.
+  void release_dirty_granules(bool squeeze);
 
 public:
 
