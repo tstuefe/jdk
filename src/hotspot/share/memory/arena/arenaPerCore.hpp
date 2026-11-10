@@ -36,6 +36,7 @@
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "runtime/atomic.hpp"
 
 // ArenaPerCore contains the logic that holds cache groups
 // per core and the access functions needed to effectively select
@@ -56,10 +57,8 @@ public:
     ArenaCacheGroup _cache_group; // seg. fits caches for all valid block sizes
     explicit Data(ArenaSlabGroup* slab_group);
   };
-#ifdef ARENA_STATS
-  uint64_t _num_slow_cpu_queries;
-  uint64_t _num_cpu_queries; // is this too expensive?
-#endif
+
+  ARENA_STATS_ONLY(Atomic<uint64_t> _num_slow_cpu_queries;)
 
 private:
 
@@ -78,7 +77,6 @@ private:
 
   unsigned current_core() {
     const uintptr_t affinity = at(_cpu)->_affinity;
-    ARENA_STATS_ONLY(_num_cpu_queries ++);
     if (affinity == this_thread_identity()) {
       return _cpu;
     }

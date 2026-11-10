@@ -138,6 +138,8 @@ private:
     unsigned _num_blocks_in_use;
     // Highest number of blocks in-use since the last tick
     unsigned _num_blocks_in_use_max;
+    // Index of one-beyond highest dirtied granule
+    unsigned _dirty_top;
 #ifdef ARENA_STATS
     SlabStatistics _stats;
 #endif
@@ -160,25 +162,25 @@ private:
 
   // Given a block index, returns its granule index
   IndexType block_index_to_granule_index(IndexType block_index) const {
-    DEBUG_ONLY(_block_range.check_is_valid_block_index(block_index);)
+    DEBUG_ONLY(_block_range.verify_is_valid_block_index(block_index);)
     return block_index >> _blocks_to_granule_shift;
   }
 
   // Given a block index, returns its granule index
   IndexType block_index_to_granule_index_incl(IndexType block_index) const {
-    DEBUG_ONLY(_block_range.check_is_valid_block_index_incl(block_index);)
+    DEBUG_ONLY(_block_range.verify_is_valid_block_index_incl(block_index);)
     return block_index >> _blocks_to_granule_shift;
   }
 
   // Given a granule index, returns the block index of the first block in that granule
   IndexType granule_index_to_first_block_index(IndexType granule_idx) const {
-    DEBUG_ONLY(_granule_range.check_is_valid_block_index(granule_idx);)
+    DEBUG_ONLY(_granule_range.verify_is_valid_block_index(granule_idx);)
     return granule_idx << _blocks_to_granule_shift;
   }
 
   // Given a granule index, returns the block index of the first block in that granule
   IndexType granule_index_to_first_block_index_incl(IndexType granule_idx) const {
-    DEBUG_ONLY(_granule_range.check_is_valid_block_index_incl(granule_idx);)
+    DEBUG_ONLY(_granule_range.verify_is_valid_block_index_incl(granule_idx);)
     return granule_idx << _blocks_to_granule_shift;
   }
 
@@ -191,6 +193,8 @@ private:
 
   // Ensure this and all lower-address blocks are committed.
   void ensure_committed(IndexType block_index);
+  void mark_granule_dirty(IndexType granule_idx);
+  void mark_granule_range_dirty(IndexType granule_begidx, IndexType granule_endidx);
 
   void increase_block_counter(unsigned num);
   void decrease_block_counter(unsigned num);

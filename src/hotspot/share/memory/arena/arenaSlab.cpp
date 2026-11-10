@@ -59,11 +59,11 @@ void ArenaSlab::SlabStatistics::account_bulk_dealloc(unsigned num) {
 ArenaSlab::SlabHotData::SlabHotData() :
   _num_blocks_in_use(0),
   _num_blocks_in_use_max(0),
+  _dirty_top(0),
 #ifdef ARENA_STATS
   _stats(),
 #endif
-  _lock()
-{
+  _lock() {
 }
 
 // Helper for padded data allocation
@@ -158,7 +158,7 @@ ArenaSlab::ArenaSlab() :
 
 // Ensure this and all lower-address blocks are committed.
 void ArenaSlab::ensure_committed(IndexType block_index) {
-  DEBUG_ONLY(_block_range.check_is_valid_block_index(block_index);)
+  DEBUG_ONLY(_block_range.verify_is_valid_block_index(block_index);)
   const IndexType granule_index = block_index_to_granule_index(block_index);
   const IndexType new_commit_boundary = MAX2(granule_index + 1, _commit_boundary);
   if (new_commit_boundary > _commit_boundary) {
@@ -192,7 +192,7 @@ unsigned ArenaSlab::allocate_blocks(const_blockptr_t out[], unsigned outlen) {
     // Update bitmaps
     _in_use_bitmap.set_bit(idx);
     const IndexType granule_idx = block_index_to_granule_index(idx);
-    _dirty_bitmap.set_bit(granule_idx);
+    mark_granule_dirty(granule_idx);
 
     assert(n == 0 || highest_block_idx < idx, "Should raise monotonously");
     highest_block_idx = MAX2(idx, highest_block_idx);
@@ -240,7 +240,7 @@ const_blockptr_t ArenaSlab::allocate_huge_block(size_t size) {
       if (idx2 - idx >= num) {
         // Found a hole large enough for this allocation
         _in_use_bitmap.set_range(idx, idx + num);
-        _dirty_bitmap.set_range(idx, idx + num); // huge blocks : granule == block size
+        mark_granule_range_dirty(idx, idx + num); // huge blocks : granule == block size
 
         // Move commit boundary up
         const IndexType highest_block_idx = idx + num - 1;
@@ -291,7 +291,7 @@ void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
   // are exactly block sized. So we get away with treating granules as blocks and vice versa.
   assert(_granule_size == block_size(), "Sanity");
 
-  DEBUG_ONLY(_block_range.check_is_valid_block(block);)
+  DEBUG_ONLY(_block_range.verify_is_valid_block(block);)
   assert(is_aligned(size, block_size()), "Alignment mismatch");
 
   const IndexType idx = _block_range.block_to_index(block);
@@ -315,6 +315,19 @@ void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
 #endif
 }
 
+void ArenaSlab::mark_granule_dirty(IndexType granule_idx) {
+  _dirty_bitmap.set_bit(granule_idx);
+  if (_hot->_dirty_top < (granule_idx + 1)) {
+    _hot->_dirty_top = checked_cast<unsigned>(granule_idx + 1);
+  }
+}
+
+void ArenaSlab::mark_granule_range_dirty(IndexType granule_begidx, IndexType granule_endidx) {
+  _dirty_bitmap.set_range(granule_begidx, granule_endidx);
+  if (_hot->_dirty_top < granule_endidx) {
+    _hot->_dirty_top = checked_cast<unsigned>(granule_endidx);
+  }
+}
 
 void ArenaSlab::increase_block_counter(unsigned num) {
   _hot->_num_blocks_in_use += num;
@@ -429,6 +442,11 @@ void ArenaSlab::verify() const {
   assert(_in_use_bitmap.count_one_bits() == _hot->_num_blocks_in_use, "Sanity");
   assert(_hot->_num_blocks_in_use_max >= _hot->_num_blocks_in_use, "Sanity");
   _dirty_bitmap.verify();
+
+  const IndexType highest_dirty_granule = _dirty_bitmap.find_last_set_bit(0, num_granules());
+  const unsigned expected_dirty_top =
+    highest_dirty_granule < num_granules() ? checked_cast<unsigned>(highest_dirty_granule) + 1 : 0u;
+  assert(expected_dirty_top == _hot->_dirty_top, "Sanity");
 
   // every in-use block must be dirty
   CHeapBitMap tmp(num_blocks(), mtTest, false);

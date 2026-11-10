@@ -314,24 +314,24 @@ public:
   // Given a pointer, not necessarily aligned, that points into this range,
   // return the index of the containing block
   IndexType index_of_containing_block(const_address p) const {
-    DEBUG_ONLY(check_contains(p));
+    DEBUG_ONLY(verify_contains(p));
     return block_to_index(start_of_containing_block(p));
   }
 
   // Given a pointer, not necessarily aligned, that points into this range,
   // return the start address of the containing block
   const_blockptr_t start_of_containing_block(const_address p) const {
-    DEBUG_ONLY(check_contains(p));
+    DEBUG_ONLY(verify_contains(p));
     return align_down(p, _block_size);
   }
 
   IndexType block_to_index(const_blockptr_t b) const {
-    DEBUG_ONLY(check_is_valid_block(b));
+    DEBUG_ONLY(verify_is_valid_block(b));
     return block_to_index_without_assert(b);
   }
 
   IndexType block_to_index_incl(const_blockptr_t b) const {
-    DEBUG_ONLY(check_is_valid_block_incl(b));
+    DEBUG_ONLY(verify_is_valid_block_incl(b));
     return block_to_index_without_assert(b);
   }
 
@@ -340,22 +340,22 @@ public:
   }
 
 #ifdef ASSERT
-  void check_contains(const_address p) const {
+  void verify_contains(const_address p) const {
     assert(contains(p), "Pointer out of range: " PTR_FORMAT, p2i(p));
   }
-  void check_contains_incl(const_address p) const {
+  void verify_contains_incl(const_address p) const {
     assert(contains_incl(p), "Pointer out of range: " PTR_FORMAT, p2i(p));
   }
-  void check_is_valid_block(const_blockptr_t b) const {
+  void verify_is_valid_block(const_blockptr_t b) const {
     assert(is_valid_block(b), "Block pointer invalid: " PTR_FORMAT, p2i(b));
   }
-  void check_is_valid_block_incl(const_blockptr_t b) const {
+  void verify_is_valid_block_incl(const_blockptr_t b) const {
     assert(is_valid_block_incl(b), "Block pointer invalid: " PTR_FORMAT, p2i(b));
   }
-  void check_is_valid_block_index(IndexType block_index) const {
+  void verify_is_valid_block_index(IndexType block_index) const {
     assert(is_valid_block_index(block_index), "Block index invalid: %zu", checked_cast<uintptr_t>(block_index));
   }
-  void check_is_valid_block_index_incl(IndexType num) const {
+  void verify_is_valid_block_index_incl(IndexType num) const {
     assert(is_valid_block_index_incl(num), "Invalid number of blocks: %zu", checked_cast<uintptr_t>(num));
   }
 #endif

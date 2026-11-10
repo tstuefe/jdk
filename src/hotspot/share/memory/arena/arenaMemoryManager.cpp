@@ -82,9 +82,10 @@ class ArenaMemoryManagerImpl : public CHeapObj<mtChunk>, public Tickable {
   ArenaTickThread* _ticker;
 
   static constexpr int seconds_per_tick = 1;
+  DEBUG_ONLY(static constexpr int verify_tick_interval = 1;)
 
   // Helper. Given a basket, return its content to the cache or the slab
-  // depending on who is resonsible for receiving it.
+  // depending on who is responsible for receiving it.
   void deallocate_chunks_in_basket(ArenaCacheGroup& cache_group, block_size_class_t szclass, const Basket* basket);
 
 public:
@@ -281,6 +282,11 @@ void ArenaMemoryManagerImpl::tick(unsigned tick_number) {
     ls.print_cr("Arena Memory Manager, Tick %u", tick_number);
     print_on(&ls);
   }
+#ifdef ASSERT
+  if ((tick_number % verify_tick_interval) == 0) {
+    verify();
+  }
+#endif
 }
 
 void ArenaMemoryManagerImpl::print_on(outputStream* st) const {

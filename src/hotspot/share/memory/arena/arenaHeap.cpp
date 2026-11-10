@@ -112,8 +112,8 @@ void ArenaHeapBase::print_on(const char* name, outputStream* st) const {
   StreamIndentor indentor(st);
   st->print_cr( RANGE2FMT, RANGE2FMTARGS(base(), end()));
 #ifdef ARENA_STATS
-  st->print_cr("Num commit ops: %u", _num_commit_ops.load_acquire());
-  st->print_cr("Num discard ops: %u", _num_discard_ops.load_acquire());
+  st->print_cr("Num commit ops: %u", _num_commit_ops.load_relaxed());
+  st->print_cr("Num discard ops: %u", _num_discard_ops.load_relaxed());
 #endif
 }
 

@@ -46,7 +46,6 @@ THREAD_LOCAL unsigned    ArenaPerCoreDataHolder::_cpu = 0u;
 
 ArenaPerCoreDataHolder::Data::Data(ArenaSlabGroup* slab_group) :
   _affinity(invalid_identity), _lock(), _cache_group(slab_group)
-
 {
 }
 
@@ -67,8 +66,6 @@ ArenaPerCoreDataHolder::ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap,
     return p;
   } ())
 {
-  ARENA_STATS_ONLY(_num_cpu_queries = 0);
-  ARENA_STATS_ONLY(_num_slow_cpu_queries = 0);
 }
 
 unsigned ArenaPerCoreDataHolder::current_core_slow() {
@@ -96,7 +93,7 @@ unsigned ArenaPerCoreDataHolder::current_core_slow() {
   // Update affinity
   at(_cpu)->_affinity = this_thread_identity();
 
-  ARENA_STATS_ONLY(_num_slow_cpu_queries++);
+  ARENA_STATS_ONLY(_num_slow_cpu_queries.fetch_then_add(1u););
 
   return _cpu;
 }
@@ -110,7 +107,6 @@ unsigned ArenaPerCoreDataHolder::num_cpus_used() const {
   return count;
 }
 
-
 // Tick all caches
 void ArenaPerCoreDataHolder::tick() {
   auto foo = [&](unsigned, Data* data) {
@@ -123,7 +119,8 @@ void ArenaPerCoreDataHolder::print_on(outputStream* st) const {
   st->print_cr("PerCore Holder");
   StreamIndentor indentor(st);
   st->print_cr("CPUs/used: %u/%u", num_cpus_used(), num_cpus());
-  ARENA_STATS_ONLY(st->print_cr("Queries/Num slow queries: " UINT64_FORMAT "/" UINT64_FORMAT , _num_cpu_queries, _num_slow_cpu_queries);)
+  ARENA_STATS_ONLY(st->print_cr("Num slow queries: " UINT64_FORMAT,
+    _num_slow_cpu_queries.load_relaxed());)
   auto foo = [&, st](unsigned cpu, Data* data) {
     st->print_cr("PerCore data for CPU: %u", cpu);
     data->_cache_group.print_on(st);

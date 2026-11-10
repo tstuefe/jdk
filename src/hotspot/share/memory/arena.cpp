@@ -218,7 +218,7 @@ void Arena::set_size_in_bytes(size_t size) {
   if (_size_in_bytes != size) {
     ssize_t delta = size - size_in_bytes();
     _size_in_bytes = size;
-    MemTracker::record_arena_size_change(delta, _mem_tag);
+  //  MemTracker::record_arena_size_change(delta, _mem_tag);
   }
 }
 
