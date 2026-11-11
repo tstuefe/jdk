@@ -129,9 +129,9 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
     const const_blockptr_t release_boundary_pointer =
       _granule_range.index_to_block_incl(_release_boundary);
     assert(release_boundary_pointer <= end(), "Sanity");
-    const bool resident_uses_large_pages = is_aligned(release_boundary_pointer, ArenaHeapBase::large_page_size);
+//    const bool resident_uses_large_pages = is_aligned(release_boundary_pointer, ArenaHeapBase::large_page_size);
     _arena_heap->commit_memory(base(), release_boundary_pointer);
-    _arena_heap->advise_large_page_use(base(), release_boundary_pointer, resident_uses_large_pages);
+//    _arena_heap->advise_large_page_use(base(), release_boundary_pointer, resident_uses_large_pages);
     _commit_boundary = _release_boundary;
   }
 }
@@ -624,16 +624,10 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // blocksize    granulesize   numblocks   release_boundary    decay_factor
 
   // 256 byte blocks
-  // We keep all of them inside a single (large) page that is fully resident.
-  // (Todo: this could actually share a single large page with the next slab, 1K)
-  // (      which would require ArenaHeap to be able to recognise neighboring fully resident
-  //        slabs - would save 2MB. Really Worth it?? )
-  { 256, 2*M, 8192 /* 2M */,  8192,  1.0f },
+  { 256, 64 * K, 4096 /* 1M */,  4096,  0.0f },
 
   // 1K blocks
-  // We keep all of them inside a single (large) page that is fully resident.
-  // (Todo: this could actually share a single large page with the 256 byte slab)
-{ K, 2*M, 2048 /* 2M */,  2048,  1.0f },
+{ K, 64 * K, 4096 /* 4M */,  4096,  1.0f },
 
   // 32K blocks
   // This block size sees the highest allocation churn and the highest peak live and average live number.
@@ -643,10 +637,10 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // Note that this scales with number of mutators (resource area chunks). The numbers are fine to absorb
   // a standard app's needs with resident and 99.9% of all apps needs with burst section; beyond that we
   // will use C-heap.
-{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.78f },
+{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.5f },
 
   // 64K blocks: semi important
-{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.75f },
+{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.5f },
 
   // From here on, we have very little average live blocks. Large block sizes get increasingly
   // uncommon with size. In all of these cases, granulesize == blocksize since reducing footprint becomes
