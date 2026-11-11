@@ -197,6 +197,9 @@ private:
   void increase_block_counter(unsigned num);
   void decrease_block_counter(unsigned num);
 
+  // Release mechanics
+  bool has_burst_section() const { return _release_boundary < num_granules(); }
+
   // Releases granules between [beg, end)
   void release_granule_memory(IndexType beg, IndexType end);
 
@@ -256,7 +259,7 @@ public:
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
   unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
 
-  void tick();
+  void tick(unsigned tick_number);
 
   void print_on(outputStream* st) const;
 
@@ -289,7 +292,7 @@ public:
     return slab;
   }
 
-  void tick();
+  void tick(unsigned tick_number);
 
   void print_on(outputStream* st) const;
 

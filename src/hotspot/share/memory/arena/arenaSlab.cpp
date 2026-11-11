@@ -27,6 +27,7 @@
 #include "memory/arena/arenaMutex.hpp"
 #include "memory/arena/arenaSlab.hpp"
 
+#include "logging/log.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -168,6 +169,7 @@ void ArenaSlab::ensure_committed(IndexType block_index) {
     const const_blockptr_t p1 = _granule_range.index_to_block(_commit_boundary);
     const const_blockptr_t p2 = _granule_range.index_to_block_incl(new_commit_boundary_overshoot);
     _arena_heap->commit_memory(p1, p2);
+    log_debug(arena, map)("committed %zu granules - " RANGE2FMT ".", p2 - p1, RANGE2FMTARGS(p1, p2));
 #ifdef LINUX
     _arena_heap->advise_large_page_use(p1, p2, use_large_pages());
 #endif
@@ -334,6 +336,26 @@ void ArenaSlab::decrease_block_counter(unsigned num) {
   _hot->_num_blocks_in_use -= num;
 }
 
+// Releases granules between [beg, end)
+void ArenaSlab::release_granule_memory(IndexType beg, IndexType end) {
+  DEBUG_ONLY(_granule_range.verify_is_valid_block_index_incl(end));
+  assert(beg < end, "Sanity");
+  DEBUG_ONLY(_granule_range.verify_is_valid_block_index(beg));
+  // To be super sure...
+  assert(_in_use_bitmap.count_one_bits(granule_index_to_first_block_index(beg),
+                                       granule_index_to_first_block_index_incl(end)) == 0,
+                                       "Have in use blocks?");
+  const const_blockptr_t granule_beg = _granule_range.index_to_block(beg);
+  const const_blockptr_t granule_end = _granule_range.index_to_block_incl(end);
+  _arena_heap->discard_memory(granule_beg, granule_end);
+  // now clean dirty bits
+  _dirty_bitmap.clear_range(beg, end);
+  // Increase discard counter
+  ARENA_STATS_ONLY(_hot->_stats._num_discard_ops++;)
+  log_debug(arena, map)("released %zu granules - " RANGE2FMT ".",
+    end - beg, RANGE2FMTARGS(granule_beg, granule_end));
+}
+
 void ArenaSlab::harvest_dirty_granules(bool squeeze) {
 
   ArenaMutexLocker locker(_hot->_lock);
@@ -356,9 +378,7 @@ void ArenaSlab::harvest_dirty_granules(bool squeeze) {
   // - We stop releasing memory if the retain target is reached
 
   // If we have no burst section (the whole slab is resident), there is nothing to release
-  if (_release_boundary == num_granules()) {
-    return;
-  }
+  assert(_release_boundary < num_granules(), "Only call for slabs that have a burst section");
 
   const unsigned retain_target_last = _per_tick->_retain_target;
   const unsigned retain_target = MAX2((unsigned)(retain_target_last * _decay_factor), _hot->_num_blocks_in_use_peak);
@@ -466,9 +486,11 @@ void ArenaSlab::harvest_dirty_granules(bool squeeze) {
   }
 }
 
-
-void ArenaSlab::tick() {
-  // Todo
+void ArenaSlab::tick(unsigned tick_number) {
+  if (has_burst_section()) {
+    const bool lets_squeeze = (tick_number % 5) == 0;
+    harvest_dirty_granules(lets_squeeze);
+  }
 }
 
 void ArenaSlab::print_on(outputStream* st) const {
@@ -621,7 +643,7 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // Note that this scales with number of mutators (resource area chunks). The numbers are fine to absorb
   // a standard app's needs with resident and 99.9% of all apps needs with burst section; beyond that we
   // will use C-heap.
-{ 32*K, 64*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.0f },
+{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.0f },
 
   // 64K blocks: semi important
 { 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.0f },
@@ -668,9 +690,9 @@ ArenaSlabGroup::ArenaSlabGroup(ArenaHeap* arena_heap,
 {
 }
 
-void ArenaSlabGroup::tick() {
+void ArenaSlabGroup::tick(unsigned tick_number) {
   for (unsigned i = 0; i < num_slots; i++) {
-    _slabs[i].tick();
+    _slabs[i].tick(tick_number);
   }
 }
 

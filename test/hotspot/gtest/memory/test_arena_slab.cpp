@@ -64,6 +64,21 @@ namespace {
       DEBUG_ONLY(_slab.verify();)
     }
 
+    static constexpr uint8_t canary_1 = 0x17u;
+    static constexpr uint8_t canary_2 = 0xFEu;
+
+    void check_for_memory_corruption() {
+      // Check for overwriters in every block that is should be in use and should not have
+      // been touched by anything
+      for (unsigned i = 0; i < num_blocks(); i ++) {
+        if (_control.at(i)) {
+          const const_blockptr_t b = _block_range.index_to_block(i);
+          ASSERT_EQ(b[0], canary_1);
+          ASSERT_EQ(b[block_size() - 1], canary_2);
+        }
+      }
+    }
+
     // Allocates num blocks, with verification; returns number of allocated
     // blocks
     unsigned allocate_blocks_and_verify(unsigned num) {
@@ -106,14 +121,24 @@ namespace {
       for (unsigned i = 0; i < num_allocated; ++i) {
         const blockptr_t b = const_cast<blockptr_t>(arr[i]);
         os::pretouch_memory(b, b + block_size(), os::vm_page_size());
-        b[0] = 17;
-        b[block_size() - 1] = 18;
+        b[0] = canary_1;
+        b[block_size() - 1] = canary_2;
       }
       FREE_C_HEAP_ARRAY(arr);
 
       check_equality();
       DEBUG_ONLY(_slab.verify();)
       return num_allocated;
+    }
+
+
+    void deallocate_block_range_and_verify(BitMap::idx_t beg, BitMap::idx_t end) {
+      const unsigned num = beg - end;
+      BitMap::idx_t* const arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, num, mtTest);
+      for (unsigned i = 0; i < num; ++i) {
+        arr[i] = beg + i;
+      }
+      deallocate_blocks_and_verify(arr, num);
     }
 
     void deallocate_blocks_and_verify(BitMap::idx_t block_indexes[], unsigned num) {
@@ -130,7 +155,10 @@ namespace {
       // Do it for real now
       const_blockptr_t* const arr = NEW_C_HEAP_ARRAY(const_blockptr_t, num, mtTest);
       for (unsigned i = 0; i < num; ++i) {
-        arr[i] = _block_range.index_to_block(block_indexes[i]);
+        const const_blockptr_t b = _block_range.index_to_block(block_indexes[i]);
+        ASSERT_EQ(b[0], canary_1); // check for overwriters
+        ASSERT_EQ(b[block_size() - 1], canary_2);
+        arr[i] = b;
       }
       _slab.deallocate_blocks(arr, num);
       FREE_C_HEAP_ARRAY(arr);
@@ -193,6 +221,22 @@ namespace {
       _slab.deallocate_huge_block(p, size);
 
       check_equality();
+      DEBUG_ONLY(_slab.verify();)
+    }
+
+    void tick_and_verify(unsigned tick_number) {
+      // For now, ignore on slabs where blocksize != granulesize;
+      // releasing memory not yet implemented for those.
+      // See comment in ArenaSlab::harvest();
+      if (block_size() < granule_size()) {
+        return;
+      }
+      const unsigned dirty_blocks_1 = _slab.count_dirty_blocks();
+      _slab.tick(tick_number);
+      const unsigned dirty_blocks_2 = _slab.count_dirty_blocks();
+      ASSERT_LE(dirty_blocks_2, dirty_blocks_1);
+      check_equality();
+      check_for_memory_corruption();
       DEBUG_ONLY(_slab.verify();)
     }
 
@@ -320,9 +364,9 @@ namespace {
     }
 
     void test_random() {
-      for (int cycle = 0; cycle < 10000; cycle++) {
+      for (unsigned cycle = 0; cycle < 10000; cycle++) {
         const int op_select = _random.next(16);
-        if (op_select < 8) {
+        if (op_select < 13) {
           allocate_blocks_and_verify(1 + _random.next(8));
         } else if (op_select < 15) {
           BitMap::idx_t blocks[8];
@@ -330,8 +374,7 @@ namespace {
           num = ArenaTestHelpers::get_random_set_bits(_random, _control, blocks, num);
           deallocate_blocks_and_verify(blocks, num);
         } else {
-          // Todo
-          // tick_and_test();
+          tick_and_verify(cycle);
         }
         if (::testing::Test::HasFailure()) {
           tty->print_cr("cycle %d op %d", cycle, op_select);
@@ -361,17 +404,16 @@ TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size #
 //               block_size
 //                        granule_size
 //                                  num_blocks
-//                                            release_boundary (in number of granules)
+//                                            release_boundary (in number of blocks!)
 //                                                     decay_factor
 // Note: Granules >= 2MB use large pages (todo)
 
-DEFINE_ALL_TESTS(256,     16384,    16384,    0,       0)   // 4MB
-DEFINE_ALL_TESTS(256,     16384,    16384,    4,       0)   // 4MB, 64K resident
-DEFINE_ALL_TESTS(256,     65536,    8192,     0,       0)   // 2MB
-DEFINE_ALL_TESTS(256,     65536,    8192,     32,      0)   // 2MB, all resident
-DEFINE_ALL_TESTS(256,     2097152,  16384,    0,       0)
+DEFINE_ALL_TESTS(256,     16384,    16384,    16384,       0)   // 4MB
+DEFINE_ALL_TESTS(256,     65536,    8192,     8192,        0)   // 2MB
+DEFINE_ALL_TESTS(256,     2097152,  16384,    16384,       0)
 
-DEFINE_ALL_TESTS(32768,   32768,    2048,     0,       0)   // 64MB
+DEFINE_ALL_TESTS(32768,   32768,    8192,     0,       0)   // 256MB
+DEFINE_ALL_TESTS(32768,   32768,    8192,     17,      0)   // 256MB
 DEFINE_ALL_TESTS(32768,   65536,    2048,     0,       0)
 DEFINE_ALL_TESTS(32768,   2097152,  2048,     0,       0)
 
@@ -379,5 +421,4 @@ DEFINE_ALL_TESTS(1048576, 1048576,  32,       0,       0)   // 32MB
 DEFINE_ALL_TESTS(1048576, 2097152,  32,       0,       0)   // 32MB
 
 DEFINE_ALL_TESTS(2097152, 2097152,  64,       0,       0)   // 128MB
-DEFINE_ALL_TESTS(2097152, 2097152,  64,       4,       0)   // 128MB, 8 MB resident
 

@@ -274,7 +274,7 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
 
 void ArenaMemoryManagerImpl::tick(unsigned tick_number) {
   // We first tick the slabs, then the caches.
-  _slab_group.tick();
+  _slab_group.tick(tick_number);
   _per_core.tick();
   LogTarget(Info, arena, stats) lt;
   if (lt.is_enabled()) {
