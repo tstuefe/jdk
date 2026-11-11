@@ -58,8 +58,7 @@ void ArenaSlab::SlabStatistics::account_bulk_dealloc(unsigned num) {
 
 ArenaSlab::SlabHotData::SlabHotData() :
   _num_blocks_in_use(0),
-  _num_blocks_in_use_max(0),
-  _dirty_top(0),
+  _num_blocks_in_use_peak(0),
 #ifdef ARENA_STATS
   _stats(),
 #endif
@@ -113,6 +112,12 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
   assert(_granule_size >= _block_size, "Sanity");
   assert(_granule_size >= os::vm_page_size(), "Sanity");
   assert(is_aligned(_block_range.base(), _granule_size), "Sanity");
+
+  // The huge block slab shall have no resident region (little point, and it makes
+  // release a bit simpler)
+  if (block_size() == ArenaBlockHelpers::huge_block_granularity) {
+    assert(_release_boundary == 0, "Sanity");
+  }
 
   // Set up release resident portion below release boundary:
   // this portion will never be released and will be, if possible, backed by
@@ -312,22 +317,16 @@ void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
 
 void ArenaSlab::mark_granule_dirty(IndexType granule_idx) {
   _dirty_bitmap.set_bit(granule_idx);
-  if (_hot->_dirty_top < (granule_idx + 1)) {
-    _hot->_dirty_top = checked_cast<unsigned>(granule_idx + 1);
-  }
 }
 
 void ArenaSlab::mark_granule_range_dirty(IndexType granule_begidx, IndexType granule_endidx) {
   _dirty_bitmap.set_range(granule_begidx, granule_endidx);
-  if (_hot->_dirty_top < granule_endidx) {
-    _hot->_dirty_top = checked_cast<unsigned>(granule_endidx);
-  }
 }
 
 void ArenaSlab::increase_block_counter(unsigned num) {
   _hot->_num_blocks_in_use += num;
   assert(_hot->_num_blocks_in_use <= num_blocks(), "Sanity");
-  _hot->_num_blocks_in_use_max = MAX2(_hot->_num_blocks_in_use, _hot->_num_blocks_in_use_max);
+  _hot->_num_blocks_in_use_peak = MAX2(_hot->_num_blocks_in_use, _hot->_num_blocks_in_use_peak);
 }
 
 void ArenaSlab::decrease_block_counter(unsigned num) {
@@ -335,8 +334,10 @@ void ArenaSlab::decrease_block_counter(unsigned num) {
   _hot->_num_blocks_in_use -= num;
 }
 
-void ArenaSlab::release_dirty_granules(bool squeeze) {
-  /* work in progress
+void ArenaSlab::harvest_dirty_granules(bool squeeze) {
+
+  ArenaMutexLocker locker(_hot->_lock);
+
   // Release mechanics:
   //
   // - We compute a retain target, in number of blocks, based on the peak in-use blocks
@@ -359,118 +360,110 @@ void ArenaSlab::release_dirty_granules(bool squeeze) {
     return;
   }
 
-  const unsigned rt_last = _per_tick->_retain_target;
-  const unsigned rt_now = MAX2((unsigned)(rt_last * _decay_factor), _hot->_num_blocks_in_use_max);
+  const unsigned retain_target_last = _per_tick->_retain_target;
+  const unsigned retain_target = MAX2((unsigned)(retain_target_last * _decay_factor), _hot->_num_blocks_in_use_peak);
+  const unsigned retain_target_granules = retain_target >> _blocks_to_granule_shift; // align down is okay
 
-  const unsigned num_dirty_blocks = _dirty_bitmap.count_one_bits() << _blocks_to_granule_shift;
-  const unsigned max_blocks_to_release = num_dirty_blocks - rt_now;
+  // remember retain target for the next tick
+  _per_tick->_retain_target = retain_target;
+  // Reset the per-tick usage peak
+  _hot->_num_blocks_in_use_peak = _hot->_num_blocks_in_use;
 
-  // We don't release ranges smaller than this unless its a squeeze release
-  const size_t squeeze_threshold = squeeze ? 0 : 256 * K;
+  // Calculate the release budget
+  // Only the granules in burst are eligible for release
+  const unsigned granules_dirty =
+    _release_boundary + _dirty_bitmap.count_one_bits(_release_boundary, num_granules());
+  unsigned granules_release_budget =
+    granules_dirty > retain_target_granules ?
+    granules_dirty - retain_target_granules : 0u;
 
-  const IndexType granule_idx_hi = _hot->_dirty_top;
-  const IndexType granule_idx_lo = _release_boundary;
-  const IndexType block_idx_hi = granule_index_to_first_block_index_incl(granule_idx_hi);
-  const IndexType block_idx_lo = granule_index_to_first_block_index_incl(_release_boundary);
+  if (granules_release_budget == 0u) {
+    return; // nothing to do, retain target higher than whats dirty currently
+  }
 
-  const LayeredBitmap& dirty_bitmap = _dirty_bitmap;
-  const LayeredBitmap& in_use_bitmap = _in_use_bitmap;
+  // We don't release ranges smaller than this unless its a squeeze
+  const size_t squeeze_threshold_bytes = squeeze ? 0 : 256 * K;
+  const unsigned g_squeeze_threshold = squeeze_threshold_bytes / granule_size();
 
-  int blocks_to_release = checked_cast<int>(max_blocks_to_release);
+  // Release boundary, in number of granules and blocks
+  const unsigned g_release_boundary = _release_boundary;
+  const unsigned b_release_boundary = granule_index_to_first_block_index_incl(g_release_boundary);
 
-  IndexType granule_idx = granule_idx_hi;
-  while (granule_idx > granule_idx_lo && blocks_to_release > 0) {
-    IndexType tmp = 0, tmp2 = 0;
+  IndexType tmp;
 
-    // Find range of dirty granules
-    tmp = _dirty_bitmap.find_last_set_bit(granule_idx_lo, granule_idx);
-    if (granule_idx == tmp) {
-      // No dirty granules
-      break;
+  // Given a granule range, possibly release it.
+  // Returns number of granules actually released.
+  auto consider_for_release = [&](IndexType g_beg, IndexType g_end) {
+    const unsigned len = MIN2(checked_cast<unsigned>(g_end - g_beg), granules_release_budget);
+    if (len > 0 && len >= g_squeeze_threshold) {
+      release_granule_memory(g_end - len, g_end);
+      return len;
     }
-    tmp2 = _dirty_bitmap.find_last_clear_bit(granule_idx_lo, tmp);
-    if (tmp2 == tmp) {
-      tmp2 = granule_idx_lo;
+    return 0u;
+  };
+
+  // |----------|----------------------|----------------------------|
+  // | resident | in-use possibly      |      not in use            |
+  // |----------|----------------------|----------------------------|
+  // ^base      ^release_boundary      ^easy_limit                  ^num_granules
+  //
+
+  const unsigned b_commit_boundary = granule_index_to_first_block_index_incl(_commit_boundary);
+
+  // First harvest dirty runs that are above the highest in-use block (the "easy limit")
+  tmp = _in_use_bitmap.find_last_set_bit(b_release_boundary, b_commit_boundary);
+  const IndexType easy_limit =
+    tmp == b_commit_boundary ? _release_boundary : block_index_to_granule_index(tmp) + 1;
+
+  auto release_and_decrease_counter = [&](IndexType g_beg, IndexType g_end) {
+    const unsigned released = consider_for_release(g_beg, g_end);
+    assert(granules_release_budget >= released, "Sanity");
+    granules_release_budget -= released;
+    return granules_release_budget > 0; // true = continue
+  };
+
+  iterate_any_bitmap_1_runs_backward(_dirty_bitmap,
+    easy_limit, _commit_boundary,
+    release_and_decrease_counter);
+
+  // From here on, we need to consider in-use blocks and only release granules that
+  // are both dirty and unoccupied.
+  if (easy_limit > g_release_boundary && granules_release_budget > 0) {
+
+    // We calculate a combined bitmap from dirty granules and the in-use bitmap as follows:
+    // => combined = dirty & ~in-use
+
+    // Simplification for first prototype:
+    // We require the granule size and the block size to be the same for this release to work. That
+    // makes in-use bitmap and dirty bitmap the same size, and we can xor them easily.
+    // This only really affects 32K blocks.
+    // Slabs for smaller block sizes don't releasem (not worth it), so the burst section size is 0 and
+    // we handled that above.
+    // Slabs larger than 32K should have granulesize == blocksize.
+    // 32K blocks are special, since we have 64K-paged platforms - that is a problem for a future version,
+    // by downscaling the in-use bitmap to match the granule bitmap.
+
+    guarantee(block_size() == granule_size(), "Call only on slabs where this is true");
+    assert(_in_use_bitmap.size() == _dirty_bitmap.size(), "Sanity");
+
+    const unsigned combined_bitmap_len = easy_limit;
+    const unsigned combined_bitmap_len_words = BitMap::calc_size_in_words(combined_bitmap_len);
+
+    // Allocate memory for the combined bitmap, preferable on-stack
+    LittleBuffer<LayeredBitmap::WordType, 512u /* 4K, beyond that to C-heap */>
+      tmp_buffer(combined_bitmap_len_words);
+
+    for (unsigned i = 0; i < combined_bitmap_len_words; ++i) {
+      tmp_buffer.buffer()[i] = _dirty_bitmap.raw()[i] &~ _in_use_bitmap.raw()[i];
     }
-    const IndexType granule_idx_dirty_range_end = tmp + 1;
-    const IndexType granule_idx_dirty_range_beg = tmp2;
-    assert(granule_idx_dirty_range_beg < granule_idx_dirty_range_end, "Sanity");
+    BitMapView combined_bitmap(tmp_buffer.buffer(), combined_bitmap_len);
 
-    // Calculate the next iteration step start already, so we can continue wherever we want in this loop
-    granule_idx = granule_idx_dirty_range_beg - 1;
+    // Now iterate through the 1-runs in the combined bitmap.
+    iterate_any_bitmap_1_runs_backward(combined_bitmap,
+      g_release_boundary, easy_limit,
+      release_and_decrease_counter);
 
-    // For this range of dirty granule, find the last range of free blocks
-    const IndexType block_idx_dirty_range_end = granule_index_to_first_block_index_incl(granule_idx_dirty_range_end);
-    const IndexType block_idx_dirty_range_beg = granule_index_to_first_block_index(granule_idx_dirty_range_beg);
-    tmp = _in_use_bitmap.find_last_clear_bit(block_idx_dirty_range_beg, block_idx_dirty_range_end);
-    if (tmp == block_idx_dirty_range_end) {
-      // This granule range has no free blocks
-      continue;
-    }
-    tmp2 = _in_use_bitmap.find_last_set_bit(block_idx_dirty_range_beg, tmp);
-    if (tmp2 == tmp) {
-      tmp2 = block_idx_dirty_range_beg;
-    }
-    const IndexType block_idx_free_range_end = tmp + 1;
-    const IndexType block_idx_free_range_beg = tmp;
-    assert(block_idx_free_range_end > block_idx_free_range_beg, "Sanity");
-
-    // Found a potential discardable block range.
-    // Convert to a range of discardable granules: Only fully free and dirty granules can be released, and don't release
-    // more than needed to meet the retain target.
-
-    const IndexType granule_idx_discardable_end = block_index_to_granule_index_incl(block_idx_free_range_end);
-    const IndexType granule_idx_discardable_beg = align_up(block_index_to_granule_index(block_idx_free_range_beg), blocks_per_granule());
-
-
-    if (granule_idx_discardable_end <= granule_idx_discardable_beg) {
-      continue; // Nope.
-    }
-    const size_t discardable_bytes =
-      (granule_idx_discardable_end - granule_idx_discardable_beg) * granule_size();
-    if (squeeze_threshold > discardable_bytes) {
-      continue; // Not worth it.
-    }
-
-    // Cap
-    const IndexType granule_idx_dirty_range_end = tmp + 1;
-    const IndexType granule_idx_dirty_range_beg = tmp2;
-
-    const IndexType blocks_idx_free_end = _in_use_bitmap.find_last_clear_bit()
-
-    // Now find the lowest granule in that range that has in-use blocks
-    //
-    //
-    //
-    // Now iterate all runs of free blocks inside that section of dirty granules, bypassing in-use blocks
-    IndexType block_idx = block_idx_dirty_range_end;
-    while (block_idx > block_idx_dirty_range_beg) {
-      tmp = _in_use_bitmap.find_last_clear_bit(block_idx_dirty_range_beg, block_idx);
-      if (granule_idx == tmp) {
-        break; // No more free blocks in that dirty granule section
-      }
-      tmp2 = _in_use_bitmap.find_last_set_bit(block_idx_dirty_range_beg, tmp);
-      if (tmp2 == tmp) {
-        tmp2 = block_idx_dirty_range_beg;
-      }
-      // Calculate range of blocks to release.
-      const IndexType discard_block_range_end = tmp + 1;
-      const IndexType discard_block_range_start = tmp2;
-      const IndexType discard_granule_range_end = block_index_to_granule_index(discard_block_range_end);
-      const IndexType discard_granule_range_start = align_up(block_index_to_granule_index(discard_block_range_start), blocks_per_granule());
-
-
-      const
-      if (((granule_idx_discard_end - granule_idx_discard_start) * granule_size()) > squeeze_threshold) {
-        release_section(granule_idx_discard_start, granule_idx_discard_end);
-      }
-
-    }
-    // Now iterate all 0-runs of in-use blocks in that range
-
-
-    const IndexType granule_dirty_range_end = g_end + 1;
-  }*/
+  }
 }
 
 
@@ -501,7 +494,7 @@ void ArenaSlab::print_on(outputStream* st) const {
 
   // In use statistics
   PRINT_HERE("in-use blocks: %u ", count_in_use_blocks());
-  PRINT_HERE("blocks in use (historical peak): %u ", _hot->_num_blocks_in_use_max);
+  PRINT_HERE("blocks in use (historical peak): %u ", _hot->_num_blocks_in_use_peak);
 
   // To get a glimpse at the decreasing density we expect:
   if (max_blocks_in_resident > 0) {
@@ -574,13 +567,8 @@ void ArenaSlab::verify() const {
   assert(is_aligned(count_dirty_blocks(), blocks_per_granule()), "Sanity");
   _in_use_bitmap.verify();
   assert(_in_use_bitmap.count_one_bits() == _hot->_num_blocks_in_use, "Sanity");
-  assert(_hot->_num_blocks_in_use_max >= _hot->_num_blocks_in_use, "Sanity");
+  assert(_hot->_num_blocks_in_use_peak >= _hot->_num_blocks_in_use, "Sanity");
   _dirty_bitmap.verify();
-
-  const IndexType highest_dirty_granule = _dirty_bitmap.find_last_set_bit(0, num_granules());
-  const unsigned expected_dirty_top =
-    highest_dirty_granule < num_granules() ? checked_cast<unsigned>(highest_dirty_granule) + 1 : 0u;
-  assert(expected_dirty_top == _hot->_dirty_top, "Sanity");
 
   // every in-use block must be dirty
   CHeapBitMap tmp(num_blocks(), mtTest, false);

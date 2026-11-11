@@ -26,6 +26,7 @@
 #ifndef SHARE_MEMORY_ARENA_ARENABLOCK_HPP
 #define SHARE_MEMORY_ARENA_ARENABLOCK_HPP
 
+#include "memory/allocation.hpp"
 #include "memory/allStatic.hpp"
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
@@ -359,6 +360,26 @@ public:
     assert(is_valid_block_index_incl(num), "Invalid number of blocks: %zu", checked_cast<uintptr_t>(num));
   }
 #endif
+};
+
+// Little helper; allocate a buffer, preferably inline,
+// otherwise on C-heap
+template <typename T, size_t max_inline_size>
+class LittleBuffer {
+  T _inline_buffer[max_inline_size];
+  const size_t _len;
+  T* const _start;
+public:
+  explicit LittleBuffer(size_t len) :
+    _len(len),
+    _start(len > max_inline_size ? NEW_C_HEAP_ARRAY(T, len, mtInternal) : _inline_buffer)
+  {}
+  ~LittleBuffer() {
+    if (_start != _inline_buffer) {
+      FREE_C_HEAP_ARRAY(_start);
+    }
+  }
+  T* buffer() const { return _start; }
 };
 
 #endif // SHARE_MEMORY_ARENA_ARENABLOCK_HPP

@@ -136,9 +136,7 @@ private:
     // Current number of blocks in-use
     unsigned _num_blocks_in_use;
     // Highest number of blocks in-use since the last tick
-    unsigned _num_blocks_in_use_max;
-    // Index of one-beyond highest dirtied granule
-    unsigned _dirty_top;
+    unsigned _num_blocks_in_use_peak;
 #ifdef ARENA_STATS
     SlabStatistics _stats;
 #endif
@@ -199,9 +197,11 @@ private:
   void increase_block_counter(unsigned num);
   void decrease_block_counter(unsigned num);
 
-  // Releases memory. If squeeze is true, we ignore any limit toward the
-  // granularity of released memory.
-  void release_dirty_granules(bool squeeze);
+  // Releases granules between [beg, end)
+  void release_granule_memory(IndexType beg, IndexType end);
+
+  // Releases memory of dirty granules, depending on decay and squeeze
+  void harvest_dirty_granules(bool squeeze);
 
 public:
 
@@ -259,6 +259,7 @@ public:
   void tick();
 
   void print_on(outputStream* st) const;
+
 };
 
 // The ArenaSlabGroup holds one slab per block size. This object exists as

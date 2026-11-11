@@ -791,9 +791,34 @@ public:
     }
   }
 
+  // Returns a read-only view onto the raw master bitmap
+  const WordType* raw() const { return master_bitmap_storage(); }
+
   const WordType* base() const { return _data._storage; }
   const WordType* end() const { return _data._storage + (_data._offset_master_bitmap + num_master_bitmap_words(num_bits())); }
 
 };
+
+// Helper function:
+// Given a bitmap type that can be either a raw bitmap or a layered one,
+// iterate all 1-runs in that bitmap and call foo(beg, end) with [beg, end)
+// designating separate 1 runs. If foo returns false, stop the iterations.
+template <class BitmapClass, typename Function>
+void iterate_any_bitmap_1_runs_backward(const BitmapClass& bm, BitMap::idx_t range_beg, BitMap::idx_t range_end, Function foo) {
+  BitMap::idx_t idx = range_end;
+  while (idx > range_beg) {
+    BitMap::idx_t idx2 = bm.find_last_set_bit(range_beg, idx);
+    if (idx2 == idx) {
+      return;
+    }
+    BitMap::idx_t idx3 = bm.find_last_clear_bit(range_beg, idx2);
+    idx3 = (idx3 == idx2) ? range_beg : idx3 + 1;
+    idx2 ++;
+    if (!foo(idx3, idx2)) {
+      return;
+    }
+    idx = idx3;
+  }
+}
 
 #endif // SHARE_MEMORY_ARENA_LAYERED_BITMAP_HPP

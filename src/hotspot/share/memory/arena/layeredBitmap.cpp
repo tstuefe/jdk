@@ -26,6 +26,9 @@
 
 #include "memory/arena/arenaHeap.hpp"
 #include "memory/arena/layeredBitmap.hpp"
+
+#include <iterator>
+
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
