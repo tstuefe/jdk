@@ -628,12 +628,12 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // (Todo: this could actually share a single large page with the next slab, 1K)
   // (      which would require ArenaHeap to be able to recognise neighboring fully resident
   //        slabs - would save 2MB. Really Worth it?? )
-  { 256, 2*M, 8192 /* 2M */,  8192,  0.0f },
+  { 256, 2*M, 8192 /* 2M */,  8192,  1.0f },
 
   // 1K blocks
   // We keep all of them inside a single (large) page that is fully resident.
   // (Todo: this could actually share a single large page with the 256 byte slab)
-{ K, 2*M, 2048 /* 2M */,  2048,  0.0f },
+{ K, 2*M, 2048 /* 2M */,  2048,  1.0f },
 
   // 32K blocks
   // This block size sees the highest allocation churn and the highest peak live and average live number.
@@ -643,19 +643,19 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // Note that this scales with number of mutators (resource area chunks). The numbers are fine to absorb
   // a standard app's needs with resident and 99.9% of all apps needs with burst section; beyond that we
   // will use C-heap.
-{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.0f },
+{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.78f },
 
   // 64K blocks: semi important
-{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.0f },
+{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.75f },
 
   // From here on, we have very little average live blocks. Large block sizes get increasingly
   // uncommon with size. In all of these cases, granulesize == blocksize since reducing footprint becomes
   // more important than allocation speed. And we don't have a resident part, since we want those blocks to be
   // released to the OS completely, not cached.
-{ 128*K, 128*K, 1024 /* 128 MB */,  0 /* no resident section */,  0.0f },
-{ 256*K, 256*K, 1024 /* 256 MB */,  0 /* no resident section */,  0.0f },
-{ 512*K, 512*K, 512  /* 256 MB */,  0 /* no resident section */,  0.0f },
-{ 1*M, 1*M, 256      /* 256 MB */,  0 /* no resident section */,  0.0f },
+{ 128*K, 128*K, 1024 /* 128 MB */,  0 /* no resident section */,  0.5f },
+{ 256*K, 256*K, 1024 /* 256 MB */,  0 /* no resident section */,  0.5f },
+{ 512*K, 512*K, 512  /* 256 MB */,  0 /* no resident section */,  0.3f },
+{ 1*M, 1*M, 256      /* 256 MB */,  0 /* no resident section */,  0.3f },
 
   // 2MB blocks really are huge blocks (consisting of sequences of neighboring 2MB blocks). Keep the total size of this
   // slab large enough to absorb most of the abnormal allocations a compiler may do.

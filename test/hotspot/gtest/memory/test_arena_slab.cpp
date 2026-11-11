@@ -363,6 +363,12 @@ namespace {
       EXPECT_NE(_slab.allocate_huge_block(2 * M), nullptr);
     }
 
+    void test_release_memory() {
+      allocate_fully();
+      deallocate_block_range_and_verify(0, num_blocks());
+
+    }
+
     void test_random() {
       for (unsigned cycle = 0; cycle < 10000; cycle++) {
         const int op_select = _random.next(16);
