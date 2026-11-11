@@ -269,7 +269,7 @@ namespace {
     // For the slab. We don't test the slab in this test, so these values only matter
     // are a valid slab configuration
     static constexpr ArenaSlab::Parameters _params = {
-      32 * K, ArenaHeapBase::large_page_size, 1024, 0, 0.0f
+      32 * K, ArenaHeapBase::large_page_size, 1024, 0, false, 0.0f
     };
 
     typedef AllocationPredictionModel<_params.block_size, cachesize> ModelType;

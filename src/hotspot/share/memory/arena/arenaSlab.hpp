@@ -51,6 +51,9 @@ public:
     // Release boundary, in number of blocks
     // (must be a multiple of granule size)
     unsigned release_boundary;
+    // if true, the resident section < release_boundary
+    // will use large pages
+    bool resident_section_uses_large_pages;
     // Between 0.0 and 1.0
     double decay_factor;
   };

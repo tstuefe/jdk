@@ -129,9 +129,17 @@ ArenaSlab::ArenaSlab(ArenaHeap* arena_heap,
     const const_blockptr_t release_boundary_pointer =
       _granule_range.index_to_block_incl(_release_boundary);
     assert(release_boundary_pointer <= end(), "Sanity");
-//    const bool resident_uses_large_pages = is_aligned(release_boundary_pointer, ArenaHeapBase::large_page_size);
     _arena_heap->commit_memory(base(), release_boundary_pointer);
-//    _arena_heap->advise_large_page_use(base(), release_boundary_pointer, resident_uses_large_pages);
+    if (params->resident_section_uses_large_pages) {
+      const const_blockptr_t resident_block_pointer_lp =
+        align_down(release_boundary_pointer, ArenaHeapBase::large_page_size);
+      if (resident_block_pointer_lp > base()) {
+        _arena_heap->advise_large_page_use(base(), resident_block_pointer_lp, true);
+        _arena_heap->advise_large_page_use(resident_block_pointer_lp, release_boundary_pointer, false);
+      }
+    } else {
+      _arena_heap->advise_large_page_use(base(), release_boundary_pointer, false);
+    }
     _commit_boundary = _release_boundary;
   }
 }
@@ -624,10 +632,10 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // blocksize    granulesize   numblocks   release_boundary    decay_factor
 
   // 256 byte blocks
-  { 256, 64 * K, 4096 /* 1M */,  4096,  0.0f },
+  { 256, 64 * K, 4096 /* 1M */,  4096, false, 0.0f },
 
   // 1K blocks
-{ K, 64 * K, 4096 /* 4M */,  4096,  1.0f },
+{ K, 64 * K, 4096 /* 4M */,  4096, false, 1.0f },
 
   // 32K blocks
   // This block size sees the highest allocation churn and the highest peak live and average live number.
@@ -637,23 +645,23 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // Note that this scales with number of mutators (resource area chunks). The numbers are fine to absorb
   // a standard app's needs with resident and 99.9% of all apps needs with burst section; beyond that we
   // will use C-heap.
-{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */,  0.5f },
+{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */, true, 0.5f },
 
   // 64K blocks: semi important
-{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */,  0.5f },
+{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */, false, 0.5f },
 
   // From here on, we have very little average live blocks. Large block sizes get increasingly
   // uncommon with size. In all of these cases, granulesize == blocksize since reducing footprint becomes
   // more important than allocation speed. And we don't have a resident part, since we want those blocks to be
   // released to the OS completely, not cached.
-{ 128*K, 128*K, 1024 /* 128 MB */,  0 /* no resident section */,  0.5f },
-{ 256*K, 256*K, 1024 /* 256 MB */,  0 /* no resident section */,  0.5f },
-{ 512*K, 512*K, 512  /* 256 MB */,  0 /* no resident section */,  0.3f },
-{ 1*M, 1*M, 256      /* 256 MB */,  0 /* no resident section */,  0.3f },
+{ 128*K, 128*K, 1024 /* 128 MB */,  0 /* no resident section */, false, 0.5f },
+{ 256*K, 256*K, 1024 /* 256 MB */,  0 /* no resident section */, false,  0.5f },
+{ 512*K, 512*K, 512  /* 256 MB */,  0 /* no resident section */, false,  0.3f },
+{ 1*M, 1*M, 256      /* 256 MB */,  0 /* no resident section */, false,  0.3f },
 
   // 2MB blocks really are huge blocks (consisting of sequences of neighboring 2MB blocks). Keep the total size of this
   // slab large enough to absorb most of the abnormal allocations a compiler may do.
-{ 2*M, 2*M, ArenaBlockHelpers::huge_block_max_size / (2 * M) /* 2GB = 1024 */,  0 /* no resident section */,  0.0f }
+{ 2*M, 2*M, ArenaBlockHelpers::huge_block_max_size / (2 * M) /* 2GB = 1024 */,  0 /* no resident section */, false,  0.0f }
 
 };
 

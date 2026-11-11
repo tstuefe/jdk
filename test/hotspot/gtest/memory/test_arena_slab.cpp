@@ -394,7 +394,7 @@ namespace {
 
 #define DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, testname) \
 TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size ## _ ## num_blocks ## _ ## release_boundary ## _ ## decay_factor) { \
-  const ArenaSlab::Parameters params = { block_size, granule_size, num_blocks, release_boundary, decay_factor }; \
+  const ArenaSlab::Parameters params = { block_size, granule_size, num_blocks, release_boundary, false, decay_factor }; \
   Tester tester(&params); \
   tester.testname (); \
 }
