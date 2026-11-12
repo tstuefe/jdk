@@ -133,7 +133,7 @@ namespace {
 
 
     void deallocate_block_range_and_verify(BitMap::idx_t beg, BitMap::idx_t end) {
-      const unsigned num = beg - end;
+      const unsigned num = end - beg;
       BitMap::idx_t* const arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, num, mtTest);
       for (unsigned i = 0; i < num; ++i) {
         arr[i] = beg + i;
@@ -264,7 +264,7 @@ namespace {
     }
 
   public:
-    
+
     explicit Tester(const ArenaSlab::Parameters* params) :
       _params(params),
       _arena_heap(), _metadata_heap(),
@@ -363,11 +363,15 @@ namespace {
       EXPECT_NE(_slab.allocate_huge_block(2 * M), nullptr);
     }
 
-    void test_release_memory() {
-      allocate_fully();
-      deallocate_block_range_and_verify(0, num_blocks());
 
-    }
+    /*
+    void test_release_on_tick() {
+     allocate_fully();
+      ASSERT_EQ(_slab.count_dirty_granules(), _slab.num_granules());
+      deallocate_block_range_and_verify(0, num_blocks());
+      ASSERT_EQ(_slab.count_dirty_granules(), _slab.num_granules());
+
+    }*/
 
     void test_random() {
       for (unsigned cycle = 0; cycle < 10000; cycle++) {

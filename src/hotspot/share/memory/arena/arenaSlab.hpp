@@ -227,6 +227,7 @@ public:
   size_t granule_size() const { return _granule_size; }
   unsigned num_blocks() const { return _num_blocks; }
   unsigned num_granules() const { return _num_granules; }
+  unsigned release_boundary() const { return _release_boundary; }
   unsigned blocks_per_granule() const { return 1u << _blocks_to_granule_shift; }
 
   // Allocate a number of blocks and return their addresses in the user-provided array;
