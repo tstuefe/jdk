@@ -38,9 +38,9 @@
 #include "test_arena_helpers.hpp"
 
 class ArenaSlabTester {
+  typedef BitMap::idx_t IndexType;
 
   const ArenaSlab::Parameters* const _params;
-
   ArenaHeap _arena_heap;
   ArenaMetadataHeap _metadata_heap;
   ArenaSlab _slab;
@@ -84,7 +84,7 @@ class ArenaSlabTester {
 
     // fake-allocate in control bitmap
     CHeapBitMap prediction(num_blocks(), mtTest, true);
-    BitMap::idx_t idx = 0;
+    IndexType idx = 0;
     unsigned num_fake_allocated = 0;
     while (idx < num_blocks() && num_fake_allocated < num) {
       idx = _control.find_first_clear_bit(idx, num_blocks());
@@ -131,16 +131,16 @@ class ArenaSlabTester {
   }
 
 
-  void deallocate_block_range_and_verify(BitMap::idx_t beg, BitMap::idx_t end) {
+  void deallocate_block_range_and_verify(IndexType beg, IndexType end) {
     const unsigned num = end - beg;
-    BitMap::idx_t* const arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, num, mtTest);
+    IndexType* const arr = NEW_C_HEAP_ARRAY(IndexType, num, mtTest);
     for (unsigned i = 0; i < num; ++i) {
       arr[i] = beg + i;
     }
     deallocate_blocks_and_verify(arr, num);
   }
 
-  void deallocate_blocks_and_verify(BitMap::idx_t block_indexes[], unsigned num) {
+  void deallocate_blocks_and_verify(IndexType block_indexes[], unsigned num) {
     // check that the released blocks are in use
     CHeapBitMap tmp(num_blocks(), mtTest, true);
     for (unsigned i = 0; i < num; ++i) {
@@ -166,8 +166,8 @@ class ArenaSlabTester {
     DEBUG_ONLY(_slab.verify();)
   }
 
-  // void deallocate_blocks_and_verify(BitMap::idx_t block_index) {
-  //   BitMap::idx_t idx = block_index;
+  // void deallocate_blocks_and_verify(IndexType block_index) {
+  //   IndexType idx = block_index;
   //   deallocate_blocks_and_verify(&idx, 1);
   // }
 
@@ -178,7 +178,7 @@ class ArenaSlabTester {
     const unsigned num = size / ArenaBlockHelpers::huge_block_granularity;
 
     // fake-allocate in control bitmap
-    const BitMap::idx_t idx = ArenaTestHelpers::find_first_clear_run(_control, num);
+    const IndexType idx = ArenaTestHelpers::find_first_clear_run(_control, num);
 
     // allocate in real bitmap
     const const_blockptr_t p = _slab.allocate_huge_block(size);
@@ -206,11 +206,11 @@ class ArenaSlabTester {
     assert(is_aligned(size, ArenaBlockHelpers::huge_block_granularity), "Sanity");
 
     const unsigned num = size / ArenaBlockHelpers::huge_block_granularity;
-    const BitMap::idx_t idx = _block_range.block_to_index(p);
+    const IndexType idx = _block_range.block_to_index(p);
 
     // Range must be marked as in-use
     ASSERT_TRUE(_control.at(idx));
-    const BitMap::idx_t idx2 = _control.find_first_clear_bit(idx);
+    const IndexType idx2 = _control.find_first_clear_bit(idx);
     ASSERT_GE(idx2, idx + num);
 
     // Fake-clear in control
@@ -239,11 +239,11 @@ class ArenaSlabTester {
     DEBUG_ONLY(_slab.verify();)
   }
 
-  // void deallocate_block_range_and_verify(BitMap::idx_t from, BitMap::idx_t to) {
+  // void deallocate_block_range_and_verify(IndexType from, IndexType to) {
   //   const unsigned num = to - from;
   //   assert(num > 0, "Sanity");
-  //   BitMap::idx_t* const arr = NEW_C_HEAP_ARRAY(BitMap::idx_t, num, mtTest);
-  //   for (BitMap::idx_t idx = from; idx < to; idx ++) {
+  //   IndexType* const arr = NEW_C_HEAP_ARRAY(IndexType, num, mtTest);
+  //   for (IndexType idx = from; idx < to; idx ++) {
   //     arr[idx - from] = idx;
   //   }
   //   deallocate_blocks_and_verify(arr, num);
@@ -282,7 +282,7 @@ public:
     // Now deallocate.
     // Mode=0: forward, Mode=1 reverse, Mode=2 random
     int num_allocated = num_blocks();
-    BitMap::idx_t arr[16];
+    IndexType arr[16];
     while (num_allocated > 0) {
       int num_to_deallocate = MIN2(num_allocated, 1 + (int)_random.next(15));
       num_to_deallocate = ArenaTestHelpers::get_random_set_bits(_random, _control, arr, num_to_deallocate);
@@ -300,7 +300,7 @@ public:
     // Punch holes
     constexpr unsigned max_num_holes = 119u;
     const unsigned num_holes = MIN2(num_blocks() / 4, max_num_holes);
-    BitMap::idx_t holes [max_num_holes];
+    IndexType holes [max_num_holes];
     ArenaTestHelpers::get_random_set_bits(_random, _control, holes, num_holes);
     deallocate_blocks_and_verify(holes, num_holes);
     assert(_slab.count_in_use_blocks() == num_blocks() - num_holes, "Sanity");
@@ -378,7 +378,7 @@ public:
       if (op_select < 13) {
         allocate_blocks_and_verify(1 + _random.next(8));
       } else if (op_select < 15) {
-        BitMap::idx_t blocks[8];
+        IndexType blocks[8];
         unsigned num = 1 + _random.next(8);
         num = ArenaTestHelpers::get_random_set_bits(_random, _control, blocks, num);
         deallocate_blocks_and_verify(blocks, num);
