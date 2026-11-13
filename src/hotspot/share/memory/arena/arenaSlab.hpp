@@ -36,7 +36,10 @@
 #include "utilities/deferredStatic.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+class ArenaSlabTester;
+
 class ArenaSlab {
+  friend class ArenaSlabTester;
 public:
   typedef BitMap::idx_t IndexType;
 
@@ -94,6 +97,7 @@ private:
 
   // The arena heap is used for the slab memory
   ArenaHeap* const _arena_heap;
+
   // The metadata heap is used for the bitmaps
   ArenaMetadataHeap* const _metadata_heap;
   const size_t _block_size;
@@ -213,8 +217,16 @@ private:
   // Releases granules between [beg, end)
   void release_granule_memory(IndexType beg, IndexType end);
 
-  // Releases memory of dirty granules, depending on decay and squeeze
-  void harvest_dirty_granules(bool squeeze);
+  // Given a release max R, a granule range [G_lo, G_hi) and a minimum release len MRL,
+  // function will search [G_lo, G_hi), backwards - highest addresses first - for runs of
+  // dirty but releasable granules that are longer than MRL, release them to the heap,
+  // and clear their dirty flag. It will stop once the number of released granules reaches
+  // R, and return the number of actually released granules.
+  unsigned harvest_dirty_granules(unsigned release_max,
+                                  IndexType granule_lo, IndexType granule_hi,
+                                  unsigned min_release_len);
+
+  void clear_dirty_granules(bool squeeze);
 
 public:
 
