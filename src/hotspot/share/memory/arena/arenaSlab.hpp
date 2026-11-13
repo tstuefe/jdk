@@ -219,7 +219,7 @@ private:
 
   // Given a release max R, a granule range [G_lo, G_hi) and a minimum release len MRL,
   // function will search [G_lo, G_hi), backwards - highest addresses first - for runs of
-  // dirty but releasable granules that are longer than MRL, release them to the heap,
+  // dirty but releasable granules that are >= MRL, release them to the heap,
   // and clear their dirty flag. It will stop once the number of released granules reaches
   // R, and return the number of actually released granules.
   unsigned harvest_dirty_granules(unsigned release_max,

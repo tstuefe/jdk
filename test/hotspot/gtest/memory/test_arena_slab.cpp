@@ -509,7 +509,7 @@ public:
             for (int has_budget_cap = 0; has_budget_cap <= 1; has_budget_cap ++) {
               const IndexType hole_beg = at_back ? num_granules() - hole_size - offset : offset;
               const IndexType hole_end = hole_beg + hole_size;
-              const unsigned max_release = has_budget_cap ? num_granules() : hole_size / 2;
+              const unsigned max_release = has_budget_cap ? hole_size / 2 : num_granules();
               if (max_release == 0) {
                 continue;
               }
