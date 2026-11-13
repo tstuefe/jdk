@@ -277,10 +277,12 @@ public:
 
   // Mostly for tests:
   void get_in_use_map(BitMap& out) const { _in_use_bitmap.convert_to_flat_bitmap(out); }
+  void get_dirty_map(BitMap& out) const { _dirty_bitmap.convert_to_flat_bitmap(out); }
 
   unsigned count_in_use_blocks() const  { return checked_cast<unsigned>(_in_use_bitmap.count_one_bits()); }
   unsigned count_dirty_granules() const { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits()); }
   unsigned count_dirty_blocks() const   { return checked_cast<unsigned>(_dirty_bitmap.count_one_bits() * blocks_per_granule()); }
+  unsigned commit_boundary() const      { return _commit_boundary; }
 
   void tick(unsigned tick_number);
 

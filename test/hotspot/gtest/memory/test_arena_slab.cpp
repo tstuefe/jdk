@@ -51,6 +51,7 @@ class ArenaSlabTester {
   size_t block_size() const { return _params->block_size; }
   size_t granule_size() const { return _params->granule_size; }
   unsigned num_blocks() const { return _params->num_blocks; }
+  unsigned num_granules() const { return _slab.num_granules(); }
   unsigned release_boundary() const { return _params->release_boundary; }
   double decay_factor() const { return _params->decay_factor; }
 
@@ -129,7 +130,6 @@ class ArenaSlabTester {
     DEBUG_ONLY(_slab.verify();)
     return num_allocated;
   }
-
 
   void deallocate_block_range_and_verify(IndexType beg, IndexType end) {
     const unsigned num = end - beg;
@@ -239,27 +239,127 @@ class ArenaSlabTester {
     DEBUG_ONLY(_slab.verify();)
   }
 
-  // void deallocate_block_range_and_verify(IndexType from, IndexType to) {
-  //   const unsigned num = to - from;
-  //   assert(num > 0, "Sanity");
-  //   IndexType* const arr = NEW_C_HEAP_ARRAY(IndexType, num, mtTest);
-  //   for (IndexType idx = from; idx < to; idx ++) {
-  //     arr[idx - from] = idx;
-  //   }
-  //   deallocate_blocks_and_verify(arr, num);
-  // }
+  void harvest_dirty_granules_and_verify(unsigned release_max,
+                                         IndexType granule_lo, IndexType granule_hi,
+                                         unsigned min_release_len)
+  {
+
+    // Pre-state: - The slab contains 0..n in-use blocks that are marked with canary (which we know from _control_in_use)
+    //            - The slab contains 0..m dirty granules (from dirty_granule_bitmap)
+    //              These granules will still be accessible and their canaries still be in place.
+    // Call harvest_dirty_granules on the slab and then:
+    //            - all in-use blocks should remain untouched
+    //            - all previously dirty granules that fall into the expected release zones should now be zero'd out
+
+    // Please note that the _release_boundary does not matter for this test, since the function we test
+    // (harvest_dirty_granules) functions at a lower layer.
+
+    // For now, this works only for granules that are blocks. See comment in arenaSlab.hpp.
+    assert(block_size() == granule_size(), "Sanity");
+
+    // Equally, this only works if the slab is fully committed (to simplify matters)
+    assert(num_granules() == _slab.commit_boundary(), "Sanity");
+
+    // Grab a copy of the dirty bitmap from the slab
+    CHeapBitMap dirty_bitmap(num_granules(), mtTest, false);
+    _slab.get_dirty_map(dirty_bitmap);
+
+    ASSERT_TRUE(dirty_bitmap.contains(_control));
+
+    // Pre-state check. Check that all dirty blocks (which have to be not yet released at this point)
+    // are canary-intact. All others are zero'd out (since the full slab is committed, they should
+    // all be accessible)
+    for (IndexType i = 0; i < num_granules(); i ++) {
+      const const_blockptr_t b = _block_range.index_to_block(i);
+      if (dirty_bitmap.at(i)) {
+        ASSERT_EQ(b[0], canary_1);
+        ASSERT_EQ(b[block_size() - 1], canary_2);
+      } else {
+        ASSERT_EQ(b[0], 0u);
+        ASSERT_EQ(b[block_size() - 1], 0u);
+      }
+    }
+
+    // Calculate the expected state of the dirty bitmap after we released memory
+    // (essentially, we are mimicking harvest_dirty_blocks() here but keep the code deliberately
+    // super simple
+    CHeapBitMap dirty_bitmap_2(num_granules(), mtTest, false);
+    dirty_bitmap_2.set_from(dirty_bitmap);
+    IndexType idx = granule_hi - 1;
+    unsigned run_len = 0;
+    unsigned to_release = release_max;
+    auto consider_range = [&](IndexType i1, IndexType i2) {
+      unsigned len = checked_cast<unsigned>(i2 - i1);
+      len = MIN2(len, to_release);
+      if (len >= min_release_len) {
+        dirty_bitmap_2.clear_range(i2 - len, i2);
+        to_release -= len;
+      }
+    };
+    while (to_release > 0) {
+      const bool releasable = !_control.at(idx) && dirty_bitmap_2.at(idx);
+      if (releasable) {
+        run_len++;
+      } else {
+        consider_range(idx + 1, idx + 1 + run_len);
+        run_len = 0;
+      }
+      if (idx == granule_lo) {
+        break;
+      }
+      idx --;
+    }
+    if (run_len > 0 && to_release > 0) {
+      consider_range(idx, idx + run_len);
+    }
+
+    // Now release for real
+    _slab.harvest_dirty_granules(release_max, granule_lo, granule_hi, min_release_len);
+
+    // Check the expected dirty state
+    _slab.get_dirty_map(dirty_bitmap);
+    ASSERT_TRUE(dirty_bitmap.is_same(dirty_bitmap_2));
+    ASSERT_TRUE(dirty_bitmap.contains(_control));
+
+    // Post-state check. Check that all dirty blocks (in-use or not in-use)
+    // are canary-intact. All others are zero'd out.
+    for (IndexType i = 0; i < num_granules(); i ++) {
+      const const_blockptr_t b = _block_range.index_to_block(i);
+      if (dirty_bitmap.at(i)) {
+        ASSERT_EQ(b[0], canary_1);
+        ASSERT_EQ(b[block_size() - 1], canary_2);
+      } else {
+        ASSERT_EQ(b[0], 0u);
+        ASSERT_EQ(b[block_size() - 1], 0u);
+      }
+    }
+
+    check_equality();
+    DEBUG_ONLY(_slab.verify();)
+  }
+
+  void test_harvest_with_one_hole(IndexType hole_beg, IndexType hole_end,
+                                  unsigned release_max,
+                                  IndexType granule_lo, IndexType granule_hi,
+                                  unsigned min_release_len
+  ) {
+    allocate_fully();
+    deallocate_block_range_and_verify(hole_beg, hole_end);
+    harvest_dirty_granules_and_verify(release_max, granule_lo, granule_hi, min_release_len);
+  }
 
   void allocate_fully() {
-    // allocate to the brim and a bit beyond
-    unsigned num_allocated = 0;
-    while (num_allocated < num_blocks()) {
-      const unsigned num_to_allocate = MAX2(_random.next(16), 1u);
+    // allocate fully (regardless of current state of slab)
+    unsigned free_blocks = num_blocks() - _slab.count_in_use_blocks();
+    while (free_blocks > 0) {
+      const unsigned num_to_allocate = clamp<unsigned>(_random.next(16), 1u, free_blocks);
       const unsigned n = allocate_blocks_and_verify(num_to_allocate);
       ASSERT_LE(n, num_to_allocate);
       ASSERT_GE(n, 1u);
-      num_allocated += n;
+      free_blocks -= n;
     }
     ASSERT_EQ(_slab.count_in_use_blocks(), num_blocks());
+    ASSERT_EQ(_slab.count_dirty_blocks(), num_blocks());
   }
 
 public:
@@ -362,15 +462,93 @@ public:
     EXPECT_NE(_slab.allocate_huge_block(2 * M), nullptr);
   }
 
+  void test_harvest_nothing_1() {
+    if (block_size() < granule_size()) {
+      GTEST_SKIP() << "only for blocksize == granulesize";
+    }
+    // all blocks in use, we harvest nothing
+    allocate_fully();
+    ASSERT_EQ(_slab.count_dirty_blocks(), num_blocks());
+    harvest_dirty_granules_and_verify(num_granules(), 0, num_granules(), 1u);
+    ASSERT_EQ(_slab.count_dirty_blocks(), num_blocks()); // nothing changed
+  }
 
-  /*
-  void test_release_on_tick() {
-   allocate_fully();
-    ASSERT_EQ(_slab.count_dirty_granules(), _slab.num_granules());
-    deallocate_block_range_and_verify(0, num_blocks());
-    ASSERT_EQ(_slab.count_dirty_granules(), _slab.num_granules());
+  void test_harvest_nothing_2() {
+    if (block_size() < granule_size()) {
+      GTEST_SKIP() << "only for blocksize == granulesize";
+    }
+    // minsize too large, we harvest nothing
+    allocate_fully();
+    deallocate_block_range_and_verify(0, 16);
+    ASSERT_EQ(_slab.count_dirty_blocks(), num_blocks());
+    harvest_dirty_granules_and_verify(num_granules(), 0, num_granules(), 17u);
+    ASSERT_EQ(_slab.count_dirty_blocks(), num_blocks()); // nothing changed
+  }
 
-  }*/
+  void test_harvest_half() {
+    if (block_size() < granule_size()) {
+      GTEST_SKIP() << "only for blocksize == granulesize";
+    }
+    allocate_fully();
+    deallocate_block_range_and_verify(0, num_blocks()); // dealloc all. Now all is dirty and releasable
+    ASSERT_EQ(_slab.count_dirty_granules(), num_granules());
+
+    // Release but only in upper range
+    harvest_dirty_granules_and_verify(num_granules(), num_granules() / 2, num_granules(), 1u);
+    ASSERT_EQ(_slab.count_dirty_granules(), num_granules() / 2); // only half should be released
+  }
+
+  void test_harvest_one_hole_sweep() {
+    if (block_size() < granule_size()) {
+      GTEST_SKIP() << "only for blocksize == granulesize";
+    }
+    for (unsigned hole_size = 1; hole_size < 10; hole_size ++) {
+      for (unsigned offset = 0; offset < 3; offset ++) {
+        for (unsigned minlen = 1; minlen < hole_size + 1; minlen *= 2) {
+          for (int at_back = 0; at_back <= 1; at_back ++) {
+            for (int has_budget_cap = 0; has_budget_cap <= 1; has_budget_cap ++) {
+              const IndexType hole_beg = at_back ? num_granules() - hole_size - offset : offset;
+              const IndexType hole_end = hole_beg + hole_size;
+              const unsigned max_release = has_budget_cap ? num_granules() : hole_size / 2;
+              if (max_release == 0) {
+                continue;
+              }
+              test_harvest_with_one_hole(hole_beg, hole_end,
+                max_release, 0, num_granules(), minlen);
+              if (::testing::Test::HasFailure()) {
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void test_harvest_random() {
+    if (block_size() < granule_size()) {
+      GTEST_SKIP() << "only for blocksize == granulesize";
+    }
+    // Release random ranges, then harvest the whole thing and verify
+    for (unsigned cycle = 0; cycle < 16; cycle++) {
+      allocate_fully();
+      IndexType idx = 0;
+      const unsigned max_run_len = MIN2(8u, num_granules() / 32u);
+      while (idx < num_granules()) {
+        const IndexType idx2 = MIN2<IndexType>(idx + _random.next(max_run_len) + 1u, num_granules());
+        const bool release = _random.tosscoin();
+        if (release) {
+          deallocate_block_range_and_verify(idx, idx2);
+        }
+        idx = idx2;
+      }
+      const unsigned min_release = cycle % 8;
+      harvest_dirty_granules_and_verify(num_granules(), 0, num_granules(), min_release);
+      if (::testing::Test::HasFailure()) {
+        return;
+      }
+    }
+  }
 
   void test_random() {
     for (unsigned cycle = 0; cycle < 10000; cycle++) {
@@ -393,8 +571,6 @@ public:
   }
 };
 
-
-
 #define DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, testname) \
 TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size ## _ ## num_blocks ## _ ## release_boundary ## _ ## decay_factor) { \
   const ArenaSlab::Parameters params = { block_size, granule_size, num_blocks, release_boundary, false, decay_factor }; \
@@ -406,7 +582,11 @@ TEST_VM(Arena2_Slab, test_ ## testname ## _ ## block_size ## _ ## granule_size #
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_and_deallocate ) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_no_exhaustion ) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_allocate_first_fit_order_with_exhaustion ) \
-  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_huge_block_allocation_deallocation ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_harvest_nothing_1 ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_harvest_nothing_2 ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_harvest_half ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_harvest_one_hole_sweep ) \
+  DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_harvest_random ) \
   DEFINE_TESTS(block_size, granule_size, num_blocks, release_boundary, decay_factor, test_random ) \
 
 
