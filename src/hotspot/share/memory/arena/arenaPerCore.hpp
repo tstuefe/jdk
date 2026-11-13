@@ -76,9 +76,15 @@ private:
   unsigned current_core_slow();
 
   unsigned current_core() {
-    const uintptr_t affinity = at(_cpu)->_affinity;
-    if (affinity == this_thread_identity()) {
-      return _cpu;
+    // Note: during testing, we may create (in the same process) multiple holders
+    // with different cpu caps; for this code it means the stored thread affinity cpu
+    // number may be from an older run with a differen _num_cpu cap. So check here, too
+    // (its really cheap).
+    const unsigned cpu = _cpu;
+    if (cpu < _num_cpus) {
+      if (at(cpu)->_affinity == this_thread_identity()) {
+        return _cpu;
+      }
     }
     return current_core_slow();
   }
@@ -106,7 +112,7 @@ private:
 
 public:
 
-  ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group);
+  ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group, unsigned max_cpus);
 
   Data* get_current_core_data() { return at(current_core()); }
 

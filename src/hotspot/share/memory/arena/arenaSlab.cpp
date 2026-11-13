@@ -171,17 +171,27 @@ void ArenaSlab::ensure_committed(IndexType block_index) {
   const IndexType granule_index = block_index_to_granule_index(block_index);
   const IndexType new_commit_boundary = MAX2(granule_index + 1, _commit_boundary);
   if (new_commit_boundary > _commit_boundary) {
-    // We commit a bit more to avoid having to do this too often
-    const IndexType new_commit_boundary_overshoot =
-      MIN2((IndexType)num_granules(), new_commit_boundary + num_granules_overcommit);
+    const unsigned granules_to_commit_min = checked_cast<unsigned>(new_commit_boundary - _commit_boundary);
+    const size_t bytes_to_commit_min = granules_to_commit_min * granule_size();
+    STATIC_ASSERT(is_power_of_2(commit_granularity)); // no hard reason, but it keeps calculation simple
+    assert(commit_granularity >= granule_size(), "Sanity");
+    assert(is_aligned(commit_granularity,
+      MAX2(granule_size(), os::vm_allocation_granularity())), "Sanity");
+    size_t bytes_to_commit = align_up(bytes_to_commit_min, commit_granularity);
+    if ((bytes_to_commit - bytes_to_commit_min) < (commit_granularity / 2)) {
+      bytes_to_commit += commit_granularity; // bit more headroom
+    }
     const const_blockptr_t p1 = _granule_range.index_to_block(_commit_boundary);
-    const const_blockptr_t p2 = _granule_range.index_to_block_incl(new_commit_boundary_overshoot);
+    const size_t bytes_left_uncommitted = end() - p1;
+    bytes_to_commit = MIN2(bytes_to_commit, bytes_left_uncommitted);
+    const const_blockptr_t p2 = p1 + bytes_to_commit;
     _arena_heap->commit_memory(p1, p2);
-    log_debug(arena, map)("committed %zu granules - " RANGE2FMT ".", p2 - p1, RANGE2FMTARGS(p1, p2));
+    log_debug(arena, map)("committed %u granules - " RANGE2FMT ".",
+                          checked_cast<unsigned>(bytes_to_commit / granule_size()), RANGE2FMTARGS(p1, p2));
 #ifdef LINUX
     _arena_heap->advise_large_page_use(p1, p2, use_large_pages());
 #endif
-    _commit_boundary = new_commit_boundary_overshoot;
+    _commit_boundary = (p2 - base()) / granule_size();
   }
 }
 

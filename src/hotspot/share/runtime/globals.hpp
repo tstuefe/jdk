@@ -2033,8 +2033,10 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, UseHashcodeFastPath, true, DIAGNOSTIC,                      \
           "Use fast path for identityHashCode.")                            \
                                                                             \
-  product(bool, UseNewArenas, false, EXPERIMENTAL,                          \
+  product(bool, UseNewArenas, false,                                        \
           "Use new Arena system")                                           \
+  product(uint, ArenaMaxCacheGroups, 0,                              \
+          "How many Cache Groups. Default is 0, which creates one cache group per core.") \
 
 // end of RUNTIME_FLAGS
 

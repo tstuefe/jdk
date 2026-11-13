@@ -24,10 +24,12 @@
  */
 
 
+#include "logging/log.hpp"
 
 #include "memory/arena/arenaBlock.hpp"
 #include "memory/arena/arenaBlockCache.hpp"
 #include "memory/arena/arenaPerCore.hpp"
+
 #include "memory/arena/arenaSlab.hpp"
 
 #include "runtime/os.hpp"
@@ -49,8 +51,17 @@ ArenaPerCoreDataHolder::Data::Data(ArenaSlabGroup* slab_group) :
 {
 }
 
-ArenaPerCoreDataHolder::ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap, ArenaSlabGroup* slab_group) :
-  _num_cpus(os::processor_count()),
+ArenaPerCoreDataHolder::ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap,
+                                               ArenaSlabGroup* slab_group, unsigned max_cpus) :
+  _num_cpus([max_cpus]() {
+    unsigned num = checked_cast<unsigned>(os::processor_count());
+    assert(num > 0, "Sanity");
+    if (max_cpus > 0) {
+      assert(is_power_of_2(max_cpus), "Sanity");
+      num = MIN2(num, max_cpus);
+    }
+    return num;
+  } ()),
   _data([this, metadata_heap, slab_group]() {
     assert(_num_cpus > 0, "Sanity");
 
@@ -66,6 +77,7 @@ ArenaPerCoreDataHolder::ArenaPerCoreDataHolder(ArenaMetadataHeap* metadata_heap,
     return p;
   } ())
 {
+  log_info(arena, init)("Cache groups initialized (%u, for %d active cores)", _num_cpus, os::processor_count());
 }
 
 unsigned ArenaPerCoreDataHolder::current_core_slow() {
@@ -81,14 +93,17 @@ unsigned ArenaPerCoreDataHolder::current_core_slow() {
     if (pthread_cpu_number_np(&n) == 0) {
       cpu = n;
     }
-    // to be careful. Pthread_cpu_number_np is not documented.
-    cpu = cpu % num_cpus();
   }
 #else
   cpu = os::processor_id();
 #endif
 
-  _cpu = cpu;
+  // Todo: this simple modulo may not be optimal:
+  // 1) If sibling sharing matters for hyperthreading, e.g. on x64, we need to consider
+  //    the CPU layout (eg /sys/devices/system/cpu/cpuN/topology/)
+  // 2) if available cores is not a common multiple of num_cpus, the modulo can be
+  //    unfair
+  _cpu = cpu % num_cpus();
 
   // Update affinity
   at(_cpu)->_affinity = this_thread_identity();

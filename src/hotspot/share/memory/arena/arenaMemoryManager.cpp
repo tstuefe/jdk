@@ -93,10 +93,10 @@ public:
   ArenaMemoryManagerImpl() :
     _arena_heap(), _metadata_heap(),
     _slab_group(&_arena_heap, &_metadata_heap),
-    _per_core(&_metadata_heap, &_slab_group),
+    _per_core(&_metadata_heap, &_slab_group, ArenaMaxCacheGroups),
     _ticker(nullptr)
   {
-    log_info(arena)("Arena System Initialized");
+    log_info(arena, init)("Arena System Initialized.");
   }
 
   void start_ticker() {

@@ -60,8 +60,15 @@ public:
 
 private:
 
-  // How much we overcommit when moving the commit boundary
-  static constexpr IndexType num_granules_overcommit = 1;
+  // This is the step size in which the commit boundary moves upward.
+  // Note: we don't uncommit to free memory. Instead, to free memory, we discard
+  // it (e.g. madvise(dont_need) on linux). So we only commit at the start of
+  // the JVM. We could keep matters simple and just commit the whole slab upfront.
+  // But that may have implications on OSes that punish overcommitting. So we move
+  // a "commit boundary" below everything is committed. However, we don't want to
+  // do this too often since this it hits startup, mostly. So the granularity
+  // of committing is kept deliberately pretty coarse.
+  static constexpr size_t commit_granularity = 32 * M;
 
   // We split data associated with the slab into different groups. These data
   // are kept separately from each other in its own cache lines:
