@@ -104,6 +104,7 @@ namespace {
     ArenaMemoryManager _memory_manager;
     AllocatedChunks _allocated_chunks;
     PredictableRandom _random;
+    unsigned _num_ticks;
 
     // How many blocks were allocated of a specific size
     unsigned _num_allocated_per_size[ArenaBlockHelpers::num_size_classes];
@@ -155,8 +156,7 @@ namespace {
     }
 
     void tick_and_test() {
-      static unsigned num_ticks = 0;
-      _memory_manager.tick(num_ticks++);
+      _memory_manager.tick(_num_ticks++);
       DEBUG_ONLY(verify());
     }
 
@@ -172,8 +172,8 @@ namespace {
       _memory_manager(),
       _allocated_chunks(),
       _random(),
-      _num_allocated_per_size { 0 }
-    {
+      _num_ticks(0),
+      _num_allocated_per_size{0} {
       _memory_manager.initialize();
     }
 
@@ -277,12 +277,13 @@ namespace {
         const int op_select = _random.next(16);
         const size_t size = _random.next(16) > 14 ?
           M + _random.next(M * 10) : 1 + _random.next(64 * K);
-        if (op_select < 12 && !_allocated_chunks.is_full()) {
-          allocate_chunk_and_test(size);
+        if (op_select < 15) {
+          if (op_select < 12 && !_allocated_chunks.is_full()) {
+            allocate_chunk_and_test(size);
+          } else {
+            deallocate_chunks_and_test(4);
+          }
         } else {
-          deallocate_chunks_and_test(4);
-        }
-        if (cycle % 16) {
           tick_and_test();
         }
         if (::testing::Test::HasFailure()) {

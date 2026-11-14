@@ -360,6 +360,11 @@ void ArenaSlab::release_granule_memory(IndexType beg, IndexType end) {
   _dirty_bitmap.clear_range(beg, end);
   log_debug(arena, map)("released %zu granules - " RANGE2FMT ".",
     end - beg, RANGE2FMTARGS(granule_beg, granule_end));
+  // bookkeeping
+#ifdef ARENA_STATS
+  const unsigned num_released_blocks = (end - beg) << _blocks_to_granule_shift;
+  _hot->_stats._num_blocks_released += num_released_blocks;
+#endif
 }
 
 // Given a release max R, a granule range [G_lo, G_hi) and a minimum release len MRL,
@@ -599,9 +604,9 @@ void ArenaSlab::print_on(outputStream* st) const {
     _hot->_stats._num_alloc_ops > 0 ?
       (double)_hot->_stats._num_blocks_allocated /
       (double)_hot->_stats._num_alloc_ops : 0.0);
-  PRINT_COUNTER("Block units allocated", _hot->_stats._num_blocks_deallocated);
+  PRINT_COUNTER("Block units deallocated", _hot->_stats._num_blocks_deallocated);
   PRINT_COUNTER("Dealloc ops", _hot->_stats._num_dealloc_ops);
-  st->print_cr("Block units per bulk dealloc, avg: %.2f",
+  st->print_cr("Block units per dealloc call, avg: %.2f",
     _hot->_stats._num_dealloc_ops > 0 ?
       (double)_hot->_stats._num_blocks_deallocated /
       (double)_hot->_stats._num_dealloc_ops : 0.0);
