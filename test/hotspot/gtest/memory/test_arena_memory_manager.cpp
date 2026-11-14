@@ -154,6 +154,12 @@ namespace {
       DEBUG_ONLY(verify());
     }
 
+    void tick_and_test() {
+      static unsigned num_ticks = 0;
+      _memory_manager.tick(num_ticks++);
+      DEBUG_ONLY(verify());
+    }
+
 #ifdef ASSERT
     void verify() const {
       _memory_manager.verify();
@@ -275,6 +281,9 @@ namespace {
           allocate_chunk_and_test(size);
         } else {
           deallocate_chunks_and_test(4);
+        }
+        if (cycle % 16) {
+          tick_and_test();
         }
         if (::testing::Test::HasFailure()) {
           tty->print_cr("cycle %d op %d", cycle, op_select);

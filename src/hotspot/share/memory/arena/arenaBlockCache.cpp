@@ -36,11 +36,8 @@
 ArenaBlockCache::CacheStatistics::CacheStatistics() :
   _num_blocks_allocated(0),
   _num_blocks_deallocated(0),
-  _num_bulk_dealloc_ops(0),
-  _num_overflows(0),
-  _num_underflows(0),
-  _num_busy_ticks(0),
-  _num_idle_ticks(0) {
+  _num_bulk_dealloc_ops(0)
+{
 }
 #endif // ARENA_STATS
 
@@ -75,13 +72,6 @@ void ArenaBlockCache::tick() {
     }
     set_count(c2);
   }
-#ifdef ARENA_STATS
-  if (_is_busy) {
-    _stats._num_busy_ticks++;
-  } else {
-    _stats._num_idle_ticks++;
-  }
-#endif
   _is_busy = false; // reset flag
 }
 
@@ -145,10 +135,6 @@ void ArenaBlockCache::print_on(const size_t block_size, outputStream* st) const 
     _stats._num_bulk_dealloc_ops > 0 ?
       _stats._num_blocks_deallocated /
       (double)_stats._num_bulk_dealloc_ops : 0.0);
-  PRINT_COUNTER("Underflows", _stats._num_underflows);
-  PRINT_COUNTER("Overflows", _stats._num_overflows);
-  PRINT_HERE("Busy ticks: %u", _stats._num_busy_ticks);
-  PRINT_HERE("Idle ticks: %u", _stats._num_idle_ticks);
 #endif
 #undef PRINT_COUNTER
 #undef PRINT_HERE

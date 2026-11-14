@@ -74,13 +74,6 @@ private:
     uint64_t _num_blocks_allocated;
     uint64_t _num_blocks_deallocated;
     uint64_t _num_bulk_dealloc_ops;
-    // How often we fetched memory from slab/evicted memory to the slab
-    uint64_t _num_overflows;
-    // How often we fetched memory from slab/evicted memory to the slab
-    uint64_t _num_underflows;
-    unsigned _num_busy_ticks;
-    unsigned _num_idle_ticks;
-    void account_bulk_dealloc(unsigned num);
     CacheStatistics();
   } _stats;
 #endif
@@ -196,7 +189,6 @@ public:
       }
       set_count(num_fetched - 1);
 
-      ARENA_STATS_ONLY(_stats._num_underflows ++;)
       ARENA_STATS_ONLY(_stats._num_blocks_allocated ++;)
 
       return result;
@@ -251,7 +243,6 @@ public:
       _slab->deallocate_blocks(evict_set, num_in_eviction_set);
       // post-cleanups
       compress_cache(num_evict_on_overflow(), num_in_cache);
-      ARENA_STATS_ONLY(_stats._num_overflows ++;)
     } else {
       assert(num_in_cache <= cachesize(), "sanity");
     }

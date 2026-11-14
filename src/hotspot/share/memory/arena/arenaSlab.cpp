@@ -35,24 +35,21 @@
 
 #ifdef ARENA_STATS
 ArenaSlab::SlabStatistics::SlabStatistics() :
-  _num_standard_block_allocated(0),
-  _num_standard_block_deallocated(0),
-  _num_bulk_alloc_ops(0),
-  _num_bulk_dealloc_ops(0),
-  _num_huge_blocks_allocated(0),
-  _num_huge_blocks_deallocated(0),
-  _num_discard_ops(0)
-{
+  _num_blocks_allocated(0),
+  _num_blocks_deallocated(0),
+  _num_alloc_ops(0),
+  _num_dealloc_ops(0),
+  _num_blocks_released(0) {
 }
 
 void ArenaSlab::SlabStatistics::account_bulk_alloc(unsigned num) {
-  _num_bulk_alloc_ops ++;
-  _num_standard_block_allocated += num;
+  _num_alloc_ops ++;
+  _num_blocks_allocated += num;
 }
 
 void ArenaSlab::SlabStatistics::account_bulk_dealloc(unsigned num) {
-  _num_bulk_dealloc_ops ++;
-  _num_standard_block_deallocated += num;
+  _num_dealloc_ops ++;
+  _num_blocks_deallocated += num;
 }
 
 #endif
@@ -227,9 +224,7 @@ unsigned ArenaSlab::allocate_blocks(const_blockptr_t out[], unsigned outlen) {
     ensure_committed(highest_block_idx);
     // Bookkeeping
     increase_block_counter(n);
-#ifdef ARENA_STATS
-    _hot->_stats.account_bulk_alloc(n);
-#endif
+    ARENA_STATS_ONLY(_hot->_stats.account_bulk_alloc(n));
   }
 
   return n;
@@ -268,9 +263,7 @@ const_blockptr_t ArenaSlab::allocate_huge_block(size_t size) {
 
         // Bookkeeping
         increase_block_counter(num);
-#ifdef ARENA_STATS
-        _hot->_stats._num_huge_blocks_allocated++;
-#endif
+        ARENA_STATS_ONLY(_hot->_stats.account_bulk_alloc(num));
 
         const const_blockptr_t block = _block_range.index_to_block(idx);
         return block;
@@ -294,9 +287,7 @@ void ArenaSlab::deallocate_blocks(const_blockptr_t blocks[], unsigned num) {
   }
   // Bookkeeping
   decrease_block_counter(num);
-#ifdef ARENA_STATS
-  _hot->_stats.account_bulk_dealloc(num);
-#endif
+  ARENA_STATS_ONLY(_hot->_stats.account_bulk_dealloc(num));
 }
 
 // huge blocks. Called rarely.
@@ -329,10 +320,9 @@ void ArenaSlab::deallocate_huge_block(const_blockptr_t block, size_t size) {
   _in_use_bitmap.clear_range(idx, idx2);
 
   // Bookkeeping
-  decrease_block_counter(idx2 - idx);
-#ifdef ARENA_STATS
-  _hot->_stats._num_huge_blocks_deallocated ++;
-#endif
+  const unsigned num = idx2 - idx;
+  decrease_block_counter(num);
+  ARENA_STATS_ONLY(_hot->_stats.account_bulk_dealloc(num));
 }
 
 void ArenaSlab::mark_granule_dirty(IndexType granule_idx) {
@@ -368,8 +358,6 @@ void ArenaSlab::release_granule_memory(IndexType beg, IndexType end) {
   _arena_heap->discard_memory(granule_beg, granule_end);
   // now clean dirty bits
   _dirty_bitmap.clear_range(beg, end);
-  // Increase discard counter
-  ARENA_STATS_ONLY(_hot->_stats._num_discard_ops++;)
   log_debug(arena, map)("released %zu granules - " RANGE2FMT ".",
     end - beg, RANGE2FMTARGS(granule_beg, granule_end));
 }
@@ -605,21 +593,19 @@ void ArenaSlab::print_on(outputStream* st) const {
 
 #ifdef ARENA_STATS
 #define PRINT_COUNTER(desc, name) { PRINT_HERE("%s: " UINT64_FORMAT, desc, name); }
-  PRINT_COUNTER("Standard blocks allocated", _hot->_stats._num_standard_block_allocated);
-  PRINT_COUNTER("Bulk allocs", _hot->_stats._num_bulk_alloc_ops);
-  st->print_cr("Blocks per bulk alloc, avg: %.2f",
-    _hot->_stats._num_bulk_alloc_ops > 0 ?
-      (double)_hot->_stats._num_standard_block_allocated /
-      (double)_hot->_stats._num_bulk_alloc_ops : 0.0);
-  PRINT_COUNTER("Standard blocks deallocated", _hot->_stats._num_standard_block_deallocated);
-  PRINT_COUNTER("Bulk deallocs", _hot->_stats._num_bulk_dealloc_ops);
-  st->print_cr("Blocks per bulk dealloc, avg: %.2f",
-    _hot->_stats._num_bulk_dealloc_ops > 0 ?
-      (double)_hot->_stats._num_standard_block_deallocated /
-      (double)_hot->_stats._num_bulk_dealloc_ops : 0.0);
-  PRINT_COUNTER("Huge blocks allocated", _hot->_stats._num_huge_blocks_allocated);
-  PRINT_COUNTER("Huge blocks deallocated", _hot->_stats._num_huge_blocks_deallocated);
-  PRINT_COUNTER("Num discard ops", _hot->_stats._num_discard_ops);
+  PRINT_COUNTER("Block units allocated", _hot->_stats._num_blocks_allocated);
+  PRINT_COUNTER("Alloc ops", _hot->_stats._num_alloc_ops);
+  st->print_cr("Block units per alloc call, avg: %.2f",
+    _hot->_stats._num_alloc_ops > 0 ?
+      (double)_hot->_stats._num_blocks_allocated /
+      (double)_hot->_stats._num_alloc_ops : 0.0);
+  PRINT_COUNTER("Block units allocated", _hot->_stats._num_blocks_deallocated);
+  PRINT_COUNTER("Dealloc ops", _hot->_stats._num_dealloc_ops);
+  st->print_cr("Block units per bulk dealloc, avg: %.2f",
+    _hot->_stats._num_dealloc_ops > 0 ?
+      (double)_hot->_stats._num_blocks_deallocated /
+      (double)_hot->_stats._num_dealloc_ops : 0.0);
+  PRINT_COUNTER("Block units released", _hot->_stats._num_blocks_released);
 #undef PRINT_COUNTER
 #endif
 #undef PRINT_HERE
