@@ -273,15 +273,21 @@ void ArenaMemoryManagerImpl::deallocate_chunks(const Chunk* chunk) {
 }
 
 void ArenaMemoryManagerImpl::tick(unsigned tick_number) {
-  // We first tick the slabs, then the caches.
-  _slab_group.tick(tick_number);
-  _per_core.tick();
+
+  // We first print the statistics before releasing memory.
+  // That means that the per-tick numbers (eg slab highest-in-use counters)
+  // are still valid for this tick.
   LogTarget(Info, arena, stats) lt;
   if (lt.is_enabled()) {
     LogStream ls(lt);
     ls.print_cr("Arena Memory Manager, Tick %u", tick_number);
     print_on(&ls);
   }
+
+  // Then we propagate the tick to caches and slabs.
+  _per_core.tick();
+  _slab_group.tick(tick_number);
+
 #ifdef ASSERT
   if ((tick_number % verify_tick_interval) == 0) {
     verify();

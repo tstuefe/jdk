@@ -559,7 +559,7 @@ void ArenaSlab::print_on(outputStream* st) const {
 
   // In use statistics
   PRINT_HERE("in-use blocks: %u ", count_in_use_blocks());
-  PRINT_HERE("blocks in use (historical peak): %u ", _hot->_num_blocks_in_use_peak);
+  PRINT_HERE("blocks in use (last tick peak): %u ", _hot->_num_blocks_in_use_peak);
 
   // To get a glimpse at the decreasing density we expect:
   if (max_blocks_in_resident > 0) {
@@ -592,7 +592,7 @@ void ArenaSlab::print_on(outputStream* st) const {
 
   // Dirty statistics
   const unsigned dirty_granules = count_dirty_granules();
-  const unsigned dirty_blocks = count_dirty_blocks();
+  const unsigned dirty_blocks = dirty_granules * blocks_per_granule();
   PRINT_HERE("Dirty granules: %u (%u blocks, %zu bytes)",
     dirty_granules, dirty_blocks, dirty_granules * granule_size());
 
