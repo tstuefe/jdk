@@ -31,8 +31,6 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/powerOfTwo.hpp"
 
-#include "logging/log.hpp"
-
 // The byte alignment to be used by Arena::Amalloc.
 #define ARENA_AMALLOC_ALIGNMENT BytesPerLong
 #define ARENA_ALIGN(x) (align_up((x), ARENA_AMALLOC_ALIGNMENT))
@@ -142,7 +140,6 @@ protected:
 
   void* internal_amalloc(size_t x, AllocFailType alloc_failmode = AllocFailStrategy::EXIT_OOM)  {
     assert(is_aligned(x, BytesPerWord), "misaligned size");
-log_trace(arena)("Allocation: %zu", x);
     if (pointer_delta(_max, _hwm, 1) >= x) {
       char *old = _hwm;
       _hwm += x;
