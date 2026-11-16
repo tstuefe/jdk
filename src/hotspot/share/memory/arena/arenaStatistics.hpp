@@ -39,7 +39,4 @@
 #define NO_ARENA_STATS(code) code
 #endif
 
-
-
-
 #endif // SHARE_MEMORY_ARENA_ARENASTATISTICS_HPP
