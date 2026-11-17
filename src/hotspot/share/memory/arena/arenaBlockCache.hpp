@@ -33,7 +33,15 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-
+// for counter aggregation
+struct ArenaBlockCacheCounters {
+  unsigned _count; // number of blocks in cache
+#ifdef ARENA_STATS
+  uint64_t _num_blocks_allocated;
+  uint64_t _num_blocks_deallocated;
+  uint64_t _num_bulk_dealloc_ops;
+#endif
+};
 
 // The block cache is a vector of blocks of one block size.
 // A vector for cache-friendly iteration and because the arena manager never writes to free blocks as a policy
@@ -292,6 +300,8 @@ public:
   static int num_evict_on_tick_nonbusy(int cachesize)     { return cachesize; }
   int num_evict_on_tick_nonbusy() const                   { return num_evict_on_tick_nonbusy(cachesize()); }
 
+  void aggregate(ArenaBlockCacheCounters& counters) const;
+
 };
 
 // A cache table holds one cache per cached block size
@@ -327,6 +337,8 @@ public:
 
   // Print all caches
   void print_on(outputStream* st) const;
+
+  void aggregate(ArenaBlockCacheCounters counters[num_caches]) const;
 
   DEBUG_ONLY(void verify() const);
 

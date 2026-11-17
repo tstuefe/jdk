@@ -140,6 +140,13 @@ void ArenaBlockCache::print_on(const size_t block_size, outputStream* st) const 
 #undef PRINT_HERE
 }
 
+void ArenaBlockCache::aggregate(ArenaBlockCacheCounters& counters) const {
+  counters._count += count();
+  ARENA_STATS_ONLY(counters._num_blocks_allocated += _stats._num_blocks_allocated;)
+  ARENA_STATS_ONLY(counters._num_blocks_deallocated += _stats._num_blocks_deallocated;)
+  ARENA_STATS_ONLY(counters._num_bulk_dealloc_ops += _stats._num_bulk_dealloc_ops;)
+}
+
 ///// Arena cache group
 
 ArenaCacheGroup::ArenaCacheGroup(ArenaSlabGroup* slab_group) :
@@ -173,6 +180,12 @@ void ArenaCacheGroup::print_on(outputStream* st) const {
   for (unsigned i = 0; i < num_caches; i++) {
     const size_t block_size = ArenaBlockHelpers::size_class_to_block_size(i);
     at(i)->print_on(block_size, st);
+  }
+}
+
+void ArenaCacheGroup::aggregate(ArenaBlockCacheCounters counters[num_caches]) const {
+  for (unsigned i = 0; i < num_caches; i++) {
+    at(i)->aggregate(counters[i]);
   }
 }
 

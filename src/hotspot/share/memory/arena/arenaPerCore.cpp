@@ -133,14 +133,31 @@ void ArenaPerCoreDataHolder::tick() {
 void ArenaPerCoreDataHolder::print_on(outputStream* st) const {
   st->print_cr("PerCore Holder");
   StreamIndentor indentor(st);
-  st->print_cr("CPUs/used: %u/%u", num_cpus_used(), num_cpus());
+  st->print_cr("CPUs/active: %u/%u", num_cpus_used(), num_cpus());
   ARENA_STATS_ONLY(st->print_cr("Num slow queries: " UINT64_FORMAT,
     _num_slow_cpu_queries.load_relaxed());)
-  auto foo = [&, st](unsigned cpu, Data* data) {
-    st->print_cr("PerCore data for CPU: %u", cpu);
-    data->_cache_group.print_on(st);
+
+  // Aggregate numbers for caches across all cpus
+  ArenaBlockCacheCounters counters[ArenaBlockHelpers::num_cached_size_classes] = {};
+  for (unsigned i = 0; i < _num_cpus; i++) {
+    const Data* const data = (_data + i);
+    assert(data->_affinity > 0, "Sanity");
+    if (data->_affinity != invalid_identity) {
+      const ArenaCacheGroup& group = data->_cache_group;
+      group.aggregate(counters);
+    }
+  }
+  // Then print, for each block size separately, the accumulated numbers
+  auto printer = [st, &counters](block_size_class_t szclass) {
+    const ArenaBlockCacheCounters& counter = counters[szclass];
+    st->print_cr("ArenaBlockCache %zu (across all active cores)", ArenaBlockHelpers::size_class_to_block_size(szclass));
+    StreamIndentor indentor2(st);
+    st->print_cr("count: %u", counter._count);
+    ARENA_STATS_ONLY(st->print_cr("Block allocs: " UINT64_FORMAT, counter._num_blocks_allocated);)
+    ARENA_STATS_ONLY(st->print_cr("Block deallocs: " UINT64_FORMAT, counter._num_blocks_deallocated);)
+    ARENA_STATS_ONLY(st->print_cr("Bulk deallocs: " UINT64_FORMAT, counter._num_bulk_dealloc_ops);)
   };
-  iterate(foo);
+  ArenaBlockHelpers::iterate_cached_size_classes_forward(printer);
 }
 
 #ifdef ASSERT
