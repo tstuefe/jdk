@@ -212,7 +212,11 @@ namespace {
 
     template <size_t size>
     void test_chunk_chain_deallocation_samesize_0() {
-      for (int i = 0; i < 100; i++) {
+      // Lets limit total size needed for this test
+      constexpr size_t mem_cap = 128 * M;
+      constexpr unsigned num_blocks = MIN2(500u, (unsigned)(mem_cap / size));
+      STATIC_ASSERT(num_blocks > 0u);
+      for (unsigned i = 0; i < num_blocks; i++) {
         const Chunk* const c = allocate_chunk_and_test(size);
         ASSERT_NE(c, nullptr);
       }
@@ -220,19 +224,37 @@ namespace {
     }
 
     void test_chunk_chain_deallocation_samesize() {
+      // Small standard blocks (cached)
       test_chunk_chain_deallocation_samesize_0<256>();
       test_chunk_chain_deallocation_samesize_0<32 * K>();
+      // Large standard blocks (not cached)
+      test_chunk_chain_deallocation_samesize_0<512 * K>();
+      test_chunk_chain_deallocation_samesize_0<M>();
     }
 
     void test_chunk_chain_deallocation_mixedsize() {
-      for (int i = 0; i < 500; i++) {
-        constexpr size_t max_block_size = 128 * K; // )
-        constexpr size_t min_block_size = 128;     // [
-        const size_t log2_block_size = exact_log2(min_block_size) +
-                                       _random.next(exact_log2(max_block_size) - exact_log2(min_block_size));
-        const Chunk* const c = allocate_chunk_and_test(nth_bit(log2_block_size));
+      size_t allocated = 0;
+      int cycle = 0;
+      // Allocate a mix of standard (cached and not) and huge blocks
+      while (allocated < 128 * M && cycle < 500) {
+        const block_size_class_t szclass = (cycle % ArenaBlockHelpers::num_size_classes);
+        size_t size = 0;
+        if (szclass <= ArenaBlockHelpers::highest_standard_size_class) {
+          // standard block
+          const size_t block_size = ArenaBlockHelpers::size_class_to_block_size(szclass);
+          const size_t block_size_half = block_size / 2;
+          size = block_size_half + _random.next(block_size_half);
+        } else {
+          // huge block
+          size = ArenaBlockHelpers::huge_block_granularity +
+            _random.next(ArenaBlockHelpers::huge_block_granularity);
+        }
+        const Chunk* const c = allocate_chunk_and_test(size);
         ASSERT_NE(c, nullptr);
+        allocated += size;
+        cycle++;
       }
+      // Deallocate in random-sized batches
       while (deallocate_chunks_and_test(16));
     }
 

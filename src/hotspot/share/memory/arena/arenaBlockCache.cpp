@@ -149,9 +149,7 @@ ArenaCacheGroup::ArenaCacheGroup(ArenaSlabGroup* slab_group) :
     ArenaBlockCache(slab_group->slab_for_size_class(ArenaBlockHelpers::szclass_32K), 7u),
     ArenaBlockCache(slab_group->slab_for_size_class(ArenaBlockHelpers::szclass_64K), 3u),
     ArenaBlockCache(slab_group->slab_for_size_class(ArenaBlockHelpers::szclass_128K), 3u),
-    ArenaBlockCache(slab_group->slab_for_size_class(ArenaBlockHelpers::szclass_256K), 3u),
-    ArenaBlockCache(slab_group->slab_for_size_class(ArenaBlockHelpers::szclass_512K), 1u),
-    ArenaBlockCache(slab_group->slab_for_size_class(ArenaBlockHelpers::szclass_1M), 1u),
+    ArenaBlockCache(slab_group->slab_for_size_class(ArenaBlockHelpers::szclass_256K), 3u)
   }
 {
 }

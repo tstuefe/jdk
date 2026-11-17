@@ -43,11 +43,11 @@ TEST_VM(Arena2_CacheGroup, basic) {
   ArenaSlabGroup slab_group(&arena_heap, &metadata_heap);
   ArenaCacheGroup cache_group(&slab_group);
 
-  for (unsigned log2_block_size = 0; log2_block_size <= ArenaBlockHelpers::highest_standard_size_class;
-       log2_block_size++)
+  for (block_size_class_t szclass = 0; szclass <= ArenaBlockHelpers::highest_cached_size_class;
+       szclass++)
   {
-    ArenaBlockCache* const cache = cache_group.cache_for_size_class(log2_block_size);
-    const size_t block_size = nth_bit(log2_block_size);
+    ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
+    const size_t block_size = ArenaBlockHelpers::size_class_to_block_size(szclass);
     ASSERT_NE(cache, nullptr);
     const const_blockptr_t p1 = cache->allocate_block();
     const const_blockptr_t p2 = cache->allocate_block();
@@ -76,7 +76,7 @@ static void prefetch_all(ArenaCacheGroup& cache_group) {
     ASSERT_NE(p, nullptr);
     ASSERT_GT(cache->count(), 0);
   };
-  ArenaBlockHelpers::iterate_standard_size_classes_forward(cache_filler);
+  ArenaBlockHelpers::iterate_cached_size_classes_forward(cache_filler);
 }
 
 TEST_VM(Arena2_CacheGroup, flush_all) {
@@ -93,7 +93,7 @@ TEST_VM(Arena2_CacheGroup, flush_all) {
     const ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
     ASSERT_EQ(cache->count(), 0); // should have flushed
   };
-  ArenaBlockHelpers::iterate_standard_size_classes_forward(check);
+  ArenaBlockHelpers::iterate_cached_size_classes_forward(check);
 
 #ifdef ASSERT
   arena_heap.verify();
@@ -116,7 +116,7 @@ TEST_VM(Arena2_CacheGroup, tick_all) {
   auto take_counts = [&cache_group, &num](block_size_class_t szclass) {
     num[szclass] = cache_group.cache_for_size_class(szclass)->count();
   };
-  ArenaBlockHelpers::iterate_standard_size_classes_forward(take_counts);
+  ArenaBlockHelpers::iterate_cached_size_classes_forward(take_counts);
 
   // tick
   cache_group.tick();
@@ -126,7 +126,7 @@ TEST_VM(Arena2_CacheGroup, tick_all) {
     const ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
     ASSERT_LT((unsigned)cache->count(), num[szclass]); // should have flushed
   };
-  ArenaBlockHelpers::iterate_standard_size_classes_forward(check);
+  ArenaBlockHelpers::iterate_cached_size_classes_forward(check);
 
 #ifdef ASSERT
   arena_heap.verify();

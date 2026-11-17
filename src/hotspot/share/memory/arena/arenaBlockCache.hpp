@@ -294,10 +294,10 @@ public:
 
 };
 
-// A cache table holds one cache per block size
+// A cache table holds one cache per cached block size
 class ArenaCacheGroup {
 
-  static constexpr unsigned num_caches = ArenaBlockHelpers::num_standard_size_classes;
+  static constexpr unsigned num_caches = ArenaBlockHelpers::num_cached_size_classes;
 
   ArenaBlockCache _caches[num_caches];
 

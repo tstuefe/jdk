@@ -54,7 +54,7 @@ public:
   struct alignas (DEFAULT_PADDING_SIZE) Data {
     uintptr_t _affinity;
     ArenaMutex _lock;
-    ArenaCacheGroup _cache_group; // seg. fits caches for all valid block sizes
+    ArenaCacheGroup _cache_group; // seg. fits caches for all valid (cached) block sizes
     explicit Data(ArenaSlabGroup* slab_group);
   };
 

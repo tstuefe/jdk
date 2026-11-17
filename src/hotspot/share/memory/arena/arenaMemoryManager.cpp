@@ -124,10 +124,14 @@ void ArenaMemoryManagerImpl::deallocate_chunks_in_basket(ArenaCacheGroup& cache_
   assert(ArenaBlockHelpers::is_valid_size_class(szclass), "invalid block size");
 
   DEBUG_ONLY(ArenaBlockHelpers::verify_size_class(szclass));
-  if (szclass < ArenaBlockHelpers::huge_size_class) {
-    // a basket with 1..n standard blocks. These are returned to their respective caches.
+  if (szclass <= ArenaBlockHelpers::highest_cached_size_class) {
+    // Smaller standard block, cached. Bulk-return to its cache.
     ArenaBlockCache* const cache = cache_group.cache_for_size_class(szclass);
     cache->bulk_deallocate_block((const_blockptr_t*) basket->v(), basket->count());
+  } else if (szclass <= ArenaBlockHelpers::highest_standard_size_class) {
+    // Larger standard block, not cached. Bulk-return to its slab.
+    ArenaSlab* const slab = _slab_group.slab_for_size_class(szclass);
+    slab->deallocate_blocks((const_blockptr_t*) basket->v(), basket->count());
   } else {
     // a basket with 1..n huge blocks. These are never cached but returned directly to the huge block slab.
     ArenaSlab* const slab_for_huge_blocks = _slab_group.slab_for_size_class(szclass);
@@ -154,19 +158,25 @@ const_blockptr_t ArenaMemoryManagerImpl::allocate_chunk_storage(size_t requested
     const block_size_class_t szclass =
       ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(requested_size);
 
-    // Grab the per-core data for the core we are running on
-    ArenaPerCoreDataHolder::Data* const per_core = _per_core.get_current_core_data();
-    assert(per_core != nullptr, "invalid block size");
-
-    {
+    // smaller standard block sizes are allocated from cache, larger ones directly from slab
+    if (szclass <= ArenaBlockHelpers::highest_cached_size_class) { // smaller standard block, cached
+      // Grab the per-core data for the core we are running on
+      ArenaPerCoreDataHolder::Data* const per_core = _per_core.get_current_core_data();
+      assert(per_core != nullptr, "invalid block size");
       // Lock per-core data
       ArenaMutexLocker locker(per_core->_lock);
-
       // Grab cache and allocate a block from it
       ArenaBlockCache* const cache = per_core->_cache_group.cache_for_size_class(szclass);
       result = cache->allocate_block();
-      real = ArenaBlockHelpers::size_class_to_block_size(szclass);
+    } else { // larger standard block
+      ArenaSlab* const slab = _slab_group.slab_for_size_class(szclass);
+      const_blockptr_t block = nullptr;
+      const unsigned allocated = slab->allocate_blocks(&block, 1);
+      assert(block == nullptr || allocated == 1u, "Sanity");
+      result = block;
     }
+
+    real = ArenaBlockHelpers::size_class_to_block_size(szclass);
 
   } else {
     // It is a huge block. We allocate it directly from the huge-block slab.

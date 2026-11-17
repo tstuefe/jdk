@@ -78,25 +78,28 @@ struct ArenaBlockHelpers : public AllStatic {
   ARENA_VALID_BLOCK_SIZES_DO(X)
 #undef X
 
-  static constexpr block_size_class_t highest_standard_size_class = szclass_1M;
-  static constexpr block_size_class_t huge_size_class = szclass_2M;
-  static constexpr block_size_class_t highest_size_class = huge_size_class;
+  static constexpr size_t max_cached_block_size = block_size_256K;
+  static constexpr block_size_class_t highest_cached_size_class = szclass_256K;
 
-  static constexpr unsigned log2_max_standard_block_size = 20; // 1MB
-  static constexpr size_t max_standard_block_size = nth_bit(log2_max_standard_block_size);
-  static constexpr unsigned log2_huge_block_granularity = log2_max_standard_block_size + 1;
-  static constexpr size_t huge_block_granularity = nth_bit(log2_huge_block_granularity); // 2MB
+  static constexpr size_t max_standard_block_size = block_size_1M;
+  static constexpr block_size_class_t highest_standard_size_class = szclass_1M;
+
+  static constexpr size_t huge_block_granularity = block_size_2M;
+  static constexpr block_size_class_t huge_size_class = szclass_2M;
   static constexpr size_t huge_block_max_size = 2 * G;
 
+  static constexpr block_size_class_t highest_size_class = huge_size_class;
+
+  static constexpr unsigned num_size_classes = highest_size_class + 1;
+  static constexpr unsigned num_standard_size_classes = highest_standard_size_class + 1;
+  static constexpr unsigned num_cached_size_classes = highest_cached_size_class + 1;
+
   // A translation table translates from size class to block size
-  static constexpr size_t size_class_to_block_size_table[] = {
+  static constexpr size_t size_class_to_block_size_table[num_size_classes] = {
 #define X(szclass, blocksize, name) blocksize,
     ARENA_VALID_BLOCK_SIZES_DO(X)
 #undef X
   };
-
-  static constexpr unsigned num_size_classes = sizeof(size_class_to_block_size_table)/sizeof(size_class_to_block_size_table[0]);
-  static constexpr unsigned num_standard_size_classes = num_size_classes - 1;
 
   // Given a size class, return block size (for huge_size_class, returns huge_block_granularity)
   static constexpr size_t size_class_to_block_size(block_size_class_t szclass) {
@@ -105,7 +108,7 @@ struct ArenaBlockHelpers : public AllStatic {
   }
 
   // A translation table translates from log2 block size to size class
-  static constexpr block_size_class_t log2_block_size_to_size_class_table[log2_max_standard_block_size + 1] = {
+  static constexpr block_size_class_t log2_block_size_to_size_class_table[] = {
     // [1, 256] => 256
     szclass_256,
     szclass_256,
@@ -132,6 +135,8 @@ struct ArenaBlockHelpers : public AllStatic {
     szclass_512K,
     szclass_1M
   };
+  STATIC_ASSERT((constexpr_exact_log2(max_standard_block_size) + 1) ==
+                (sizeof(log2_block_size_to_size_class_table) / sizeof(log2_block_size_to_size_class_table[0])));
 
   // Returns the size class for a given valid standard block size (one of 256, K, 32K, 64K ...).
   static constexpr block_size_class_t valid_standard_block_size_to_size_class(size_t block_size) {
@@ -202,28 +207,41 @@ struct ArenaBlockHelpers : public AllStatic {
   }
 #endif // ASSERT
 
-  // Todo: we can probably scrap that, we removed most usages
-  template <typename function, bool forward, bool including_huge>
-  static void iterate_size_classes_X_X(function f) {
-    constexpr unsigned limit = including_huge ? num_size_classes : num_standard_size_classes;
+  template <typename function, bool forward>
+  static void iterate_size_classes_X_X(function f, block_size_class_t stop) {
     if (forward) {
-      for (unsigned i = 0; i < limit; i++) {
+      for (unsigned i = 0; i < stop; i++) {
         f(i);
       }
     } else {
-      for (unsigned i = limit - 1; i < limit; i--) {
+      for (unsigned i = stop - 1; i < stop; i--) {
         f(i);
       }
     }
   }
+
   template <typename function>
-  static void iterate_size_classes_forward(function f) { iterate_size_classes_X_X<function, true, true>(f); }
+  static void iterate_size_classes_forward(function f) {
+    iterate_size_classes_X_X<function, true>(f, highest_size_class + 1);
+  }
   template <typename function>
-  static void iterate_size_classes_backward(function f) { iterate_size_classes_X_X<function, false, true>(f); }
+  static void iterate_size_classes_backward(function f) {
+    iterate_size_classes_X_X<function, false>(f, highest_size_class + 1);
+  }
+
   template <typename function>
-  static void iterate_standard_size_classes_forward(function f) { iterate_size_classes_X_X<function, true, false>(f); }
+  static void iterate_standard_size_classes_forward(function f) {
+    iterate_size_classes_X_X<function, true>(f, highest_standard_size_class + 1);
+  }
   template <typename function>
-  static void iterate_standard_size_classes_backward(function f) { iterate_size_classes_X_X<function, false, false>(f); }
+  static void iterate_standard_size_classes_backward(function f) {
+    iterate_size_classes_X_X<function, false>(f, highest_standard_size_class + 1);
+  }
+
+  template <typename function>
+  static void iterate_cached_size_classes_forward(function f) {
+    iterate_size_classes_X_X<function, true>(f, highest_cached_size_class + 1);
+  }
 
 #ifdef ASSERT
   static void verify_standard_size_class(block_size_class_t szclass) {
