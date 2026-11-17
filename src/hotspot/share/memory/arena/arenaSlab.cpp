@@ -474,6 +474,14 @@ unsigned ArenaSlab::harvest_dirty_granules(const unsigned release_max,
 
 void ArenaSlab::clear_dirty_granules(bool squeeze) {
 
+  // We never clear granules < 32K
+  // Todo: this is a hack; we need to separate "resident is precommitted and possibly THPed" from
+  // "we run a release on this slab at all". One may conceivably have a small resident, but allow
+  // slab to grow into burst when needed, and then never release it should that happen.
+  if (block_size() < ArenaBlockHelpers::block_size_32K) {
+    return;
+  }
+
   ArenaMutexLocker locker(_hot->_lock);
 
   // Release mechanics:
@@ -665,10 +673,10 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // blocksize    granulesize   numblocks   release_boundary    decay_factor
 
   // 256 byte blocks
-  { 256, 64 * K, 4096 /* 1M */,  4096, false, 0.0f },
+  { 256, 64 * K, 4096 /* 1M */,  1024, false, 1.0f },
 
   // 1K blocks
-{ K, 64 * K, 4096 /* 4M */,  4096, false, 1.0f },
+{ K, 64 * K, 8192 /* 8M */,  1024, false, 1.0f },
 
   // 32K blocks
   // This block size sees the highest allocation churn and the highest peak live and average live number.
@@ -678,19 +686,19 @@ static constexpr ArenaSlab::Parameters global_slab_params[ArenaBlockHelpers::num
   // Note that this scales with number of mutators (resource area chunks). The numbers are fine to absorb
   // a standard app's needs with resident and 99.9% of all apps needs with burst section; beyond that we
   // will use C-heap.
-{ 32*K, 32*K, 32768 /* 1GB */,  384 /* 12 MB */, true, 0.5f },
+{ 32*K, 32*K, 32768 /* 1GB */,  64 /* 2 MB */, true, 0.4f },
 
   // 64K blocks: semi important
-{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */, false, 0.5f },
+{ 64*K, 64*K, 1024 /* 64MB */ ,  8 /* 512 KB */, false, 0.4f },
 
   // From here on, we have very little average live blocks. Large block sizes get increasingly
   // uncommon with size. In all of these cases, granulesize == blocksize since reducing footprint becomes
   // more important than allocation speed. And we don't have a resident part, since we want those blocks to be
   // released to the OS completely, not cached.
-{ 128*K, 128*K, 1024 /* 128 MB */,  0 /* no resident section */, false, 0.5f },
-{ 256*K, 256*K, 1024 /* 256 MB */,  0 /* no resident section */, false,  0.5f },
-{ 512*K, 512*K, 512  /* 256 MB */,  0 /* no resident section */, false,  0.3f },
-{ 1*M, 1*M, 256      /* 256 MB */,  0 /* no resident section */, false,  0.3f },
+{ 128*K, 128*K, 1024 /* 128 MB */,  0 /* no resident section */, false, 0.3f },
+{ 256*K, 256*K, 1024 /* 256 MB */,  0 /* no resident section */, false,  0.3f },
+{ 512*K, 512*K, 512  /* 256 MB */,  0 /* no resident section */, false,  0.2f },
+{ 1*M, 1*M, 256      /* 256 MB */,  0 /* no resident section */, false,  0.1f },
 
   // 2MB blocks really are huge blocks (consisting of sequences of neighboring 2MB blocks). Keep the total size of this
   // slab large enough to absorb most of the abnormal allocations a compiler may do.
