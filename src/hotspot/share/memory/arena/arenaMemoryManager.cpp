@@ -38,9 +38,7 @@
 
 #include "memory/arena.hpp"
 
-
-#include "runtime/os.hpp"
-
+#include "runtime/atomic.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -84,6 +82,10 @@ class ArenaMemoryManagerImpl : public CHeapObj<mtChunk>, public Tickable {
   static constexpr int seconds_per_tick = 1;
   DEBUG_ONLY(static constexpr int verify_tick_interval = 1;)
 
+  // Informational statistics
+  // Number of times we hit a slab oom and returned null (upper layer would fall back to C-heap)
+  Atomic<uint64_t> _oom_count[ArenaBlockHelpers::num_size_classes];
+
   // Helper. Given a basket, return its content to the cache or the slab
   // depending on who is responsible for receiving it.
   void deallocate_chunks_in_basket(ArenaCacheGroup& cache_group, block_size_class_t szclass, const Basket* basket);
@@ -94,7 +96,8 @@ public:
     _arena_heap(), _metadata_heap(),
     _slab_group(&_arena_heap, &_metadata_heap),
     _per_core(&_metadata_heap, &_slab_group, ArenaMaxCacheGroups),
-    _ticker(nullptr)
+    _ticker(nullptr),
+    _oom_count{}
   {
     log_info(arena, init)("Arena System Initialized.");
   }
@@ -148,16 +151,18 @@ void ArenaMemoryManagerImpl::deallocate_chunks_in_basket(ArenaCacheGroup& cache_
 // returned may be of larger size.
 const_blockptr_t ArenaMemoryManagerImpl::allocate_chunk_storage(size_t requested_size, size_t& real_size) {
 
+  assert(requested_size > 0, "Sanity");
+
   const_blockptr_t result;
   size_t real;
 
-  assert(requested_size > 0, "Sanity");
+  // Translate the request size into a valid block size.
+  const block_size_class_t szclass =
+    requested_size <= ArenaBlockHelpers::max_standard_block_size ?
+    ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(requested_size) :
+    ArenaBlockHelpers::huge_size_class;
 
-  if (requested_size <= ArenaBlockHelpers::max_standard_block_size) {
-    // Translate the request size into a valid block size.
-    const block_size_class_t szclass =
-      ArenaBlockHelpers::unaligned_block_size_to_standard_size_class(requested_size);
-
+  if (szclass <= ArenaBlockHelpers::highest_standard_size_class) {
     // smaller standard block sizes are allocated from cache, larger ones directly from slab
     if (szclass <= ArenaBlockHelpers::highest_cached_size_class) { // smaller standard block, cached
       // Grab the per-core data for the core we are running on
@@ -187,6 +192,8 @@ const_blockptr_t ArenaMemoryManagerImpl::allocate_chunk_storage(size_t requested
 
   if (result != nullptr) {
     real_size = real;
+  } else {
+    _oom_count[szclass].fetch_then_add(1u);
   }
   return result;
 }
@@ -307,10 +314,22 @@ void ArenaMemoryManagerImpl::tick(unsigned tick_number) {
 
 void ArenaMemoryManagerImpl::print_on(outputStream* st) const {
   st->print_cr("Arena Statistic:");
+  StreamIndentor indentor(st);
+
   _arena_heap.print_on(st);
   _metadata_heap.print_on(st);
   _slab_group.print_on(st);
   _per_core.print_on(st);
+
+  // Also print number of OOMs we got per size class
+  st->print_cr("OOMs per block size:");
+  StreamIndentor indentor2(st);
+  auto print_ooms = [&](block_size_class_t szclass) {
+    st->print_cr("%zu: " UINT64_FORMAT,
+      ArenaBlockHelpers::size_class_to_block_size(szclass),
+      _oom_count[szclass].load_relaxed());
+  };
+  ArenaBlockHelpers::iterate_size_classes_forward(print_ooms);
 }
 
 #ifdef ASSERT
