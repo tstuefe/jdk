@@ -576,33 +576,28 @@ void ArenaSlab::print_on(outputStream* st) const {
     );
   }
 
-  // Print in-use blocks in burst section (possibly also by quartile)
-  if (max_blocks_in_burst > 0) {
-    const unsigned in_burst =
-      checked_cast<unsigned>(_in_use_bitmap.count_one_bits(max_blocks_in_resident, num_blocks()));
-    PRINT_HERE("in-use blocks in burst: %u", in_burst);
-
-    if (max_blocks_in_burst > 4) {
-      const unsigned q = max_blocks_in_burst / 4;
-      unsigned count[4];
-      for (int i = 0; i < 4; i++) {
-        const unsigned end_idx =
-          (i == 3) ?
-          num_blocks() :  // prevent rounding error on last quartile
-          max_blocks_in_resident + (i + 1) * q;
-        count[i] = checked_cast<unsigned>(
-          _in_use_bitmap.count_one_bits(max_blocks_in_resident + i * q, end_idx));
-      }
-      PRINT_HERE("in-use blocks in burst per-quartile distribution: %u/%u/%u/%u",
-        count[0], count[1], count[2], count[3]);
-    }
-  }
-
   // Dirty statistics
-  const unsigned dirty_granules = count_dirty_granules();
-  const unsigned dirty_blocks = dirty_granules * blocks_per_granule();
-  PRINT_HERE("Dirty granules: %u (%u blocks, %zu bytes)",
-    dirty_granules, dirty_blocks, dirty_granules * granule_size());
+  {
+    constexpr unsigned max_sections = 128u;
+    unsigned dirty_granules_by_section[max_sections] = { 0 };
+    const unsigned num_sections = MIN2(num_granules(), max_sections);
+    const unsigned num_granules_per_section = (num_granules() + num_sections - 1) / num_sections;
+    unsigned all_dirty = 0;
+    for (unsigned i = 0; i < num_sections; ++i) {
+      const IndexType g_beg = MIN2(num_granules(), i * num_granules_per_section);
+      const IndexType g_end = MIN2(num_granules(), (i + 1) * num_granules_per_section);
+      const unsigned dirty = _dirty_bitmap.count_one_bits(g_beg, g_end);
+      dirty_granules_by_section[i] = dirty;
+      all_dirty += dirty;
+    }
+    PRINT_HERE("Dirty granules: %u (%u blocks, %zu bytes)",
+      all_dirty, all_dirty * blocks_per_granule(), all_dirty * granule_size());
+    st->print("Dirty granule map: { ");
+    for (unsigned i = 0; i < num_sections; ++i) {
+      st->print("%s%u", (i == 0) ? "" : ", ", dirty_granules_by_section[i]);
+    }
+    st->print_cr(" }");
+  }
 
 #ifdef ARENA_STATS
 #define PRINT_COUNTER(desc, name) { PRINT_HERE("%s: " UINT64_FORMAT, desc, name); }
