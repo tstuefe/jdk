@@ -226,6 +226,7 @@ private:
                                   unsigned min_release_len);
 
   void clear_dirty_granules(bool squeeze);
+  void prepare_next_tick();
 
 public:
 

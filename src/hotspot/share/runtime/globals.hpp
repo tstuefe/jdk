@@ -2037,6 +2037,8 @@ const int ObjectAlignmentInBytes = 8;
           "Use new Arena system")                                           \
   product(uint, ArenaMaxCacheGroups, 0,                              \
           "How many Cache Groups. Default is 0, which creates one cache group per core.") \
+  product(bool, ArenaReleaseMemory, true,                              \
+          "Whether arenas release memory to the OS at all.") \
 
 // end of RUNTIME_FLAGS
 

@@ -472,17 +472,12 @@ unsigned ArenaSlab::harvest_dirty_granules(const unsigned release_max,
   return release_max - release_budget;
 }
 
+void ArenaSlab::prepare_next_tick() {
+  // Reset per-tick counters
+  _hot->_num_blocks_in_use_peak = _hot->_num_blocks_in_use;
+}
+
 void ArenaSlab::clear_dirty_granules(bool squeeze) {
-
-  // We never clear granules < 32K
-  // Todo: this is a hack; we need to separate "resident is precommitted and possibly THPed" from
-  // "we run a release on this slab at all". One may conceivably have a small resident, but allow
-  // slab to grow into burst when needed, and then never release it should that happen.
-  if (block_size() < ArenaBlockHelpers::block_size_32K) {
-    return;
-  }
-
-  ArenaMutexLocker locker(_hot->_lock);
 
   // Release mechanics:
   //
@@ -510,8 +505,6 @@ void ArenaSlab::clear_dirty_granules(bool squeeze) {
 
   // remember retain target for the next tick
   _per_tick->_retain_target = retain_target;
-  // Reset the per-tick usage peak
-  _hot->_num_blocks_in_use_peak = _hot->_num_blocks_in_use;
 
   // Calculate the release budget
   // Only the granules in burst are eligible for release
@@ -538,10 +531,22 @@ void ArenaSlab::clear_dirty_granules(bool squeeze) {
 }
 
 void ArenaSlab::tick(unsigned tick_number) {
-  if (has_burst_section()) {
-    const bool lets_squeeze = (tick_number % 5) == 0;
-    clear_dirty_granules(lets_squeeze);
+
+  const bool do_release = ArenaReleaseMemory &&
+    has_burst_section() &&
+    // We never clear granules < 32K
+    // Todo: this is a hack; we need to separate "resident is precommitted and possibly THPed" from
+    // "we run a release on this slab at all". One may conceivably have a small resident, but allow
+    // slab to grow into burst when needed, and then never release it should that happen.
+    block_size() >= ArenaBlockHelpers::block_size_32K;
+  const bool squeeze = (tick_number % 5) == 0;
+
+  ArenaMutexLocker locker(_hot->_lock);
+
+  if (do_release) {
+    clear_dirty_granules(squeeze);
   }
+  prepare_next_tick();
 }
 
 void ArenaSlab::print_on(outputStream* st) const {
