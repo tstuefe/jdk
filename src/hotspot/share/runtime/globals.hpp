@@ -2039,6 +2039,8 @@ const int ObjectAlignmentInBytes = 8;
           "How many Cache Groups. Default is 0, which creates one cache group per core.") \
   product(bool, ArenaReleaseMemory, true,                              \
           "Whether arenas release memory to the OS at all.") \
+          product(bool, ArenaUseLargePages, true,                              \
+                  "Whether arenas attempts to use large pages.") \
 
 // end of RUNTIME_FLAGS
 

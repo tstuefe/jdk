@@ -69,12 +69,14 @@ void ArenaHeapBase::commit_memory(const_blockptr_t from, const_blockptr_t to){
 // Given a memory range, enforce or inhibit huge pages (THPs).
 void ArenaHeapBase::advise_large_page_use(const_blockptr_t from, const_blockptr_t to, bool use_large_pages) {
 #ifdef LINUX
-  const int advise = use_large_pages ? MADV_HUGEPAGE : MADV_NOHUGEPAGE;
-  const size_t alignment = use_large_pages ? ArenaHeap::large_page_size : os::vm_page_size();
-  assert(is_aligned(from, alignment), "Sanity");
-  assert(is_aligned(to, alignment), "Sanity");
-  const int rc = madvise((void*)from, to - from, advise);
-  assert(rc == 0, "madvise failed");
+  if (ArenaUseLargePages) {
+    const int advise = use_large_pages ? MADV_HUGEPAGE : MADV_NOHUGEPAGE;
+    const size_t alignment = use_large_pages ? ArenaHeap::large_page_size : os::vm_page_size();
+    assert(is_aligned(from, alignment), "Sanity");
+    assert(is_aligned(to, alignment), "Sanity");
+    const int rc = madvise((void*)from, to - from, advise);
+    assert(rc == 0, "madvise failed (%d)", errno);
+  }
 #else
   (void)from; (void)to; (void)use_large_pages;
 #endif
